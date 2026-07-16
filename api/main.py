@@ -122,7 +122,11 @@ FRONT = ROOT / "frontend"
 
 @app.get("/", response_class=HTMLResponse)
 def root():
-    return FileResponse(FRONT / "index.html")
+    return FileResponse(FRONT / "index.html", headers={
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    })
 
 
 # Отдача AstroChart.js

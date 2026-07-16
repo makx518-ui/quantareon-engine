@@ -1,70 +1,46 @@
-# КВАНТАРИОН — АСТРО-ФРАКТАЛ
+# QUANTAREON — Astro Engine
 
-## Быстрый запуск
+FastAPI + Swiss Ephemeris. Deployed on Render.
 
-```bash
-# 1. Установить зависимости
-pip install -r requirements.txt
+## Deploy
 
-# 2. Скачать эфемериды для Хирона (один раз)
-mkdir -p data/ephe
-wget -O data/ephe/seas_18.se1 https://raw.githubusercontent.com/aloistr/swisseph/master/ephe/seas_18.se1
+1. Push this repo to GitHub
+2. Render → New Web Service → select repo
+3. Environment → add `QUANTAREON_PASSWORD`
 
-# 3. Запустить сервер
-python api/main.py
+Render reads `render.yaml` automatically.
 
-# 4. Открыть браузер
-# http://localhost:8000/docs — документация API
-```
+## Check
 
-## Структура
+Open the engine, enter password, look at the **bottom right corner**:
 
 ```
-quantarion-astrofractal/
-├── engine/              — собственные модули (1644 стр)
-│   ├── micro_cascade.py     фрактальный расчёт (4 уровня)
-│   ├── degree_parser.py     парсер 360 градусов
-│   ├── cascade_assembler.py сборка маркеров для ИИ
-│   ├── natal.py             натальная карта (18 точек + ТЖ)
-│   ├── horary.py            таймстамп → ASC → натал
-│   ├── synastry.py          синастрия + уран-синхрон
-│   └── matrix.py            карта оператора (постоянный слой)
-├── astro/               — модули из Dream Oracle (5094 стр)
-│   ├── astro_engine.py      базовый движок
-│   ├── solar_calculator.py  соляр
-│   ├── progressions_calculator.py  прогрессии
-│   ├── solar_arc_calculator.py     дирекции
-│   ├── transit_activations.py      транзиты
-│   ├── profections_calculator.py   профекции
-│   ├── eclipses_calculator.py      затмения
-│   └── lunations_calculator.py     лунации
-├── api/
-│   └── main.py          FastAPI сервер (13 эндпоинтов)
-├── data/
-│   ├── gradusy_360_baza.txt  база градусов
-│   └── ephe/                 эфемериды (Хирон)
-├── frontend/
-│   └── quantarion-panel.jsx  панель управления
-└── requirements.txt
+v2 · quantareon-engine.onrender.com   ->  correct, chart will build
+v2 · localhost:8000                   ->  wrong API base
+no label                              ->  old file, not deployed
 ```
 
-## API эндпоинты
+## What was fixed
 
-| Метод | Путь | Описание |
-|-------|------|----------|
-| POST | /natal | Натальная карта |
-| POST | /cascade | Фрактальный расклад |
-| POST | /horary | Хорарная ректификация |
-| POST | /synastry | Синастрия двух карт |
-| POST | /uran-sync | Уран-синхрон (антенна) |
-| POST | /solar | Соляр |
-| POST | /progressions | Прогрессии |
-| POST | /directions | Дирекции |
-| POST | /transit-aspects | Транзитные активации |
-| POST | /profections | Профекции |
-| GET | /transit | Текущие позиции планет |
-| GET | /matrix | Статус матрицы оператора |
-| GET | /geocode | Город → координаты |
+The frontend had **three variables named `A`**. The global one (API base)
+was shadowed by two others — so the browser called localhost.
 
-## Проект Квантарион (Астро-фрактал)
-Экспериментальный инструмент. Доступ: только оператор.
+Renamed to `QAPI`. 25 call sites updated.
+
+Verified with real Chrome: password, form, "Calculate" — the wheel builds.
+
+## Endpoints
+
+`/natal` `/chart-wheel-natal` `/chart-wheel-transit` `/transit`
+`/geocode` `/resolve-place` `/synastry` `/horary` `/cascade` `/interpret`
+
+## Files
+
+```
+api/main.py          FastAPI app, password gate, static mount
+engine/              natal, cascade, degrees, synastry, horary
+astro/               progressions, profections, eclipses
+frontend/index.html  the wheel
+data/                degree database, ephemeris
+render.yaml          Render config
+```
