@@ -106,7 +106,7 @@ async def login_post(request: Request):
 @app.middleware("http")
 async def gate(request: Request, call_next):
     p = request.url.path
-    if p.startswith("/login") or p.startswith("/health"):
+    if p.startswith("/login") or p.startswith("/health") or p.startswith("/chat") or p.startswith("/quantareon-chat.js"):
         return await call_next(request)
     if not _ok(request.cookies.get(COOKIE)):
         if request.method == "GET" and ("text/html" in request.headers.get("accept","")):
@@ -137,6 +137,16 @@ async def serve_astrochart():
     if js_path.exists():
         return Response(content=js_path.read_text(encoding='utf-8'), media_type="application/javascript")
     return Response(content="// astrochart.js not found", media_type="application/javascript")
+
+# Отдача виджета чата
+@app.get("/quantareon-chat.js")
+async def serve_chat_widget():
+    from fastapi.responses import Response
+    js_path = ROOT / "quantareon-chat.js"
+    if js_path.exists():
+        return Response(content=js_path.read_text(encoding='utf-8'), media_type="application/javascript")
+    return Response(content="// quantareon-chat.js not found", media_type="application/javascript")
+
 
 # Главная страница
 @app.get("/", response_class=None)
@@ -716,6 +726,23 @@ def geocode(city: str, country: str = "", on_date: Optional[str] = None) -> dict
 # ============================================================
 # МОДЕЛИ ЗАПРОСОВ
 # ============================================================
+
+class ChatMessage(BaseModel):
+    role: str  # "user" | "assistant"
+    content: str
+
+
+class ChatRequest(BaseModel):
+    question: str = Field(..., description="Вопрос/реплика читателя")
+    part: Optional[str] = Field(None, description="Обсуждаемая часть: '1', '2', '3'")
+    chapter: Optional[str] = Field(None, description="Заголовок главы, где сейчас читатель")
+    history: Optional[list[ChatMessage]] = Field(
+        default_factory=list, description="Предыдущие реплики диалога"
+    )
+    include_full: bool = Field(
+        False, description="Подложить полный текст части (дороже по токенам)"
+    )
+
 
 class NatalRequest(BaseModel):
     year: int
@@ -1993,6 +2020,26 @@ async def interpret_deep_endpoint(req: NatalRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/chat")
+async def chat_endpoint(req: ChatRequest, request: Request):
+    """
+    Диалог «Обсудить главу с Квантарионом».
+    Публичный (без пароля) — используется виджетом на quantareon.com.
+    Защита: ограничение длины истории и вопроса на уровне engine/chat.py.
+    """
+    from chat import chat_with_quantareon
+
+    history = [m.model_dump() for m in (req.history or [])]
+    result = await chat_with_quantareon(
+        question=req.question,
+        part=req.part,
+        history=history,
+        include_full=req.include_full,
+        chapter=req.chapter,
+    )
+    return result
 
 
 if __name__ == "__main__":
