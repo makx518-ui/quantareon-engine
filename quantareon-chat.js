@@ -45,7 +45,7 @@
     micStart: "Записать голосом",
     micStop: "Идёт запись — говори",
     micWait: "Распознаю…",
-    micListen: "Слушаю… говори, текст появится сам",
+    micListen: "Говори… замолчишь — запишу текст",
     micQuiet: "Ничего не расслышал. Попробуй ещё раз, поближе к микрофону.",
     micDenied: "Не получилось включить микрофон. Разреши доступ в настройках браузера.",
     micFail: "Не удалось распознать речь. Попробуй ещё раз или напиши текстом.",
@@ -61,7 +61,7 @@
     micStart: "Record by voice",
     micStop: "Recording — speak",
     micWait: "Transcribing…",
-    micListen: "Listening… speak, text will appear",
+    micListen: "Speak… text appears when you finish",
     micQuiet: "I didn't catch anything. Try again, closer to the mic.",
     micDenied: "Could not access the microphone. Allow it in your browser settings.",
     micFail: "Could not transcribe. Try again or type your question.",
@@ -255,7 +255,7 @@
   }
 
   function submit() {
-    if (typeof liveOn !== "undefined" && liveOn) stopLive();
+    if (micOn) stopMic();
     var q = input.value.trim();
     if (!q || busy) return;
 
@@ -308,15 +308,14 @@
       });
   }
 
-  // ── ГОЛОСОВОЙ ВВОД: нажал один раз, говоришь, замолчал — сам остановился ──
+  // ── ГОЛОСОВОЙ ВВОД: микрофон горит, пока не выключишь. Текст прибавляется после каждой паузы ──
   var mic = panel.querySelector("#qc-mic");
-  var recorder = null, chunks = [], recStream = null, starting = false;
-  var actx = null, vadTimer = null, maxTimer = null;
+  var micOn = false;                 // намерение человека: микрофон включён
+  var recorder = null, chunks = [], recStream = null;
+  var actx = null, vadTimer = null, maxTimer = null, busyStt = false;
 
-  var canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia &&
-                     window.MediaRecorder);
-  var canLive = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-  if (!canRecord && !canLive) mic.style.display = "none";
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder))
+    mic.style.display = "none";
 
   function pickMime() {
     var list = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
@@ -331,7 +330,19 @@
     return "voice.webm";
   }
 
-  function cleanupRec() {
+  function micRed(on) {
+    if (on) {
+      mic.classList.add("rec");
+      mic.setAttribute("aria-label", T.micStop);
+      mic.title = T.micStop;
+    } else {
+      mic.classList.remove("rec");
+      mic.setAttribute("aria-label", T.micStart);
+      mic.title = T.micStart;
+    }
+  }
+
+  function killStream() {
     if (vadTimer) { clearInterval(vadTimer); vadTimer = null; }
     if (maxTimer) { clearTimeout(maxTimer); maxTimer = null; }
     if (actx) { try { actx.close(); } catch (e) {} actx = null; }
@@ -341,44 +352,27 @@
     }
   }
 
-  function setMicIdle() {
-    mic.classList.remove("rec");
-    mic.setAttribute("aria-label", T.micStart);
-    mic.title = T.micStart;
-  }
-
-  async function startRec() {
-    if (starting || (recorder && recorder.state === "recording")) return;
-    starting = true;
-    try {
-      recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (e) {
-      starting = false;
-      addMsg(T.micDenied, "ai");
-      return;
-    }
+  // Один отрезок речи: пишем, пока не наступит тишина
+  function recordSegment() {
+    if (!micOn || !recStream) return;
     chunks = [];
     var mime = pickMime();
     try {
       recorder = mime ? new MediaRecorder(recStream, { mimeType: mime })
                       : new MediaRecorder(recStream);
-    } catch (e) {
-      starting = false; cleanupRec(); addMsg(T.micFail, "ai"); return;
-    }
+    } catch (e) { stopMic(); addMsg(T.micFail, "ai"); return; }
+
     recorder.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
-    recorder.onstop = function () { sendAudio(); };
+    recorder.onstop = function () { flushSegment(); };
     recorder.start(500);
-    starting = false;
 
-    mic.classList.add("rec");
-    mic.setAttribute("aria-label", T.micStop);
-    mic.title = T.micStop;
-    input.placeholder = T.micListen;
-
-    // Слежение за тишиной: замолчал на 1.8 сек — останавливаемся сами
+    // Слежение за тишиной внутри отрезка
+    if (vadTimer) clearInterval(vadTimer);
     try {
-      var AC = window.AudioContext || window.webkitAudioContext;
-      actx = new AC();
+      if (!actx) {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        actx = new AC();
+      }
       var src = actx.createMediaStreamSource(recStream);
       var an = actx.createAnalyser();
       an.fftSize = 512;
@@ -393,31 +387,33 @@
         if (rms > 0.025) { spoke = true; quietFrom = null; }
         else if (spoke) {
           if (!quietFrom) quietFrom = Date.now();
-          else if (Date.now() - quietFrom > 1800) stopRec();
+          else if (Date.now() - quietFrom > 1800) {
+            clearInterval(vadTimer); vadTimer = null;
+            if (recorder && recorder.state !== "inactive") recorder.stop();
+          }
         }
       }, 150);
-    } catch (e) { /* нет анализатора — просто ждём ручной остановки */ }
+    } catch (e) { /* без анализатора: отрезок закроется по потолку времени */ }
 
-    maxTimer = setTimeout(stopRec, 90000); // потолок 90 сек
+    if (maxTimer) clearTimeout(maxTimer);
+    maxTimer = setTimeout(function () {
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+    }, 60000);
   }
 
-  function stopRec() {
-    if (vadTimer) { clearInterval(vadTimer); vadTimer = null; }
-    if (maxTimer) { clearTimeout(maxTimer); maxTimer = null; }
-    if (recorder && recorder.state !== "inactive") recorder.stop();
-    setMicIdle();
-  }
-
-  async function sendAudio() {
+  // Отрезок закончился: отправляем в Whisper, дописываем текст, слушаем дальше
+  async function flushSegment() {
     var mime = (recorder && recorder.mimeType) || "audio/webm";
     var blob = new Blob(chunks, { type: mime });
     chunks = [];
-    cleanupRec();
-    setMicIdle();
 
-    if (blob.size < 1200) { input.placeholder = T.placeholder; addMsg(T.micQuiet, "ai"); return; }
+    if (blob.size < 1200) {                 // почти тишина — просто слушаем дальше
+      if (micOn) recordSegment();
+      return;
+    }
 
-    mic.disabled = true;
+    busyStt = true;
+    var savedPh = T.micListen;
     input.placeholder = T.micWait;
     try {
       var fd = new FormData();
@@ -429,109 +425,43 @@
         input.value = (input.value ? input.value.trim() + " " : "") + data.text;
         input.style.height = "auto";
         input.style.height = Math.min(input.scrollHeight, 100) + "px";
-        input.focus();
-      } else {
-        addMsg(data && data.error ? T.micFail : T.micQuiet, "ai");
       }
     } catch (e) {
       addMsg(T.micFail, "ai");
     } finally {
-      mic.disabled = false;
-      input.placeholder = T.placeholder;
+      busyStt = false;
+      input.placeholder = micOn ? savedPh : T.placeholder;
+      if (micOn) recordSegment();           // микрофон по-прежнему горит — слушаем дальше
     }
   }
 
-  // ── ЖИВОЕ РАСПОЗНАВАНИЕ (текст появляется во время речи) ──
-  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  var live = null, liveOn = false, liveBase = "", liveFinal = "";
-  var liveWanted = false, liveRestarts = 0;
-
-  function startLive() {
-    try { live = new SR(); } catch (e) { startRec(); return; }
-    live.lang = isRU ? "ru-RU" : "en-US";
-    live.continuous = true;
-    live.interimResults = true;
-
-    liveBase = input.value.trim();
-    liveFinal = "";
-
-    live.onresult = function (e) {
-      var interim = "";
-      for (var i = e.resultIndex; i < e.results.length; i++) {
-        var t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) liveFinal += t;
-        else interim += t;
-      }
-      input.value = (liveBase ? liveBase + " " : "") + (liveFinal + interim).replace(/^\s+/, "");
-      input.style.height = "auto";
-      input.style.height = Math.min(input.scrollHeight, 100) + "px";
-    };
-    live.onerror = function (e) {
-      var err = e && e.error;
-      if (err === "not-allowed" || err === "service-not-allowed") {
-        liveWanted = false;
-        liveOn = false;
-        setMicIdle();
-        input.placeholder = T.placeholder;
-        addMsg(T.micDenied, "ai");
-      } else if (err === "audio-capture") {
-        liveWanted = false;
-        liveOn = false;
-        setMicIdle();
-        input.placeholder = T.placeholder;
-        addMsg(T.micFail, "ai");
-      }
-      // "no-speech", "network", "aborted" — не гасим: onend сам перезапустит
-    };
-    live.onend = function () {
-      // Браузер сам обрывает распознавание после паузы — тихо перезапускаем,
-      // пока человек не остановит микрофон сам или не отправит сообщение
-      if (liveWanted && liveRestarts < 200) {
-        liveRestarts++;
-        liveBase = input.value.trim();   // уже надиктованное — в основу
-        liveFinal = "";
-        setTimeout(function () {
-          if (!liveWanted) return;
-          try { live.start(); } catch (e) {
-            try { startLive(); } catch (e2) {}
-          }
-        }, 250);
-        return;
-      }
-      liveOn = false;
-      setMicIdle();
-      input.placeholder = T.placeholder;
-      input.focus();
-    };
-
+  async function startMic() {
+    if (micOn) return;
     try {
-      liveWanted = true;
-      liveRestarts = 0;
-      live.start();
-      liveOn = true;
-      mic.classList.add("rec");
-      mic.setAttribute("aria-label", T.micStop);
-      mic.title = T.micStop;
-      input.placeholder = T.micListen;
-    } catch (e) { startRec(); }
+      recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) { addMsg(T.micDenied, "ai"); return; }
+    micOn = true;
+    micRed(true);
+    input.placeholder = T.micListen;
+    recordSegment();
   }
 
-  function stopLive() {
-    liveWanted = false;
-    if (live) { try { live.stop(); } catch (e) {} }
-    liveOn = false;
-    setMicIdle();
-    input.placeholder = T.placeholder;
+  function stopMic() {
+    micOn = false;
+    if (vadTimer) { clearInterval(vadTimer); vadTimer = null; }
+    if (maxTimer) { clearTimeout(maxTimer); maxTimer = null; }
+    if (recorder && recorder.state !== "inactive") {
+      try { recorder.stop(); } catch (e) {}   // последний отрезок ещё распознается
+    }
+    micRed(false);
+    if (!busyStt) input.placeholder = T.placeholder;
+    setTimeout(killStream, 500);
+    input.focus();
   }
 
   mic.addEventListener("click", function () {
-    if (SR) {
-      if (liveOn) stopLive();
-      else startLive();
-      return;
-    }
-    if (recorder && recorder.state === "recording") stopRec();
-    else startRec();
+    if (micOn) stopMic();
+    else startMic();
   });
 
   send.addEventListener("click", submit);
