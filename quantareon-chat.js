@@ -444,6 +444,7 @@
   // ── ЖИВОЕ РАСПОЗНАВАНИЕ (текст появляется во время речи) ──
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   var live = null, liveOn = false, liveBase = "", liveFinal = "";
+  var liveWanted = false, liveRestarts = 0;
 
   function startLive() {
     try { live = new SR(); } catch (e) { startRec(); return; }
@@ -466,13 +467,37 @@
       input.style.height = Math.min(input.scrollHeight, 100) + "px";
     };
     live.onerror = function (e) {
-      liveOn = false;
-      setMicIdle();
-      input.placeholder = T.placeholder;
-      if (e && (e.error === "not-allowed" || e.error === "service-not-allowed"))
+      var err = e && e.error;
+      if (err === "not-allowed" || err === "service-not-allowed") {
+        liveWanted = false;
+        liveOn = false;
+        setMicIdle();
+        input.placeholder = T.placeholder;
         addMsg(T.micDenied, "ai");
+      } else if (err === "audio-capture") {
+        liveWanted = false;
+        liveOn = false;
+        setMicIdle();
+        input.placeholder = T.placeholder;
+        addMsg(T.micFail, "ai");
+      }
+      // "no-speech", "network", "aborted" — не гасим: onend сам перезапустит
     };
     live.onend = function () {
+      // Браузер сам обрывает распознавание после паузы — тихо перезапускаем,
+      // пока человек не остановит микрофон сам или не отправит сообщение
+      if (liveWanted && liveRestarts < 200) {
+        liveRestarts++;
+        liveBase = input.value.trim();   // уже надиктованное — в основу
+        liveFinal = "";
+        setTimeout(function () {
+          if (!liveWanted) return;
+          try { live.start(); } catch (e) {
+            try { startLive(); } catch (e2) {}
+          }
+        }, 250);
+        return;
+      }
       liveOn = false;
       setMicIdle();
       input.placeholder = T.placeholder;
@@ -480,6 +505,8 @@
     };
 
     try {
+      liveWanted = true;
+      liveRestarts = 0;
       live.start();
       liveOn = true;
       mic.classList.add("rec");
@@ -490,9 +517,11 @@
   }
 
   function stopLive() {
+    liveWanted = false;
     if (live) { try { live.stop(); } catch (e) {} }
     liveOn = false;
     setMicIdle();
+    input.placeholder = T.placeholder;
   }
 
   mic.addEventListener("click", function () {
