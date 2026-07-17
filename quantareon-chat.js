@@ -196,15 +196,16 @@
     panel.classList.remove("open");
     fab.style.display = "";
   }
-  // На телефоне: кнопка появляется полной, при первом скролле (или через 10 сек) сжимается
+  // На телефоне: кнопка стоит полной ровно 15 секунд (скролл в это время не считается),
+  // и только потом первый скролл её сворачивает в компактную
   if (window.matchMedia("(max-width:600px)").matches) {
-    var mini = function () {
+    var onScrollMini = function () {
       fab.classList.add("qc-mini");
       window.removeEventListener("scroll", onScrollMini);
     };
-    var onScrollMini = function () { mini(); };
-    window.addEventListener("scroll", onScrollMini, { passive: true, once: true });
-    setTimeout(mini, 10000);
+    setTimeout(function () {
+      window.addEventListener("scroll", onScrollMini, { passive: true });
+    }, 15000);
   }
 
   fab.addEventListener("click", open);
