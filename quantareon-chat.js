@@ -43,8 +43,10 @@
     limit: "На сегодня разговор довольно длинный — дай мыслям осесть. Перечитай главу, и вернёмся к ней свежими.",
     error: "Связь прервалась. Попробуй ещё раз через минуту.",
     micStart: "Записать голосом",
-    micStop: "Остановить запись",
+    micStop: "Идёт запись — говори",
     micWait: "Распознаю…",
+    micListen: "Слушаю… говори, текст появится сам",
+    micQuiet: "Ничего не расслышал. Попробуй ещё раз, поближе к микрофону.",
     micDenied: "Не получилось включить микрофон. Разреши доступ в настройках браузера.",
     micFail: "Не удалось распознать речь. Попробуй ещё раз или напиши текстом.",
   } : {
@@ -57,8 +59,10 @@
     limit: "Quite a long conversation for today — let the thoughts settle. Reread the chapter, and we'll return to it fresh.",
     error: "Connection lost. Try again in a minute.",
     micStart: "Record by voice",
-    micStop: "Stop recording",
+    micStop: "Recording — speak",
     micWait: "Transcribing…",
+    micListen: "Listening… speak, text will appear",
+    micQuiet: "I didn't catch anything. Try again, closer to the mic.",
     micDenied: "Could not access the microphone. Allow it in your browser settings.",
     micFail: "Could not transcribe. Try again or type your question.",
   };
@@ -251,6 +255,7 @@
   }
 
   function submit() {
+    if (typeof liveOn !== "undefined" && liveOn) stopLive();
     var q = input.value.trim();
     if (!q || busy) return;
 
@@ -303,66 +308,120 @@
       });
   }
 
-  // ── ГОЛОСОВОЙ ВВОД ─────────────────────────────────────
+  // ── ГОЛОСОВОЙ ВВОД: нажал один раз, говоришь, замолчал — сам остановился ──
   var mic = panel.querySelector("#qc-mic");
-  var recorder = null, chunks = [], recStream = null;
+  var recorder = null, chunks = [], recStream = null, starting = false;
+  var actx = null, vadTimer = null, maxTimer = null;
 
-  function micSupported() {
-    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia &&
-              window.MediaRecorder);
+  var canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia &&
+                     window.MediaRecorder);
+  var canLive = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  if (!canRecord && !canLive) mic.style.display = "none";
+
+  function pickMime() {
+    var list = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
+    for (var i = 0; i < list.length; i++)
+      if (window.MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(list[i]))
+        return list[i];
+    return "";
   }
-  if (!micSupported()) mic.style.display = "none";
+  function extFor(mime) {
+    if (mime.indexOf("ogg") > -1) return "voice.ogg";
+    if (mime.indexOf("mp4") > -1) return "voice.m4a";
+    return "voice.webm";
+  }
 
-  function stopStream() {
+  function cleanupRec() {
+    if (vadTimer) { clearInterval(vadTimer); vadTimer = null; }
+    if (maxTimer) { clearTimeout(maxTimer); maxTimer = null; }
+    if (actx) { try { actx.close(); } catch (e) {} actx = null; }
     if (recStream) {
       recStream.getTracks().forEach(function (t) { t.stop(); });
       recStream = null;
     }
   }
 
-  async function startRec() {
-    try {
-      recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (e) {
-      addMsg(T.micDenied, "ai");
-      return;
-    }
-    chunks = [];
-    try {
-      recorder = new MediaRecorder(recStream);
-    } catch (e) {
-      stopStream();
-      addMsg(T.micFail, "ai");
-      return;
-    }
-    recorder.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
-    recorder.onstop = function () { sendAudio(); };
-    recorder.start();
-    mic.classList.add("rec");
-    mic.setAttribute("aria-label", T.micStop);
-    mic.title = T.micStop;
-  }
-
-  function stopRec() {
-    if (recorder && recorder.state !== "inactive") recorder.stop();
+  function setMicIdle() {
     mic.classList.remove("rec");
     mic.setAttribute("aria-label", T.micStart);
     mic.title = T.micStart;
   }
 
-  async function sendAudio() {
-    stopStream();
-    var blob = new Blob(chunks, { type: (recorder && recorder.mimeType) || "audio/webm" });
+  async function startRec() {
+    if (starting || (recorder && recorder.state === "recording")) return;
+    starting = true;
+    try {
+      recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      starting = false;
+      addMsg(T.micDenied, "ai");
+      return;
+    }
     chunks = [];
-    if (!blob.size) return;
+    var mime = pickMime();
+    try {
+      recorder = mime ? new MediaRecorder(recStream, { mimeType: mime })
+                      : new MediaRecorder(recStream);
+    } catch (e) {
+      starting = false; cleanupRec(); addMsg(T.micFail, "ai"); return;
+    }
+    recorder.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+    recorder.onstop = function () { sendAudio(); };
+    recorder.start(500);
+    starting = false;
+
+    mic.classList.add("rec");
+    mic.setAttribute("aria-label", T.micStop);
+    mic.title = T.micStop;
+    input.placeholder = T.micListen;
+
+    // Слежение за тишиной: замолчал на 1.8 сек — останавливаемся сами
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      actx = new AC();
+      var src = actx.createMediaStreamSource(recStream);
+      var an = actx.createAnalyser();
+      an.fftSize = 512;
+      src.connect(an);
+      var buf = new Uint8Array(an.fftSize);
+      var spoke = false, quietFrom = null;
+      vadTimer = setInterval(function () {
+        an.getByteTimeDomainData(buf);
+        var sum = 0;
+        for (var i = 0; i < buf.length; i++) { var v = (buf[i] - 128) / 128; sum += v * v; }
+        var rms = Math.sqrt(sum / buf.length);
+        if (rms > 0.025) { spoke = true; quietFrom = null; }
+        else if (spoke) {
+          if (!quietFrom) quietFrom = Date.now();
+          else if (Date.now() - quietFrom > 1800) stopRec();
+        }
+      }, 150);
+    } catch (e) { /* нет анализатора — просто ждём ручной остановки */ }
+
+    maxTimer = setTimeout(stopRec, 90000); // потолок 90 сек
+  }
+
+  function stopRec() {
+    if (vadTimer) { clearInterval(vadTimer); vadTimer = null; }
+    if (maxTimer) { clearTimeout(maxTimer); maxTimer = null; }
+    if (recorder && recorder.state !== "inactive") recorder.stop();
+    setMicIdle();
+  }
+
+  async function sendAudio() {
+    var mime = (recorder && recorder.mimeType) || "audio/webm";
+    var blob = new Blob(chunks, { type: mime });
+    chunks = [];
+    cleanupRec();
+    setMicIdle();
+
+    if (blob.size < 1200) { input.placeholder = T.placeholder; addMsg(T.micQuiet, "ai"); return; }
 
     mic.disabled = true;
-    var prevPh = input.placeholder;
     input.placeholder = T.micWait;
-
     try {
       var fd = new FormData();
-      fd.append("file", blob, "voice.webm");
+      fd.append("file", blob, extFor(mime));
       fd.append("language", isRU ? "ru" : "en");
       var res = await fetch(API.replace(/\/chat$/, "/transcribe"), { method: "POST", body: fd });
       var data = await res.json();
@@ -372,17 +431,76 @@
         input.style.height = Math.min(input.scrollHeight, 100) + "px";
         input.focus();
       } else {
-        addMsg(T.micFail, "ai");
+        addMsg(data && data.error ? T.micFail : T.micQuiet, "ai");
       }
     } catch (e) {
       addMsg(T.micFail, "ai");
     } finally {
       mic.disabled = false;
-      input.placeholder = prevPh;
+      input.placeholder = T.placeholder;
     }
   }
 
+  // ── ЖИВОЕ РАСПОЗНАВАНИЕ (текст появляется во время речи) ──
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var live = null, liveOn = false, liveBase = "", liveFinal = "";
+
+  function startLive() {
+    try { live = new SR(); } catch (e) { startRec(); return; }
+    live.lang = isRU ? "ru-RU" : "en-US";
+    live.continuous = true;
+    live.interimResults = true;
+
+    liveBase = input.value.trim();
+    liveFinal = "";
+
+    live.onresult = function (e) {
+      var interim = "";
+      for (var i = e.resultIndex; i < e.results.length; i++) {
+        var t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) liveFinal += t;
+        else interim += t;
+      }
+      input.value = (liveBase ? liveBase + " " : "") + (liveFinal + interim).replace(/^\s+/, "");
+      input.style.height = "auto";
+      input.style.height = Math.min(input.scrollHeight, 100) + "px";
+    };
+    live.onerror = function (e) {
+      liveOn = false;
+      setMicIdle();
+      input.placeholder = T.placeholder;
+      if (e && (e.error === "not-allowed" || e.error === "service-not-allowed"))
+        addMsg(T.micDenied, "ai");
+    };
+    live.onend = function () {
+      liveOn = false;
+      setMicIdle();
+      input.placeholder = T.placeholder;
+      input.focus();
+    };
+
+    try {
+      live.start();
+      liveOn = true;
+      mic.classList.add("rec");
+      mic.setAttribute("aria-label", T.micStop);
+      mic.title = T.micStop;
+      input.placeholder = T.micListen;
+    } catch (e) { startRec(); }
+  }
+
+  function stopLive() {
+    if (live) { try { live.stop(); } catch (e) {} }
+    liveOn = false;
+    setMicIdle();
+  }
+
   mic.addEventListener("click", function () {
+    if (SR) {
+      if (liveOn) stopLive();
+      else startLive();
+      return;
+    }
     if (recorder && recorder.state === "recording") stopRec();
     else startRec();
   });
