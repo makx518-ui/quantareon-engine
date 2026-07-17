@@ -34,7 +34,8 @@
   var PARTS = isRU ? PARTS_RU : PARTS_EN;
 
   var T = isRU ? {
-    fab: "☀ Обсудить с Квантарионом",
+    fabFull: "Обсудить с Квантарионом",
+    fabShort: "Обсудить",
     title: "КВАНТАРИОН",
     intro: "Ты читаешь эссе — и можешь обсудить прочитанное.\nСпроси о любой мысли этой части, и разберём вместе.",
     placeholder: "Спросить о прочитанном…",
@@ -42,7 +43,8 @@
     limit: "На сегодня разговор довольно длинный — дай мыслям осесть. Перечитай главу, и вернёмся к ней свежими.",
     error: "Связь прервалась. Попробуй ещё раз через минуту.",
   } : {
-    fab: "☀ Discuss with Quantareon",
+    fabFull: "Discuss with Quantareon",
+    fabShort: "Discuss",
     title: "QUANTAREON",
     intro: "You are reading the essay — and you can discuss it.\nAsk about any idea in this part, and let's think it through together.",
     placeholder: "Ask about what you've read…",
@@ -129,7 +131,18 @@
   ".qc-send{background:none;border:1px solid var(--fire,#e8bd6a);color:var(--fire,#e8bd6a);" +
     "border-radius:8px;padding:0 .9rem;cursor:pointer;font-size:1.1rem}" +
   ".qc-send:hover{opacity:.8}" +
-  ".qc-send:disabled{opacity:.4;cursor:default}";
+  ".qc-send:disabled{opacity:.4;cursor:default}" +
+  ".qc-fab{display:flex;align-items:center;gap:7px;transition:padding .25s,font-size .25s,opacity .25s}" +
+  ".qc-fab-short{display:none}" +
+  "@media (max-width:600px){" +
+    ".qc-fab{right:12px;bottom:16px;font-size:12.5px;padding:.62rem .9rem}" +
+    ".qc-fab.qc-mini{padding:.45rem .7rem;font-size:11.5px;opacity:.72;gap:5px}" +
+    ".qc-fab.qc-mini:active{opacity:1}" +
+    ".qc-fab.qc-mini .qc-fab-full{display:none}" +
+    ".qc-fab.qc-mini .qc-fab-short{display:inline}" +
+    ".qc-fab.qc-mini svg{width:13px;height:13px}" +
+    ".qc-panel{right:8px;left:8px;bottom:8px;width:auto;height:min(80vh,calc(100vh - 80px))}" +
+  "}";
 
   var style = document.createElement("style");
   style.textContent = css;
@@ -138,7 +151,13 @@
   // ── разметка ─────────────────────────────────────────────
   var fab = document.createElement("button");
   fab.className = "qc-fab";
-  fab.textContent = T.fab;
+  var BUBBLE = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7' +
+    'a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>';
+  fab.innerHTML = BUBBLE +
+    '<span class="qc-fab-full">' + T.fabFull + '</span>' +
+    '<span class="qc-fab-short">' + T.fabShort + '</span>';
 
   var panel = document.createElement("div");
   panel.className = "qc-panel";
@@ -177,6 +196,17 @@
     panel.classList.remove("open");
     fab.style.display = "";
   }
+  // На телефоне: кнопка появляется полной, при первом скролле (или через 10 сек) сжимается
+  if (window.matchMedia("(max-width:600px)").matches) {
+    var mini = function () {
+      fab.classList.add("qc-mini");
+      window.removeEventListener("scroll", onScrollMini);
+    };
+    var onScrollMini = function () { mini(); };
+    window.addEventListener("scroll", onScrollMini, { passive: true, once: true });
+    setTimeout(mini, 10000);
+  }
+
   fab.addEventListener("click", open);
   panel.querySelector(".qc-close").addEventListener("click", close);
 
