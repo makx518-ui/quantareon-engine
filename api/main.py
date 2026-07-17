@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -106,7 +106,7 @@ async def login_post(request: Request):
 @app.middleware("http")
 async def gate(request: Request, call_next):
     p = request.url.path
-    if p.startswith("/login") or p.startswith("/health") or p.startswith("/chat") or p.startswith("/quantareon-chat.js"):
+    if p.startswith("/login") or p.startswith("/health") or p.startswith("/chat") or p.startswith("/transcribe") or p.startswith("/quantareon-chat.js"):
         return await call_next(request)
     if not _ok(request.cookies.get(COOKIE)):
         if request.method == "GET" and ("text/html" in request.headers.get("accept","")):
@@ -2039,6 +2039,16 @@ async def chat_endpoint(req: ChatRequest, request: Request):
         include_full=req.include_full,
         chapter=req.chapter,
     )
+    return result
+
+
+@app.post("/transcribe")
+async def transcribe_endpoint(file: UploadFile = File(...), language: str = "ru"):
+    """Речь -> текст для голосового ввода в чате Квантариона. Публичный."""
+    from chat import transcribe_audio
+    audio = await file.read()
+    result = await transcribe_audio(audio, filename=file.filename or "voice.webm",
+                                    language=language)
     return result
 
 
