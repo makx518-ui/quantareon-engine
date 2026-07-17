@@ -38,7 +38,7 @@ MAX_QUESTION_LEN = 2000
 # ЗАГРУЗКА ТЕКСТОВ ЭССЕ (один раз при старте)
 # ============================================================
 
-_ESSAY_DIR = Path(__file__).parent  # тексты эссе лежат рядом, в корне репозитория
+_ESSAY_DIR = Path(__file__).parent
 
 
 def _read(name: str) -> str:
@@ -191,3 +191,39 @@ async def _call_groq(messages: list, model: str):
             return data["choices"][0]["message"]["content"].strip(), model
     except Exception:
         return None, None
+
+# ============================================================
+# РАСПОЗНАВАНИЕ РЕЧИ (Groq Whisper)
+# ============================================================
+
+GROQ_STT_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+STT_MODEL = os.getenv("QUANTARION_STT_MODEL", "whisper-large-v3-turbo")
+MAX_AUDIO_BYTES = 8 * 1024 * 1024  # 8 МБ — с запасом на пару минут речи
+
+
+async def transcribe_audio(audio_bytes: bytes, filename: str = "voice.webm",
+                           language: str = "ru") -> dict:
+    """
+    Речь -> текст через Groq Whisper.
+    Возвращает {"text": str} или {"text": "", "error": str}
+    """
+    if not GROQ_API_KEY:
+        return {"text": "", "error": "no_key"}
+    if not audio_bytes:
+        return {"text": "", "error": "empty"}
+    if len(audio_bytes) > MAX_AUDIO_BYTES:
+        return {"text": "", "error": "too_large"}
+
+    headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
+    files = {"file": (filename, audio_bytes, "application/octet-stream")}
+    data = {"model": STT_MODEL, "response_format": "json"}
+    if language:
+        data["language"] = language
+
+    try:
+        async with httpx.AsyncClient(timeout=90) as client:
+            r = await client.post(GROQ_STT_URL, headers=headers, files=files, data=data)
+            r.raise_for_status()
+            return {"text": (r.json().get("text") or "").strip()}
+    except Exception as e:
+        return {"text": "", "error": str(e)[:200]}

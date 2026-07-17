@@ -42,6 +42,11 @@
     thinking: "Квантарион размышляет…",
     limit: "На сегодня разговор довольно длинный — дай мыслям осесть. Перечитай главу, и вернёмся к ней свежими.",
     error: "Связь прервалась. Попробуй ещё раз через минуту.",
+    micStart: "Записать голосом",
+    micStop: "Остановить запись",
+    micWait: "Распознаю…",
+    micDenied: "Не получилось включить микрофон. Разреши доступ в настройках браузера.",
+    micFail: "Не удалось распознать речь. Попробуй ещё раз или напиши текстом.",
   } : {
     fabFull: "Discuss with Quantareon",
     fabShort: "Discuss",
@@ -51,6 +56,11 @@
     thinking: "Quantareon is reflecting…",
     limit: "Quite a long conversation for today — let the thoughts settle. Reread the chapter, and we'll return to it fresh.",
     error: "Connection lost. Try again in a minute.",
+    micStart: "Record by voice",
+    micStop: "Stop recording",
+    micWait: "Transcribing…",
+    micDenied: "Could not access the microphone. Allow it in your browser settings.",
+    micFail: "Could not transcribe. Try again or type your question.",
   };
 
   var history = [];
@@ -132,6 +142,13 @@
     "border-radius:8px;padding:0 .9rem;cursor:pointer;font-size:1.1rem}" +
   ".qc-send:hover{opacity:.8}" +
   ".qc-send:disabled{opacity:.4;cursor:default}" +
+  ".qc-mic{background:none;border:1px solid var(--line,#43474f);color:var(--ink-dim,#8a8f99);" +
+    "border-radius:8px;padding:0 .7rem;cursor:pointer;display:flex;align-items:center;" +
+    "justify-content:center;transition:color .2s,border-color .2s}" +
+  ".qc-mic:hover{color:var(--fire,#e8bd6a);border-color:var(--fire,#e8bd6a)}" +
+  ".qc-mic.rec{color:#e05a4a;border-color:#e05a4a;animation:qcpulse 1.1s infinite}" +
+  ".qc-mic:disabled{opacity:.45;cursor:default}" +
+  "@keyframes qcpulse{0%,100%{opacity:1}50%{opacity:.45}}" +
   ".qc-fab{display:flex;align-items:center;gap:7px;transition:padding .25s,font-size .25s,opacity .25s}" +
   ".qc-fab-short{display:none}" +
   "@media (max-width:600px){" +
@@ -170,6 +187,12 @@
     '<div class="qc-body" id="qc-body">' +
       '<div class="qc-intro">' + T.intro + '</div></div>' +
     '<div class="qc-foot">' +
+      '<button class="qc-mic" id="qc-mic" aria-label="' + T.micStart + '" title="' + T.micStart + '">' +
+        '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" ' +
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>' +
+        '<path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/>' +
+        '<line x1="8" y1="23" x2="16" y2="23"/></svg></button>' +
       '<textarea class="qc-input" id="qc-input" rows="1" placeholder="' + T.placeholder + '"></textarea>' +
       '<button class="qc-send" id="qc-send" aria-label="send">↑</button></div>';
 
@@ -279,6 +302,90 @@
         input.focus();
       });
   }
+
+  // ── ГОЛОСОВОЙ ВВОД ─────────────────────────────────────
+  var mic = panel.querySelector("#qc-mic");
+  var recorder = null, chunks = [], recStream = null;
+
+  function micSupported() {
+    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia &&
+              window.MediaRecorder);
+  }
+  if (!micSupported()) mic.style.display = "none";
+
+  function stopStream() {
+    if (recStream) {
+      recStream.getTracks().forEach(function (t) { t.stop(); });
+      recStream = null;
+    }
+  }
+
+  async function startRec() {
+    try {
+      recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      addMsg(T.micDenied, "ai");
+      return;
+    }
+    chunks = [];
+    try {
+      recorder = new MediaRecorder(recStream);
+    } catch (e) {
+      stopStream();
+      addMsg(T.micFail, "ai");
+      return;
+    }
+    recorder.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+    recorder.onstop = function () { sendAudio(); };
+    recorder.start();
+    mic.classList.add("rec");
+    mic.setAttribute("aria-label", T.micStop);
+    mic.title = T.micStop;
+  }
+
+  function stopRec() {
+    if (recorder && recorder.state !== "inactive") recorder.stop();
+    mic.classList.remove("rec");
+    mic.setAttribute("aria-label", T.micStart);
+    mic.title = T.micStart;
+  }
+
+  async function sendAudio() {
+    stopStream();
+    var blob = new Blob(chunks, { type: (recorder && recorder.mimeType) || "audio/webm" });
+    chunks = [];
+    if (!blob.size) return;
+
+    mic.disabled = true;
+    var prevPh = input.placeholder;
+    input.placeholder = T.micWait;
+
+    try {
+      var fd = new FormData();
+      fd.append("file", blob, "voice.webm");
+      fd.append("language", isRU ? "ru" : "en");
+      var res = await fetch(API.replace(/\/chat$/, "/transcribe"), { method: "POST", body: fd });
+      var data = await res.json();
+      if (data && data.text) {
+        input.value = (input.value ? input.value.trim() + " " : "") + data.text;
+        input.style.height = "auto";
+        input.style.height = Math.min(input.scrollHeight, 100) + "px";
+        input.focus();
+      } else {
+        addMsg(T.micFail, "ai");
+      }
+    } catch (e) {
+      addMsg(T.micFail, "ai");
+    } finally {
+      mic.disabled = false;
+      input.placeholder = prevPh;
+    }
+  }
+
+  mic.addEventListener("click", function () {
+    if (recorder && recorder.state === "recording") stopRec();
+    else startRec();
+  });
 
   send.addEventListener("click", submit);
   input.addEventListener("keydown", function (e) {
