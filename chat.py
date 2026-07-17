@@ -38,7 +38,7 @@ MAX_QUESTION_LEN = 2000
 # ЗАГРУЗКА ТЕКСТОВ ЭССЕ (один раз при старте)
 # ============================================================
 
-_ESSAY_DIR = Path(__file__).parent
+_ESSAY_DIR = Path(__file__).parent.parent / "data" / "essay"
 
 
 def _read(name: str) -> str:
@@ -224,6 +224,58 @@ async def transcribe_audio(audio_bytes: bytes, filename: str = "voice.webm",
         async with httpx.AsyncClient(timeout=90) as client:
             r = await client.post(GROQ_STT_URL, headers=headers, files=files, data=data)
             r.raise_for_status()
-            return {"text": (r.json().get("text") or "").strip()}
+            text = (r.json().get("text") or "").strip()
+            return {"text": _drop_hallucination(text)}
     except Exception as e:
         return {"text": "", "error": str(e)[:200]}
+
+
+# Whisper на тишине и шуме выдумывает фразы из титров, на которых учился.
+# Такие «призраки» отбрасываем, чтобы они не лезли в поле ввода.
+# Титры-подписи: мусор с любым хвостом («субтитры создавал такой-то»)
+_GHOST_CREDITS = (
+    "субтитры создавал",
+    "субтитры сделал",
+    "субтитры делал",
+    "субтитры подготовил",
+    "редактор субтитров",
+    "корректор субтитров",
+    "субтитры и перевод",
+    "перевод и субтитры",
+    "subtitles by",
+    "subs by",
+    "amara.org",
+    "transcription by",
+)
+
+# Обычные фразы-паразиты: выбрасываем, только если это весь ответ целиком
+_GHOST_LINES = (
+    "продолжение следует",
+    "спасибо за просмотр",
+    "спасибо за внимание",
+    "подписывайтесь на канал",
+    "ставьте лайки",
+    "до новых встреч",
+    "всем пока",
+    "thanks for watching",
+    "thank you for watching",
+    "please subscribe",
+    "you",
+    "bye",
+)
+
+
+def _drop_hallucination(text: str) -> str:
+    """Пустой ответ вместо выдуманной фразы (Whisper фантазирует на тишине и шуме)."""
+    if not text:
+        return ""
+    probe = text.lower().strip(" .,!?\u2026-\u2014\"'\u00ab\u00bb\n\t")
+    if len(probe) < 2:
+        return ""
+    for g in _GHOST_CREDITS:            # титры — режем с хвостом
+        if probe.startswith(g):
+            return ""
+    for g in _GHOST_LINES:              # фразы — только если это весь ответ
+        if probe == g or (probe.startswith(g) and len(probe) <= len(g) + 6):
+            return ""
+    return text
