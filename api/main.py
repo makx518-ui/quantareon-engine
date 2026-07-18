@@ -106,7 +106,7 @@ async def login_post(request: Request):
 @app.middleware("http")
 async def gate(request: Request, call_next):
     p = request.url.path
-    if p.startswith("/login") or p.startswith("/health") or p.startswith("/chat") or p.startswith("/transcribe") or p.startswith("/quantareon-chat.js"):
+    if p.startswith("/login") or p.startswith("/health") or p.startswith("/chat") or p.startswith("/transcribe") or p.startswith("/tts") or p.startswith("/quantareon-chat.js"):
         return await call_next(request)
     if not _ok(request.cookies.get(COOKIE)):
         if request.method == "GET" and ("text/html" in request.headers.get("accept","")):
@@ -2050,6 +2050,27 @@ async def transcribe_endpoint(file: UploadFile = File(...), language: str = "ru"
     result = await transcribe_audio(audio, filename=file.filename or "voice.webm",
                                     language=language)
     return result
+
+
+class TtsRequest(BaseModel):
+    text: str = Field(..., description="Текст ответа для озвучки")
+    language: str = Field("ru", description="ru — Дмитрий, en — Эндрю")
+
+
+@app.post("/tts")
+async def tts_endpoint(req: TtsRequest):
+    """Озвучка ответа Квантариона. Поток mp3: первый кусок играет,
+    пока следующие синтезируются. Публичный."""
+    from fastapi.responses import StreamingResponse
+    from chat import tts_stream
+
+    text = (req.text or "").strip()[:6000]
+    if not text:
+        from fastapi.responses import Response
+        return Response(status_code=400)
+
+    lang = "en" if req.language == "en" else "ru"
+    return StreamingResponse(tts_stream(text, language=lang), media_type="audio/mpeg")
 
 
 @app.websocket("/stt-stream")
