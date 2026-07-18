@@ -226,6 +226,7 @@
   }
   function open() {
     panel.classList.add("open");
+    prewarmSocket();   // сокет греется, пока человек читает и печатает
     fab.style.display = "none";
     partLabel.textContent = headLabel();
     input.focus();
@@ -636,6 +637,7 @@
   var WS_URL = API.replace(/^http/, "ws").replace(/\/chat$/, "/stt-stream");
   var dgWs = null, dgCtx = null, dgProc = null, dgStream = null, dgSrc = null;
   var dgOn = false, dgBase = "", dgFinal = "", dgReady = false;
+  var dgReconnects = 0;   // watchdog: пересоединения без выключения микрофона
 
   function resampleTo16k(input, rate) {
     if (rate === 16000) return input;
@@ -652,45 +654,95 @@
     input.style.height = Math.min(input.scrollHeight, 100) + "px";
   }
 
+  // Открытие сокета отдельно — чтобы жать параллельно с микрофоном и предсоединять заранее
+  function openSocketPromise() {
+    return new Promise(function (resolve) {
+      var ws;
+      try {
+        ws = new WebSocket(WS_URL + "?lang=" + (isRU ? "ru" : "en"));
+        ws.binaryType = "arraybuffer";
+      } catch (e) { resolve(null); return; }
+      var done = false;
+      var finish = function (v) { if (!done) { done = true; clearTimeout(t); resolve(v); } };
+      var t = setTimeout(function () { finish(null); }, 6000);
+      ws.onerror = function () { finish(null); };
+      ws.onclose = function () { finish(null); };
+      ws.onmessage = function (ev) {
+        var d;
+        try { d = JSON.parse(ev.data); } catch (e) { return; }
+        if (d.type === "ready") finish(ws);
+        else if (d.type === "error") finish(null);
+      };
+    });
+  }
+
+  // Предсоединение: сокет греется, пока человек ещё только открыл окно
+  var preWs = null, preWsPromise = null;
+  function prewarmSocket() {
+    if (preWs || preWsPromise || dgOn) return;
+    preWsPromise = openSocketPromise().then(function (ws) {
+      preWsPromise = null;
+      if (ws && !dgOn) preWs = ws;        // готовый сокет ждёт нажатия
+      else if (ws && dgOn) { try { ws.close(); } catch (e) {} }
+      return ws;
+    });
+  }
+
   async function startStream() {
-    try {
-      dgStream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
-      });
-    } catch (e) { addMsg(T.micDenied, "ai"); return false; }
-
-    try {
-      dgWs = new WebSocket(WS_URL + "?lang=" + (isRU ? "ru" : "en"));
-      dgWs.binaryType = "arraybuffer";
-    } catch (e) { killStream(); return false; }
-
+    // МГНОВЕННАЯ РЕАКЦИЯ: кнопка краснеет сразу, машинерия доваривается за спиной
+    // (схема из платформы: сначала отклик человеку, потом железо)
+    dgOn = true;
+    dgReconnects = 0;
+    micRed(true);
+    input.placeholder = T.micListen;
     dgBase = input.value.trim();
     dgFinal = "";
     dgReady = false;
 
-    // Ждём от сервера подтверждения "ready" — значит, Deepgram реально на связи.
-    // Пришла ошибка или тишина — уходим на запасной путь (Whisper).
-    var ready = await new Promise(function (resolve) {
-      var done = false;
-      var finish = function (v) { if (!done) { done = true; clearTimeout(t); resolve(v); } };
-      var t = setTimeout(function () { finish(false); }, 6000);
-      dgWs.onopen = function () {};
-      dgWs.onerror = function () { finish(false); };
-      dgWs.onclose = function () { finish(false); };
-      dgWs.onmessage = function (ev) {
-        var d;
-        try { d = JSON.parse(ev.data); } catch (e) { return; }
-        if (d.type === "ready") finish(true);
-        else if (d.type === "error") finish(false);
-      };
-    });
-    if (!ready) {
-      try { if (dgWs) dgWs.close(); } catch (e) {}
-      dgWs = null;
-      if (dgStream) { dgStream.getTracks().forEach(function (t) { t.stop(); }); dgStream = null; }
-      return false;
+    // ПАРАЛЛЕЛЬНО: сокет (или уже прогретый) + микрофон, как connectWS без await
+    var wsPromise;
+    if (preWs) {
+      var ready = preWs; preWs = null;
+      wsPromise = Promise.resolve(ready);
+    } else if (preWsPromise) {
+      wsPromise = preWsPromise;
+    } else {
+      wsPromise = openSocketPromise();
     }
 
+    var micPromise = navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+    }).catch(function () { return null; });
+
+    var results = await Promise.all([wsPromise, micPromise]);
+    var ws = results[0], stream = results[1];
+
+    if (!dgOn) {   // пока грелось, человек передумал
+      if (ws) { try { ws.close(); } catch (e) {} }
+      if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+      return false;
+    }
+    if (!stream) {
+      if (ws) { try { ws.close(); } catch (e) {} }
+      dgOn = false; micRed(false); input.placeholder = T.placeholder;
+      addMsg(T.micDenied, "ai");
+      return true;   // true = не падать на Whisper, доступа всё равно нет
+    }
+    if (!ws) {
+      // Deepgram не поднялся — отдаём микрофонный поток запасному Whisper
+      dgOn = false; micRed(false); input.placeholder = T.placeholder;
+      if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+      return false;  // false = уйти на запасной путь
+    }
+
+    dgStream = stream;
+    dgWs = ws;
+    attachSocketHandlers();
+    attachAudioPump();
+    return true;
+  }
+
+  function attachSocketHandlers() {
     dgWs.onmessage = function (ev) {
       var d;
       try { d = JSON.parse(ev.data); } catch (e) { return; }
@@ -700,8 +752,17 @@
       else paintLive(d.text);
     };
     dgWs.onerror = function () {};
-    dgWs.onclose = function () { if (dgOn) stopStream(); };
+    dgWs.onclose = function () {
+      if (!dgOn) return;
+      if (dgReconnects >= 20) { stopStream(); return; }
+      dgReconnects++;
+      dgBase = input.value.trim();
+      dgFinal = "";
+      setTimeout(function () { if (dgOn) reopenSocket(); }, 600);
+    };
+  }
 
+  function attachAudioPump() {
     var AC = window.AudioContext || window.webkitAudioContext;
     try { dgCtx = new AC({ sampleRate: 16000 }); } catch (e) { dgCtx = new AC(); }
     dgSrc = dgCtx.createMediaStreamSource(dgStream);
@@ -720,11 +781,18 @@
     };
     dgSrc.connect(dgProc);
     dgProc.connect(dgCtx.destination);
+  }
 
-    dgOn = true;
-    micRed(true);
-    input.placeholder = T.micListen;
-    return true;
+  async function reopenSocket() {
+    var ws = await openSocketPromise();
+    if (!dgOn) { if (ws) { try { ws.close(); } catch (e) {} } return; }
+    if (!ws) {
+      if (dgReconnects < 20) return;   // следующую попытку даст onclose
+      stopStream();
+      return;
+    }
+    dgWs = ws;
+    attachSocketHandlers();
   }
 
   function stopStream() {
@@ -743,12 +811,10 @@
   mic.addEventListener("click", async function () {
     if (dgOn) { stopStream(); return; }
     if (micOn) { stopMic(); return; }
-    mic.disabled = true;
     var ok = false;
-    try { ok = await startStream(); }   // сначала пробуем живой поток
+    try { ok = await startStream(); }   // живой поток; кнопка краснеет мгновенно внутри
     catch (e) { ok = false; }
-    finally { mic.disabled = false; }   // кнопка не залипнет ни при какой ошибке
-    if (!ok) { try { await startMic(); } catch (e) {} }  // запасной путь — Whisper
+    if (!ok) { try { await startMic(); } catch (e) {} }  // Deepgram не поднялся — Whisper
   });
 
   send.addEventListener("click", submit);
