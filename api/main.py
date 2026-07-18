@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException, Query, UploadFile, File
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -2050,6 +2050,91 @@ async def transcribe_endpoint(file: UploadFile = File(...), language: str = "ru"
     result = await transcribe_audio(audio, filename=file.filename or "voice.webm",
                                     language=language)
     return result
+
+
+@app.websocket("/stt-stream")
+async def stt_stream(ws: WebSocket):
+    """
+    Живое распознавание речи: браузер шлёт сырой звук (PCM 16 кГц),
+    мы перекладываем его в Deepgram и возвращаем текст по мере речи.
+    """
+    import asyncio, json
+    from chat import open_deepgram
+
+    await ws.accept()
+    lang = ws.query_params.get("lang", "ru")
+
+    dg = await open_deepgram(lang)
+    if dg is None:
+        await ws.send_json({"type": "error", "error": "deepgram_unavailable"})
+        await ws.close()
+        return
+
+    async def pump_from_deepgram():
+        """Текст от Deepgram — в браузер."""
+        try:
+            async for raw in dg:
+                try:
+                    data = json.loads(raw)
+                except Exception:
+                    continue
+                if data.get("type") != "Results":
+                    continue
+                alts = (data.get("channel") or {}).get("alternatives") or []
+                if not alts:
+                    continue
+                text = (alts[0].get("transcript") or "").strip()
+                if not text:
+                    continue
+                await ws.send_json({
+                    "type": "transcript",
+                    "text": text,
+                    "final": bool(data.get("is_final")),
+                })
+        except Exception:
+            pass
+
+    async def keepalive():
+        """Deepgram рвёт молчащее соединение — держим его живым."""
+        try:
+            while True:
+                await asyncio.sleep(5)
+                await dg.send(json.dumps({"type": "KeepAlive"}))
+        except Exception:
+            pass
+
+    task_dg = asyncio.create_task(pump_from_deepgram())
+    task_ka = asyncio.create_task(keepalive())
+
+    try:
+        while True:
+            msg = await ws.receive()
+            if msg.get("type") == "websocket.disconnect":
+                break
+            chunk = msg.get("bytes")
+            if chunk:
+                await dg.send(chunk)
+            elif msg.get("text") == "stop":
+                break
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        try:
+            await dg.send(json.dumps({"type": "CloseStream"}))
+        except Exception:
+            pass
+        task_ka.cancel()
+        task_dg.cancel()
+        try:
+            await dg.close()
+        except Exception:
+            pass
+        try:
+            await ws.close()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
