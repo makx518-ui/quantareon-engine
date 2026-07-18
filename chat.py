@@ -38,7 +38,7 @@ MAX_QUESTION_LEN = 2000
 # ЗАГРУЗКА ТЕКСТОВ ЭССЕ (один раз при старте)
 # ============================================================
 
-_ESSAY_DIR = Path(__file__).parent.parent / "data" / "essay"
+_ESSAY_DIR = Path(__file__).parent
 
 
 def _read(name: str) -> str:
@@ -262,6 +262,23 @@ _GHOST_LINES = (
     "please subscribe",
     "you",
     "bye",
+    "спасибо",
+    "спасибо большое",
+    "ага",
+    "угу",
+    "продолжение",
+    "конец",
+    "музыка",
+    "аплодисменты",
+    "смех",
+    "thank you",
+    "thanks",
+    "okay",
+    "ok",
+    "music",
+    "applause",
+    "[музыка]",
+    "[music]",
 )
 
 
@@ -279,3 +296,45 @@ def _drop_hallucination(text: str) -> str:
         if probe == g or (probe.startswith(g) and len(probe) <= len(g) + 6):
             return ""
     return text
+
+# ============================================================
+# ПОТОКОВОЕ РАСПОЗНАВАНИЕ (Deepgram) — текст появляется во время речи
+# ============================================================
+
+DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "")
+DEEPGRAM_WS_URL = "wss://api.deepgram.com/v1/listen"
+
+
+def deepgram_url(language: str = "ru") -> str:
+    """Адрес Deepgram с настройками (по образцу рабочего конвейера Оракула)."""
+    params = [
+        "model=nova-2",
+        f"language={language}",
+        "punctuate=true",
+        "smart_format=true",
+        "filler_words=false",
+        "encoding=linear16",
+        "sample_rate=16000",
+        "channels=1",
+        "endpointing=300",
+        "interim_results=true",
+    ]
+    return f"{DEEPGRAM_WS_URL}?{'&'.join(params)}"
+
+
+async def open_deepgram(language: str = "ru"):
+    """Открывает сокет к Deepgram. Возвращает соединение или None."""
+    if not DEEPGRAM_API_KEY:
+        return None
+    import websockets
+    url = deepgram_url(language)
+    auth = {"Authorization": f"Token {DEEPGRAM_API_KEY}"}
+    try:
+        try:
+            return await websockets.connect(url, extra_headers=auth)
+        except TypeError:
+            # в новых версиях библиотеки параметр называется иначе
+            return await websockets.connect(url, additional_headers=auth)
+    except Exception:
+        return None
+

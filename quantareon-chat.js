@@ -45,7 +45,7 @@
     micStart: "Записать голосом",
     micStop: "Идёт запись — говори",
     micWait: "Распознаю…",
-    micListen: "Говори… замолчишь — запишу текст",
+    micListen: "Слушаю… говори",
     micQuiet: "Ничего не расслышал. Попробуй ещё раз, поближе к микрофону.",
     micDenied: "Не получилось включить микрофон. Разреши доступ в настройках браузера.",
     micFail: "Не удалось распознать речь. Попробуй ещё раз или напиши текстом.",
@@ -61,7 +61,7 @@
     micStart: "Record by voice",
     micStop: "Recording — speak",
     micWait: "Transcribing…",
-    micListen: "Speak… text appears when you finish",
+    micListen: "Listening… speak",
     micQuiet: "I didn't catch anything. Try again, closer to the mic.",
     micDenied: "Could not access the microphone. Allow it in your browser settings.",
     micFail: "Could not transcribe. Try again or type your question.",
@@ -255,6 +255,7 @@
   }
 
   function submit() {
+    if (dgOn) stopStream();
     if (micOn) stopMic();
     var q = input.value.trim();
     if (!q || busy) return;
@@ -313,6 +314,7 @@
   var micOn = false;                 // намерение человека: микрофон включён
   var recorder = null, chunks = [], recStream = null;
   var actx = null, vadTimer = null, maxTimer = null, busyStt = false;
+  var segSpoke = false, segHasVad = false;   // была ли в отрезке живая речь
 
   if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder))
     mic.style.display = "none";
@@ -356,6 +358,8 @@
   function recordSegment() {
     if (!micOn || !recStream) return;
     chunks = [];
+    segSpoke = false;
+    segHasVad = false;
     var mime = pickMime();
     try {
       recorder = mime ? new MediaRecorder(recStream, { mimeType: mime })
@@ -378,14 +382,15 @@
       an.fftSize = 512;
       src.connect(an);
       var buf = new Uint8Array(an.fftSize);
-      var spoke = false, quietFrom = null;
+      var quietFrom = null;
+      segHasVad = true;
       vadTimer = setInterval(function () {
         an.getByteTimeDomainData(buf);
         var sum = 0;
         for (var i = 0; i < buf.length; i++) { var v = (buf[i] - 128) / 128; sum += v * v; }
         var rms = Math.sqrt(sum / buf.length);
-        if (rms > 0.025) { spoke = true; quietFrom = null; }
-        else if (spoke) {
+        if (rms > 0.03) { segSpoke = true; quietFrom = null; }
+        else if (segSpoke) {
           if (!quietFrom) quietFrom = Date.now();
           else if (Date.now() - quietFrom > 1800) {
             clearInterval(vadTimer); vadTimer = null;
@@ -407,7 +412,8 @@
     var blob = new Blob(chunks, { type: mime });
     chunks = [];
 
-    if (blob.size < 1200) {                 // почти тишина — просто слушаем дальше
+    // Тишину в Whisper не шлём — он на ней фантазирует («спасибо», «продолжение следует»)
+    if (blob.size < 1200 || (segHasVad && !segSpoke)) {
       if (micOn) recordSegment();
       return;
     }
@@ -459,9 +465,107 @@
     input.focus();
   }
 
-  mic.addEventListener("click", function () {
-    if (micOn) stopMic();
-    else startMic();
+  // ── ЖИВОЕ РАСПОЗНАВАНИЕ ЧЕРЕЗ DEEPGRAM (текст идёт во время речи) ──
+  // Звук уходит в вебсокет сырым PCM 16 кГц — как в конвейере Оракула.
+  var WS_URL = API.replace(/^http/, "ws").replace(/\/chat$/, "/stt-stream");
+  var dgWs = null, dgCtx = null, dgProc = null, dgStream = null, dgSrc = null;
+  var dgOn = false, dgBase = "", dgFinal = "", dgReady = false;
+
+  function resampleTo16k(input, rate) {
+    if (rate === 16000) return input;
+    var ratio = rate / 16000;
+    var out = new Float32Array(Math.round(input.length / ratio));
+    for (var i = 0; i < out.length; i++) out[i] = input[Math.floor(i * ratio)] || 0;
+    return out;
+  }
+
+  function paintLive(interim) {
+    var t = (dgFinal + (interim ? " " + interim : "")).replace(/\s+/g, " ").trim();
+    input.value = (dgBase ? dgBase + " " : "") + t;
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 100) + "px";
+  }
+
+  async function startStream() {
+    try {
+      dgStream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      });
+    } catch (e) { addMsg(T.micDenied, "ai"); return false; }
+
+    try {
+      dgWs = new WebSocket(WS_URL + "?lang=" + (isRU ? "ru" : "en"));
+      dgWs.binaryType = "arraybuffer";
+    } catch (e) { killStream(); return false; }
+
+    dgBase = input.value.trim();
+    dgFinal = "";
+    dgReady = false;
+
+    var opened = await new Promise(function (resolve) {
+      var done = false;
+      var t = setTimeout(function () { if (!done) { done = true; resolve(false); } }, 4000);
+      dgWs.onopen = function () { if (!done) { done = true; clearTimeout(t); resolve(true); } };
+      dgWs.onerror = function () { if (!done) { done = true; clearTimeout(t); resolve(false); } };
+    });
+    if (!opened) { try { dgWs.close(); } catch (e) {} dgWs = null; killStream(); return false; }
+
+    dgWs.onmessage = function (ev) {
+      var d;
+      try { d = JSON.parse(ev.data); } catch (e) { return; }
+      if (d.type === "error") { dgReady = false; return; }
+      if (d.type !== "transcript") return;
+      dgReady = true;
+      if (d.final) { dgFinal = (dgFinal + " " + d.text).trim(); paintLive(""); }
+      else paintLive(d.text);
+    };
+    dgWs.onclose = function () { if (dgOn) stopStream(); };
+
+    var AC = window.AudioContext || window.webkitAudioContext;
+    try { dgCtx = new AC({ sampleRate: 16000 }); } catch (e) { dgCtx = new AC(); }
+    dgSrc = dgCtx.createMediaStreamSource(dgStream);
+    dgProc = dgCtx.createScriptProcessor(4096, 1, 1);
+    dgProc.onaudioprocess = function (e) {
+      if (!dgOn || !dgWs || dgWs.readyState !== WebSocket.OPEN) return;
+      var raw = e.inputBuffer.getChannelData(0);
+      if (!raw || !raw.length) return;
+      var pcm = resampleTo16k(raw, dgCtx.sampleRate);
+      var buf = new Int16Array(pcm.length);
+      for (var i = 0; i < pcm.length; i++) {
+        var v = Math.max(-1, Math.min(1, pcm[i]));
+        buf[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+      }
+      try { dgWs.send(buf.buffer); } catch (err) {}
+    };
+    dgSrc.connect(dgProc);
+    dgProc.connect(dgCtx.destination);
+
+    dgOn = true;
+    micRed(true);
+    input.placeholder = T.micListen;
+    return true;
+  }
+
+  function stopStream() {
+    dgOn = false;
+    try { if (dgWs && dgWs.readyState === WebSocket.OPEN) dgWs.send("stop"); } catch (e) {}
+    setTimeout(function () { try { if (dgWs) dgWs.close(); } catch (e) {} dgWs = null; }, 300);
+    if (dgProc) { try { dgProc.disconnect(); } catch (e) {} dgProc = null; }
+    if (dgSrc) { try { dgSrc.disconnect(); } catch (e) {} dgSrc = null; }
+    if (dgCtx) { try { dgCtx.close(); } catch (e) {} dgCtx = null; }
+    if (dgStream) { dgStream.getTracks().forEach(function (t) { t.stop(); }); dgStream = null; }
+    micRed(false);
+    input.placeholder = T.placeholder;
+    input.focus();
+  }
+
+  mic.addEventListener("click", async function () {
+    if (dgOn) { stopStream(); return; }
+    if (micOn) { stopMic(); return; }
+    mic.disabled = true;
+    var ok = await startStream();       // сначала пробуем живой поток
+    mic.disabled = false;
+    if (!ok) startMic();                // не вышло — запасной путь через Whisper
   });
 
   send.addEventListener("click", submit);
