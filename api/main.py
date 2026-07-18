@@ -2070,6 +2070,9 @@ async def stt_stream(ws: WebSocket):
         await ws.close()
         return
 
+    # Явно подтверждаем браузеру: Deepgram на связи, можно слать звук
+    await ws.send_json({"type": "ready"})
+
     async def pump_from_deepgram():
         """Текст от Deepgram — в браузер."""
         try:
