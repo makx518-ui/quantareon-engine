@@ -308,8 +308,10 @@ DEEPGRAM_WS_URL = "wss://api.deepgram.com/v1/listen"
 def deepgram_url(language: str = "ru") -> str:
     """Адрес Deepgram с настройками (по образцу рабочего конвейера Оракула)."""
     params = [
-        "model=nova-2",
-        f"language={language}",
+        # nova-3 + multi: переключение языков на лету (рус/англ и ещё 8),
+        # речь на «не том» языке распознаётся, а не игнорируется
+        "model=nova-3",
+        "language=multi",
         "punctuate=true",
         "smart_format=true",
         "filler_words=false",
@@ -337,4 +339,86 @@ async def open_deepgram(language: str = "ru"):
             return await websockets.connect(url, additional_headers=auth)
     except Exception:
         return None
+
+# ============================================================
+# ОЗВУЧКА ОТВЕТОВ (edge-tts, по конвейеру Оракула)
+# ============================================================
+
+# Голоса по версиям сайта. По умолчанию везде Андрей (проверенный по Оракулу);
+# захочешь Дмитрия на русской — переменная QUANTARION_TTS_VOICE_RU=ru-RU-DmitryNeural в Render
+TTS_VOICE_RU = os.getenv("QUANTARION_TTS_VOICE_RU", "en-US-AndrewMultilingualNeural")
+TTS_VOICE_EN = os.getenv("QUANTARION_TTS_VOICE_EN", "en-US-AndrewMultilingualNeural")
+TTS_RATE = os.getenv("QUANTARION_TTS_RATE", "+5%")
+TTS_PITCH = os.getenv("QUANTARION_TTS_PITCH", "-15Hz")
+TTS_VOLUME = os.getenv("QUANTARION_TTS_VOLUME", "+15%")
+
+import re as _re
+
+
+def _tts_clean(text: str) -> str:
+    """Готовим текст к озвучке: убираем то, что голос прочитал бы вслух как мусор."""
+    t = text or ""
+    t = _re.sub(r"[\U0001F000-\U0001FAFF\u2600-\u27BF\uFE0F]", "", t)   # эмодзи
+    t = _re.sub(r"\*{1,3}", "", t)                                        # **жирный**
+    t = _re.sub(r"#{1,6}\s*", "", t)                                       # ## заголовки
+    t = _re.sub(r"`+", "", t)                                              # `код`
+    t = _re.sub(r"\s+", " ", t)
+    return t.strip()
+
+
+def _tts_chunks(text: str, limit: int = 260):
+    """Режем текст на фразы и собираем куски до ~260 символов.
+    Первую фразу отдаём отдельно и без запятых — голос стартует быстрее
+    (приём из конвейера Оракула)."""
+    sentences = _re.split(r"(?<=[.!?\u2026])\s+", text)
+    sentences = [s for s in (x.strip() for x in sentences) if s]
+    if not sentences:
+        return
+    first = _re.sub(r"[,;:\-\u2014\u2013]", " ", sentences[0])
+    first = _re.sub(r"\s+", " ", first).strip()
+    yield first
+    buf = ""
+    for s in sentences[1:]:
+        if buf and len(buf) + len(s) + 1 > limit:
+            yield buf
+            buf = s
+        else:
+            buf = (buf + " " + s).strip()
+    if buf:
+        yield buf
+
+
+async def tts_stream(text: str, language: str = "ru"):
+    """Асинхронный поток mp3-кусков: первый уходит, пока следующие синтезируются.
+    Каждый кусок собирается целиком (без щелчков) и с тремя попытками."""
+    import edge_tts
+
+    clean = _tts_clean(text)
+    if not clean:
+        return
+
+    for chunk_text in _tts_chunks(clean):
+        audio = b""
+        for attempt in range(3):
+            try:
+                comm = edge_tts.Communicate(
+                    text=chunk_text,
+                    voice=(TTS_VOICE_RU if language == "ru" else TTS_VOICE_EN),
+                    rate=TTS_RATE,
+                    pitch=TTS_PITCH,
+                    volume=TTS_VOLUME,
+                )
+                buf = bytearray()
+                async for part in comm.stream():
+                    if part["type"] == "audio":
+                        buf.extend(part["data"])
+                if buf:
+                    audio = bytes(buf)
+                    break
+            except Exception:
+                if attempt < 2:
+                    import asyncio as _aio
+                    await _aio.sleep(0.4 * (attempt + 1))
+        if audio:
+            yield audio
 

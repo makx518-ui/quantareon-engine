@@ -43,6 +43,7 @@
     limit: "На сегодня разговор довольно длинный — дай мыслям осесть. Перечитай главу, и вернёмся к ней свежими.",
     error: "Связь прервалась. Попробуй ещё раз через минуту.",
     micStart: "Записать голосом",
+    listen: "Озвучить",
     micStop: "Идёт запись — говори",
     micWait: "Распознаю…",
     micListen: "Слушаю… говори",
@@ -59,6 +60,7 @@
     limit: "Quite a long conversation for today — let the thoughts settle. Reread the chapter, and we'll return to it fresh.",
     error: "Connection lost. Try again in a minute.",
     micStart: "Record by voice",
+    listen: "Listen",
     micStop: "Recording — speak",
     micWait: "Transcribing…",
     micListen: "Listening… speak",
@@ -153,6 +155,11 @@
   ".qc-mic.rec{color:#e05a4a;border-color:#e05a4a;animation:qcpulse 1.1s infinite}" +
   ".qc-mic:disabled{opacity:.45;cursor:default}" +
   "@keyframes qcpulse{0%,100%{opacity:1}50%{opacity:.45}}" +
+  ".qc-spk{background:none;border:none;color:var(--ink-dim,#8a8f99);cursor:pointer;" +
+    "padding:2px 4px;margin-top:4px;display:inline-flex;align-items:center;gap:4px;" +
+    "font-size:11px;font-family:Inter,sans-serif;opacity:.7;transition:color .2s,opacity .2s}" +
+  ".qc-spk:hover{color:var(--fire,#e8bd6a);opacity:1}" +
+  ".qc-spk.playing{color:var(--fire,#e8bd6a);opacity:1;animation:qcpulse 1.2s infinite}" +
   ".qc-fab{display:flex;align-items:center;gap:7px;transition:padding .25s,font-size .25s,opacity .25s}" +
   ".qc-fab-short{display:none}" +
   "@media (max-width:600px){" +
@@ -249,9 +256,101 @@
     var d = document.createElement("div");
     d.className = "qc-msg " + (who === "user" ? "qc-user" : "qc-ai");
     d.textContent = text;
+    if (who === "ai") {
+      var spk = document.createElement("button");
+      spk.className = "qc-spk";
+      spk.setAttribute("aria-label", T.listen);
+      spk.innerHTML = SPK_ICON + " " + T.listen;
+      spk.addEventListener("click", function () { toggleSpeak(spk, text); });
+      d.appendChild(document.createElement("br"));
+      d.appendChild(spk);
+    }
     body.appendChild(d);
     body.scrollTop = body.scrollHeight;
     return d;
+  }
+
+  // \u2500\u2500 \u041e\u0417\u0412\u0423\u0427\u041a\u0410 \u041e\u0422\u0412\u0415\u0422\u041e\u0412 \u2500\u2500
+  var SPK_ICON = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" ' +
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>' +
+    '<path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
+
+  var curAudio = null, curBtn = null, curAbort = null;
+
+  function stopSpeak() {
+    if (curAbort) { try { curAbort.abort(); } catch (e) {} curAbort = null; }
+    if (curAudio) { try { curAudio.pause(); } catch (e) {} curAudio = null; }
+    if (curBtn) { curBtn.classList.remove("playing"); curBtn = null; }
+  }
+
+  async function toggleSpeak(btn, text) {
+    if (curBtn === btn) { stopSpeak(); return; }
+    stopSpeak();
+    curBtn = btn;
+    btn.classList.add("playing");
+
+    var url = API.replace(/\/chat$/, "/tts");
+    curAbort = (typeof AbortController !== "undefined") ? new AbortController() : null;
+
+    try {
+      var res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text, language: isRU ? "ru" : "en" }),
+        signal: curAbort ? curAbort.signal : undefined,
+      });
+      if (!res.ok || !res.body) throw new Error("tts_failed");
+
+      var canMse = (typeof MediaSource !== "undefined") &&
+                   MediaSource.isTypeSupported && MediaSource.isTypeSupported("audio/mpeg");
+
+      if (canMse) {
+        var ms = new MediaSource();
+        var audio = new Audio();
+        curAudio = audio;
+        audio.src = URL.createObjectURL(ms);
+        var reader = res.body.getReader();
+
+        ms.addEventListener("sourceopen", function () {
+          var sb = ms.addSourceBuffer("audio/mpeg");
+          var queue = [], ended = false, appending = false;
+
+          function pump() {
+            if (appending || !queue.length || sb.updating) return;
+            appending = true;
+            try { sb.appendBuffer(queue.shift()); } catch (e) { appending = false; }
+          }
+          sb.addEventListener("updateend", function () {
+            appending = false;
+            if (!queue.length && ended) { try { ms.endOfStream(); } catch (e) {} }
+            else pump();
+          });
+
+          (function read() {
+            reader.read().then(function (r) {
+              if (r.done) { ended = true; if (!queue.length && !sb.updating) { try { ms.endOfStream(); } catch (e) {} } return; }
+              queue.push(r.value);
+              pump();
+              read();
+            }).catch(function () { ended = true; });
+          })();
+        });
+
+        audio.onended = function () { if (curAudio === audio) stopSpeak(); };
+        audio.onerror = function () { if (curAudio === audio) stopSpeak(); };
+        await audio.play();
+      } else {
+        var blob = await res.blob();
+        var audio2 = new Audio(URL.createObjectURL(blob));
+        curAudio = audio2;
+        audio2.onended = function () { if (curAudio === audio2) stopSpeak(); };
+        audio2.onerror = function () { if (curAudio === audio2) stopSpeak(); };
+        await audio2.play();
+      }
+    } catch (e) {
+      stopSpeak();
+    }
   }
 
   function submit() {
