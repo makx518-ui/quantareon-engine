@@ -155,10 +155,11 @@
   ".qc-mic.rec{color:#e05a4a;border-color:#e05a4a;animation:qcpulse 1.1s infinite}" +
   ".qc-mic:disabled{opacity:.45;cursor:default}" +
   "@keyframes qcpulse{0%,100%{opacity:1}50%{opacity:.45}}" +
-  ".qc-spk{background:none;border:none;color:var(--ink-dim,#8a8f99);cursor:pointer;" +
-    "padding:2px 4px;margin-top:4px;display:inline-flex;align-items:center;gap:4px;" +
-    "font-size:11px;font-family:Inter,sans-serif;opacity:.7;transition:color .2s,opacity .2s}" +
-  ".qc-spk:hover{color:var(--fire,#e8bd6a);opacity:1}" +
+  ".qc-spk{background:none;border:1px solid var(--line,#43474f);border-radius:14px;" +
+    "color:var(--fire,#e8bd6a);cursor:pointer;" +
+    "padding:4px 10px;margin-top:6px;display:inline-flex;align-items:center;gap:6px;" +
+    "font-size:12.5px;font-family:Inter,sans-serif;opacity:.95;transition:border-color .2s,opacity .2s}" +
+  ".qc-spk:hover{border-color:var(--fire,#e8bd6a);opacity:1}" +
   ".qc-spk.playing{color:var(--fire,#e8bd6a);opacity:1;animation:qcpulse 1.2s infinite}" +
   ".qc-fab{display:flex;align-items:center;gap:7px;transition:padding .25s,font-size .25s,opacity .25s}" +
   ".qc-fab-short{display:none}" +
@@ -271,12 +272,13 @@
   }
 
   // \u2500\u2500 \u041e\u0417\u0412\u0423\u0427\u041a\u0410 \u041e\u0422\u0412\u0415\u0422\u041e\u0412 \u2500\u2500
-  var SPK_ICON = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" ' +
+  var SPK_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" ' +
     'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
     '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>' +
     '<path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
 
   var curAudio = null, curBtn = null, curAbort = null;
+  var ttsCache = {};   // текст -> готовый mp3 (Blob): повтор играет мгновенно
 
   function stopSpeak() {
     if (curAbort) { try { curAbort.abort(); } catch (e) {} curAbort = null; }
@@ -284,11 +286,50 @@
     if (curBtn) { curBtn.classList.remove("playing"); curBtn = null; }
   }
 
+  // Прогрев: как только ответ дописан — сразу тихо синтезируем его в кэш.
+  // К моменту нажатия «Озвучить» звук уже готов, играет мгновенно.
+  var warming = {};
+
+  function prewarmTts(text) {
+    if (!text || ttsCache[text] || warming[text]) return;
+    warming[text] = (async function () {
+      try {
+        var res = await fetch(API.replace(/\/chat$/, "/tts"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: text, language: isRU ? "ru" : "en" }),
+        });
+        if (res.ok) {
+          var blob = await res.blob();
+          if (blob && blob.size) ttsCache[text] = blob;
+        }
+      } catch (e) { /* не вышло — озвучится по нажатию, как раньше */ }
+      finally { delete warming[text]; }
+    })();
+  }
+
+  function playBlob(blob, btn) {
+    var audio = new Audio(URL.createObjectURL(blob));
+    curAudio = audio;
+    audio.onended = function () { if (curAudio === audio) stopSpeak(); };
+    audio.onerror = function () { if (curAudio === audio) stopSpeak(); };
+    audio.play().catch(function () { stopSpeak(); });
+  }
+
   async function toggleSpeak(btn, text) {
     if (curBtn === btn) { stopSpeak(); return; }
     stopSpeak();
     curBtn = btn;
     btn.classList.add("playing");
+
+    // Уже озвучивали этот ответ — играем из кэша, мгновенно и без сервера
+    if (ttsCache[text]) { playBlob(ttsCache[text], btn); return; }
+    // Прогрев ещё идёт — дожидаемся, второй синтез не запускаем
+    if (warming[text]) {
+      try { await warming[text]; } catch (e) {}
+      if (curBtn !== btn) return;
+      if (ttsCache[text]) { playBlob(ttsCache[text], btn); return; }
+    }
 
     var url = API.replace(/\/chat$/, "/tts");
     curAbort = (typeof AbortController !== "undefined") ? new AbortController() : null;
@@ -311,6 +352,7 @@
         curAudio = audio;
         audio.src = URL.createObjectURL(ms);
         var reader = res.body.getReader();
+        var cacheParts = [];   // копим куски, чтобы повтор был мгновенным
 
         ms.addEventListener("sourceopen", function () {
           var sb = ms.addSourceBuffer("audio/mpeg");
@@ -329,7 +371,13 @@
 
           (function read() {
             reader.read().then(function (r) {
-              if (r.done) { ended = true; if (!queue.length && !sb.updating) { try { ms.endOfStream(); } catch (e) {} } return; }
+              if (r.done) {
+                ended = true;
+                if (cacheParts.length) ttsCache[text] = new Blob(cacheParts, { type: "audio/mpeg" });
+                if (!queue.length && !sb.updating) { try { ms.endOfStream(); } catch (e) {} }
+                return;
+              }
+              cacheParts.push(r.value);
               queue.push(r.value);
               pump();
               read();
@@ -342,11 +390,8 @@
         await audio.play();
       } else {
         var blob = await res.blob();
-        var audio2 = new Audio(URL.createObjectURL(blob));
-        curAudio = audio2;
-        audio2.onended = function () { if (curAudio === audio2) stopSpeak(); };
-        audio2.onerror = function () { if (curAudio === audio2) stopSpeak(); };
-        await audio2.play();
+        ttsCache[text] = blob;
+        playBlob(blob, btn);
       }
     } catch (e) {
       stopSpeak();
@@ -396,6 +441,7 @@
         var reply = (data && data.reply) || "…";
         addMsg(reply, "ai");
         history.push({ role: "assistant", content: reply });
+        prewarmTts(reply);   // греем озвучку, пока человек читает
       })
       .catch(function () {
         dots.remove();
