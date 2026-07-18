@@ -502,23 +502,38 @@
     dgFinal = "";
     dgReady = false;
 
-    var opened = await new Promise(function (resolve) {
+    // Ждём от сервера подтверждения "ready" — значит, Deepgram реально на связи.
+    // Пришла ошибка или тишина — уходим на запасной путь (Whisper).
+    var ready = await new Promise(function (resolve) {
       var done = false;
-      var t = setTimeout(function () { if (!done) { done = true; resolve(false); } }, 4000);
-      dgWs.onopen = function () { if (!done) { done = true; clearTimeout(t); resolve(true); } };
-      dgWs.onerror = function () { if (!done) { done = true; clearTimeout(t); resolve(false); } };
+      var finish = function (v) { if (!done) { done = true; clearTimeout(t); resolve(v); } };
+      var t = setTimeout(function () { finish(false); }, 6000);
+      dgWs.onopen = function () {};
+      dgWs.onerror = function () { finish(false); };
+      dgWs.onclose = function () { finish(false); };
+      dgWs.onmessage = function (ev) {
+        var d;
+        try { d = JSON.parse(ev.data); } catch (e) { return; }
+        if (d.type === "ready") finish(true);
+        else if (d.type === "error") finish(false);
+      };
     });
-    if (!opened) { try { dgWs.close(); } catch (e) {} dgWs = null; killStream(); return false; }
+    if (!ready) {
+      try { if (dgWs) dgWs.close(); } catch (e) {}
+      dgWs = null;
+      if (dgStream) { dgStream.getTracks().forEach(function (t) { t.stop(); }); dgStream = null; }
+      return false;
+    }
 
     dgWs.onmessage = function (ev) {
       var d;
       try { d = JSON.parse(ev.data); } catch (e) { return; }
-      if (d.type === "error") { dgReady = false; return; }
       if (d.type !== "transcript") return;
       dgReady = true;
       if (d.final) { dgFinal = (dgFinal + " " + d.text).trim(); paintLive(""); }
       else paintLive(d.text);
     };
+    dgWs.onerror = function () {};
     dgWs.onclose = function () { if (dgOn) stopStream(); };
 
     var AC = window.AudioContext || window.webkitAudioContext;
@@ -563,9 +578,11 @@
     if (dgOn) { stopStream(); return; }
     if (micOn) { stopMic(); return; }
     mic.disabled = true;
-    var ok = await startStream();       // сначала пробуем живой поток
-    mic.disabled = false;
-    if (!ok) startMic();                // не вышло — запасной путь через Whisper
+    var ok = false;
+    try { ok = await startStream(); }   // сначала пробуем живой поток
+    catch (e) { ok = false; }
+    finally { mic.disabled = false; }   // кнопка не залипнет ни при какой ошибке
+    if (!ok) { try { await startMic(); } catch (e) {} }  // запасной путь — Whisper
   });
 
   send.addEventListener("click", submit);
