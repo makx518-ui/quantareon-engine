@@ -308,10 +308,8 @@ DEEPGRAM_WS_URL = "wss://api.deepgram.com/v1/listen"
 def deepgram_url(language: str = "ru") -> str:
     """Адрес Deepgram с настройками (по образцу рабочего конвейера Оракула)."""
     params = [
-        # nova-3 + multi: переключение языков на лету (рус/англ и ещё 8),
-        # речь на «не том» языке распознаётся, а не игнорируется
-        "model=nova-3",
-        "language=multi",
+        "model=nova-2",
+        f"language={language}",
         "punctuate=true",
         "smart_format=true",
         "filler_words=false",
@@ -374,11 +372,25 @@ def _tts_chunks(text: str, limit: int = 260):
     sentences = [s for s in (x.strip() for x in sentences) if s]
     if not sentences:
         return
-    first = _re.sub(r"[,;:\-\u2014\u2013]", " ", sentences[0])
-    first = _re.sub(r"\s+", " ", first).strip()
-    yield first
+    # Первый кусок делаем совсем коротким (до ~60 символов, по границе слова):
+    # чем меньше текста, тем раньше польётся звук. Остаток первой фразы — вторым куском.
+    first_sent = _re.sub(r"[,;:\-\u2014\u2013]", " ", sentences[0])
+    first_sent = _re.sub(r"\s+", " ", first_sent).strip()
+    if len(first_sent) > 60:
+        cut = first_sent.rfind(" ", 20, 60)
+        if cut == -1:
+            cut = 60
+        yield first_sent[:cut].strip()
+        rest = first_sent[cut:].strip()
+        if rest:
+            sentences = [rest] + sentences[1:]
+        else:
+            sentences = sentences[1:]
+    else:
+        yield first_sent
+        sentences = sentences[1:]
     buf = ""
-    for s in sentences[1:]:
+    for s in sentences:
         if buf and len(buf) + len(s) + 1 > limit:
             yield buf
             buf = s

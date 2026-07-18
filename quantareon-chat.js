@@ -304,8 +304,18 @@
 
   function stopSpeak() {
     ttsBusy = false;
+    // Отменяем активный стрим (предотвращает повторный запуск) — как в Оракуле
     if (curAbort) { try { curAbort.abort(); } catch (e) {} curAbort = null; }
-    if (curAudio) { try { curAudio.pause(); } catch (e) {} curAudio = null; }
+    // Железная остановка звука — как в Оракуле: pause + сброс + очистка src + load
+    if (curAudio) {
+      try {
+        curAudio.pause();
+        curAudio.currentTime = 0;
+        curAudio.src = "";
+        curAudio.load();
+      } catch (e) {}
+      curAudio = null;
+    }
     if (curMs) { try { curMs.endOfStream(); } catch (e) {} curMs = null; }
     if (curBtn) { setBtnLabel(curBtn, T.listen, false); curBtn = null; }
   }
@@ -326,10 +336,10 @@
 
     ttsBusy = true;
     curBtn = btn;
-    setBtnLabel(btn, T.stop, true);
+    setBtnLabel(btn, T.preparing, true);   // фаза загрузки — как «loading» в Оракуле
 
     // Повтор — мгновенно из кэша
-    if (ttsCache[text]) { playBlobNow(ttsCache[text], btn); return; }
+    if (ttsCache[text]) { setBtnLabel(btn, T.stop, true); playBlobNow(ttsCache[text], btn); return; }
 
     var url = API.replace(/\/chat$/, "/tts");
     curAbort = (typeof AbortController !== "undefined") ? new AbortController() : null;
@@ -370,7 +380,9 @@
             appending = false;
             if (!started) {           // пошёл первый кусок — включаем звук
               started = true;
-              audio.play().catch(function () {});
+              audio.play().then(function () {
+                if (curBtn === btn) setBtnLabel(btn, T.stop, true);   // звук пошёл — теперь «Стоп»
+              }).catch(function () {});
             }
             if (!queue.length && ended) { try { ms.endOfStream(); } catch (e) {} }
             else pump();
@@ -399,6 +411,7 @@
         var blob = await res.blob();
         if (curBtn !== btn) return;   // пока качали, нажали стоп
         ttsCache[text] = blob;
+        setBtnLabel(btn, T.stop, true);
         playBlobNow(blob, btn);
       }
     } catch (e) {
