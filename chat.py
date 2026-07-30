@@ -410,9 +410,6 @@ _UDAR_ABBR = [
     ("ДНК", "дэ-эн-каа"),
     ("РНК", "эр-эн-каа"),
 ]
-# "ИИ" как отдельное слово (в т.ч. "ИИ-зеркало") — читать по буквам "и-и",
-# иначе движок тянет одно долгое "ииии". Ловим строго границу слова, чтобы
-# не задеть окончания вроде "партии", "линии".
 
 def _apply_udar(text: str) -> str:
     t = text
@@ -425,8 +422,6 @@ def _apply_udar(text: str) -> str:
         t = _re.sub(_re.escape(bad), _sub_keepcase(good), t, flags=_re.IGNORECASE)
     for bad, good in _UDAR_ABBR:
         t = t.replace(bad, good)
-    # ИИ как отдельное слово -> "и-и" (в т.ч. в "ИИ-зеркало")
-    t = _re.sub(r"(?<![А-Яа-яЁё])ИИ(?![А-Яа-яЁё])", "и-и", t)
     def _wrepl(m):
         w = m.group(0)
         rep = _UDAR_WORDS[w.lower()]
