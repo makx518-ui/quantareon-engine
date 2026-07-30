@@ -406,6 +406,11 @@ _UDAR_SUBSTR = [
     ("самому",    "самомуу"),      # самому́
     ("среду",     "сридуу"),       # сре́ду — фонетическая запись (его выбор в книге)
 ]
+# Аббревиатуры: пишем как слышится, ударение на последний слог; регистр не трогаем
+_UDAR_ABBR = [
+    ("ДНК", "Дэ Эн Ка"),
+    ("РНК", "Эр Эн Ка"),
+]
 
 def _apply_udar(text: str) -> str:
     t = text
@@ -416,6 +421,8 @@ def _apply_udar(text: str) -> str:
         return _r
     for bad, good in _UDAR_SUBSTR:
         t = _re.sub(_re.escape(bad), _sub_keepcase(good), t, flags=_re.IGNORECASE)
+    for bad, good in _UDAR_ABBR:
+        t = t.replace(bad, good)
     def _wrepl(m):
         w = m.group(0)
         rep = _UDAR_WORDS[w.lower()]
