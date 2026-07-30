@@ -429,6 +429,8 @@ def _apply_udar(text: str) -> str:
         return rep[0].upper() + rep[1:] if w[0].isupper() else rep
     pattern = r"\b(" + "|".join(_re.escape(k) for k in _UDAR_WORDS) + r")\b"
     t = _re.sub(pattern, _wrepl, t, flags=_re.IGNORECASE)
+    # Буквы "ИИ" -> "И.И." (пробуем точки, чтобы движок сказал раздельно "и" "и").
+    t = _re.sub(r"(?<![А-Яа-яЁё])ИИ(?![А-Яа-яЁё])", "И.И.", t)
     return t
 
 
