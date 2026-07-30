@@ -344,16 +344,70 @@ async def open_deepgram(language: str = "ru"):
 
 # Голоса по версиям сайта. По умолчанию везде Андрей (проверенный по Оракулу);
 # захочешь Дмитрия на русской — переменная QUANTARION_TTS_VOICE_RU=ru-RU-DmitryNeural в Render
-TTS_VOICE_RU = os.getenv("QUANTARION_TTS_VOICE_RU", "en-US-AndrewMultilingualNeural")
+TTS_VOICE_RU = os.getenv("QUANTARION_TTS_VOICE_RU", "ru-RU-DmitryNeural")
 TTS_VOICE_EN = os.getenv("QUANTARION_TTS_VOICE_EN", "en-US-AndrewMultilingualNeural")
-TTS_RATE = os.getenv("QUANTARION_TTS_RATE", "+5%")
-TTS_PITCH = os.getenv("QUANTARION_TTS_PITCH", "-15Hz")
-TTS_VOLUME = os.getenv("QUANTARION_TTS_VOLUME", "+15%")
+# Русский — как в аудиокниге (голос Дмитрий): темп -15%, высота -12Hz.
+# Английский — как было (голос Эндрю): темп +5%, высота -15Hz.
+TTS_RATE_RU = os.getenv("QUANTARION_TTS_RATE_RU", "-15%")
+TTS_PITCH_RU = os.getenv("QUANTARION_TTS_PITCH_RU", "-12Hz")
+TTS_VOLUME_RU = os.getenv("QUANTARION_TTS_VOLUME_RU", "+15%")
+TTS_RATE_EN = os.getenv("QUANTARION_TTS_RATE_EN", "+5%")
+TTS_PITCH_EN = os.getenv("QUANTARION_TTS_PITCH_EN", "-15Hz")
+TTS_VOLUME_EN = os.getenv("QUANTARION_TTS_VOLUME_EN", "+15%")
 
 import re as _re
 
 
-def _tts_clean(text: str) -> str:
+
+# ============================================================
+# СЛОВАРЬ УДАРЕНИЙ (из аудиокниги, голос Дмитрий)
+# Движок edge-tts предсказуемо ошибается в одних и тех же словах.
+# Перед озвучкой русского текста заменяем их на формы, которые голос
+# произносит верно (удвоение ударной гласной / фонетическая запись).
+# Приёмы и список — те же, что утверждены при озвучке книги.
+# ============================================================
+
+# Пословные замены (по границе слова, регистр сохраняем у первой буквы).
+# Ключ — как пишется в норме, значение — как отдать движку.
+_UDAR_WORDS = {
+    # Только слова с ОДНОЗНАЧНЫМ ударением — где движок всегда ошибается
+    # предсказуемо. Двузначные ("стоит" сто́ит/стои́т, "самой" са́мой/само́й)
+    # СОЗНАТЕЛЬНО не берём: в живом тексте смысл заранее неизвестен,
+    # автозамена сломала бы половину случаев. Движок их чаще читает верно сам.
+    "тела": "телаа",     # тела́ (мн.ч.) — движок тянет те́ла
+    "ума": "умаа",       # ума́
+    "ядра": "ядраа",     # ядра́
+    "ходу": "хооду",     # хо́ду
+    "часа": "чааса",     # ча́са
+}
+
+# Замены-подстроки (санскрит, аббревиатуры, устойчивые формы) —
+# применяются как есть, без границы слова.
+_UDAR_SUBSTR = [
+    ("кундалини", "кундалинии"),   # кундали́ни — однозначно
+    ("самому",    "самомуу"),      # самомуу — однозначно
+]
+
+def _apply_udar(text: str) -> str:
+    t = text
+    def _sub_keepcase(good):
+        def _r(m):
+            w = m.group(0)
+            return good[0].upper() + good[1:] if w[:1].isupper() else good
+        return _r
+    for bad, good in _UDAR_SUBSTR:
+        t = _re.sub(_re.escape(bad), _sub_keepcase(good), t, flags=_re.IGNORECASE)
+    def _wrepl(m):
+        w = m.group(0)
+        rep = _UDAR_WORDS[w.lower()]
+        # сохраняем заглавную первую букву
+        return rep[0].upper() + rep[1:] if w[0].isupper() else rep
+    pattern = r"\b(" + "|".join(_re.escape(k) for k in _UDAR_WORDS) + r")\b"
+    t = _re.sub(pattern, _wrepl, t, flags=_re.IGNORECASE)
+    return t
+
+
+def _tts_clean(text: str, language: str = "ru") -> str:
     """Готовим текст к озвучке: убираем то, что голос прочитал бы вслух как мусор."""
     t = text or ""
     t = _re.sub(r"[\U0001F000-\U0001FAFF\u2600-\u27BF\uFE0F]", "", t)   # эмодзи
@@ -361,7 +415,10 @@ def _tts_clean(text: str) -> str:
     t = _re.sub(r"#{1,6}\s*", "", t)                                       # ## заголовки
     t = _re.sub(r"`+", "", t)                                              # `код`
     t = _re.sub(r"\s+", " ", t)
-    return t.strip()
+    t = t.strip()
+    if language == "ru":
+        t = _apply_udar(t)
+    return t
 
 
 def _tts_chunks(text: str, limit: int = 260):
@@ -405,7 +462,7 @@ async def tts_stream(text: str, language: str = "ru"):
     Каждый кусок собирается целиком (без щелчков) и с тремя попытками."""
     import edge_tts
 
-    clean = _tts_clean(text)
+    clean = _tts_clean(text, language)
     if not clean:
         return
 
@@ -416,9 +473,9 @@ async def tts_stream(text: str, language: str = "ru"):
                 comm = edge_tts.Communicate(
                     text=chunk_text,
                     voice=(TTS_VOICE_RU if language == "ru" else TTS_VOICE_EN),
-                    rate=TTS_RATE,
-                    pitch=TTS_PITCH,
-                    volume=TTS_VOLUME,
+                    rate=(TTS_RATE_RU if language == "ru" else TTS_RATE_EN),
+                    pitch=(TTS_PITCH_RU if language == "ru" else TTS_PITCH_EN),
+                    volume=(TTS_VOLUME_RU if language == "ru" else TTS_VOLUME_EN),
                 )
                 buf = bytearray()
                 async for part in comm.stream():
