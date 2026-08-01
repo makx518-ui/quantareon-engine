@@ -121,7 +121,10 @@ class Config:
     # 🙋 Добавляется всем остальным
     GUEST_BLOCK: str = """
 
-[С КЕМ ТЫ ГОВОРИШЬ]: С тобой говорит ГОСТЬ сайта — ты его не знаешь. НИКОГДА не называй его Владом и никаким другим именем, пока он сам не представится. Не говори, что помнишь его или ваши прошлые беседы. Обращайся вежливо и на «вы», без имени. Если он назовёт своё имя — запомни и дальше обращайся так."""
+[С КЕМ ТЫ ГОВОРИШЬ]: С тобой говорит ГОСТЬ сайта — ты его не знаешь. НИКОГДА не называй его Владом и никаким другим именем, пока он сам не представится. Не говори, что помнишь его или ваши прошлые беседы. Начинай на «вы», без имени.
+- ЕСЛИ ОН ПРЕДЛОЖИЛ ПЕРЕЙТИ НА «ТЫ» — СРАЗУ СОГЛАШАЙСЯ и дальше говори только на «ты». Не спорь, не объясняй про «формат обращения», не возвращайся к «вы». Это его право, и отказ звучит чопорно.
+- Если он назовёт своё имя — запомни и дальше обращайся так.
+- Вообще подстраивайся под его манеру: он на «ты» — и ты на «ты», он коротко — и ты коротко."""
 
     SYSTEM_PROMPT: str = """Ты — КВАНТАРИОН, продвинутый голосовой ИИ-ассистент (мужчина).
 
@@ -141,6 +144,11 @@ class Config:
 - ХОРОШО (льётся): Помню наш разговор — тесты прошли успешно и можно продолжать работу.
 - ПЛОХО (запятые на каждом шагу): Думаю, дело в настройках, проверь и скажи, что вышло.
 - ХОРОШО (без них): Похоже на проблему в настройках — проверь и напиши результат.
+
+ГРАМОТНОСТЬ:
+- Говори по-русски ПРАВИЛЬНО. Следи за падежами и предлогами — твой текст звучит вслух, ошибка сразу режет слух.
+- Особенно осторожно с вопросами: «О ЧЁМ поговорим?» (не «чем бы ты хотел поговорить»), «О ЧЁМ ты думаешь?», «ЧЕМ занимаешься?».
+- Если сомневаешься в оборот — скажи проще и короче.
 
 ТОН — СТРОГОЕ ПРАВИЛО:
 - Ровный, спокойный, дружеский. НЕ услужливый. Ты собеседник, а не сотрудник справочной службы.
@@ -267,6 +275,127 @@ active_sessions: Dict[str, "VoiceSessionTurbo"] = {}
 
 
 
+# ============================================================
+# Произношение: числа, время и города — словами
+# ------------------------------------------------------------
+# Движок читает «1 августа» как «ОДИН августа», «07:37» как «ноль семь»,
+# а латиницу посреди русской фразы — по-английски. Пишем словами.
+# ============================================================
+_DAYS_RU = {
+    1: "первого", 2: "второго", 3: "третьего", 4: "четвёртого", 5: "пятого",
+    6: "шестого", 7: "седьмого", 8: "восьмого", 9: "девятого", 10: "десятого",
+    11: "одиннадцатого", 12: "двенадцатого", 13: "тринадцатого", 14: "четырнадцатого",
+    15: "пятнадцатого", 16: "шестнадцатого", 17: "семнадцатого", 18: "восемнадцатого",
+    19: "девятнадцатого", 20: "двадцатого", 21: "двадцать первого", 22: "двадцать второго",
+    23: "двадцать третьего", 24: "двадцать четвёртого", 25: "двадцать пятого",
+    26: "двадцать шестого", 27: "двадцать седьмого", 28: "двадцать восьмого",
+    29: "двадцать девятого", 30: "тридцатого", 31: "тридцать первого",
+}
+
+# города, которые сервис отдаёт латиницей — по-русски звучат естественнее
+_CITIES_RU = {
+    "paris": "Париже", "london": "Лондоне", "berlin": "Берлине", "madrid": "Мадриде",
+    "rome": "Риме", "vienna": "Вене", "prague": "Праге", "warsaw": "Варшаве",
+    "amsterdam": "Амстердаме", "brussels": "Брюсселе", "lisbon": "Лиссабоне",
+    "athens": "Афинах", "istanbul": "Стамбуле", "dubai": "Дубае", "tbilisi": "Тбилиси",
+    "yerevan": "Ереване", "baku": "Баку", "kyiv": "Киеве", "kiev": "Киеве",
+    "minsk": "Минске", "almaty": "Алматы", "astana": "Астане", "tashkent": "Ташкенте",
+    "moscow": "Москве", "saint petersburg": "Петербурге", "new york": "Нью-Йорке",
+    "los angeles": "Лос-Анджелесе", "chicago": "Чикаго", "toronto": "Торонто",
+    "tel aviv": "Тель-Авиве", "beijing": "Пекине", "tokyo": "Токио", "seoul": "Сеуле",
+}
+
+
+def _time_ru(hhmm: str) -> str:
+    """«07:37» → «семь тридцать семь» (без «ноль семь двоеточие»)."""
+    try:
+        h, m = hhmm.split(":")
+        h, m = int(h), int(m)
+        return f"{h}:{m:02d}" if m else f"{h} часов"
+    except Exception:
+        return hhmm
+
+
+def _city_ru(city: str) -> str:
+    """Латинское название города — по-русски, если знаем."""
+    if not city:
+        return ""
+    return _CITIES_RU.get(city.strip().lower(), city)
+
+
+
+# ============================================================
+# Словарь произношения — перенесён из подкаста по эссе (chat.py)
+# ------------------------------------------------------------
+# Приём отработан на аудиокниге: движок не понимает знак ударения,
+# зато удвоение ударной гласной он берёт («ядраа» → ядра́).
+# Двузначные слова («стоит», «самой») сознательно НЕ трогаем —
+# в живой речи смысл заранее неизвестен, автозамена сломала бы половину.
+# Список дополняется по слуху.
+# ============================================================
+_UDAR_WORDS = {
+    "ума": "умаа",          # ума́ (род.п.)
+    "ядра": "ядраа",        # ядра́
+    "ходу": "хооду",        # хо́ду
+    "часа": "чааса",        # ча́са
+    "волны": "волныы",      # волны́
+    "замки": "замкии",      # замки́ (запоры), не за́мки
+    "мастеров": "мастиров", # мастеро́в
+}
+
+_UDAR_SUBSTR = [
+    ("кундалини", "кундалинии"),
+    ("самому",    "самомуу"),
+    ("среду",     "сридуу"),
+]
+
+_UDAR_ABBR = [
+    ("ДНК", "дэ-эн-каа"),
+    ("РНК", "эр-эн-каа"),
+    ("ИИ",  "И-И"),
+]
+
+
+def _apply_udar(text: str) -> str:
+    """Подставить произносимые формы вместо капризных слов."""
+    t = text
+
+    def _keep_case(good):
+        def _r(m):
+            w = m.group(0)
+            return good[0].upper() + good[1:] if w[:1].isupper() else good
+        return _r
+
+    for bad, good in _UDAR_SUBSTR:
+        t = re.sub(re.escape(bad), _keep_case(good), t, flags=re.IGNORECASE)
+    for bad, good in _UDAR_ABBR:
+        t = t.replace(bad, good)
+
+    def _wrepl(m):
+        w = m.group(0)
+        rep = _UDAR_WORDS[w.lower()]
+        return rep[0].upper() + rep[1:] if w[0].isupper() else rep
+
+    pattern = r"\b(" + "|".join(re.escape(k) for k in _UDAR_WORDS) + r")\b"
+    t = re.sub(pattern, _wrepl, t, flags=re.IGNORECASE)
+    return t
+
+
+def _tts_clean(text: str, language: str = "ru") -> str:
+    """Готовим текст к озвучке: убираем то, что голос прочитал бы как мусор."""
+    t = text or ""
+    t = re.sub(r"\[sticker:[^\]]*\]", "", t, flags=re.IGNORECASE)      # служебные метки
+    t = re.sub(r"[\U0001F000-\U0001FAFF\u2600-\u27BF\uFE0F]", "", t)   # эмодзи
+    t = re.sub(r"\*{1,3}", "", t)                                       # **жирный**
+    t = re.sub(r"#{1,6}\s*", "", t)                                      # ## заголовки
+    t = re.sub(r"`+", "", t)                                             # `код`
+    t = re.sub(r"\s+", " ", t).strip()
+    if str(language).lower().startswith("ru"):
+        t = _apply_udar(t)
+    return t
+
+
+
 class GeoLocation:
     """Определение локации по IP и генерация умного филлера."""
     
@@ -360,10 +489,11 @@ class GeoLocation:
                 month = self.MONTHS_RU[msk_now.month]
                 weekday = self.WEEKDAYS_RU[msk_now.weekday()]
                 msk_time = msk_now.strftime("%H:%M")
-                filler = f"Сегодня {day} {month}, {weekday}, {msk_time} по Москве"
+                day_word = _DAYS_RU.get(day, str(day))
+                filler = f"Сегодня {day_word} {month}, {weekday}, {_time_ru(msk_time)} по Москве"
                 if self.timezone != "Europe/Moscow" and self.city and user_tz != msk_tz:
-                    user_time = user_now.strftime("%H:%M")
-                    filler += f", {user_time} у вас ({self.city})"
+                    user_time = _time_ru(user_now.strftime("%H:%M"))
+                    filler += f", {user_time} у вас в городе {_city_ru(self.city)}"
 
             filler += "."
             
@@ -889,9 +1019,11 @@ class EdgeTTSTurbo:
         self.rate = config.TTS_RATE_EN if en else config.TTS_RATE
         self.pitch = config.TTS_PITCH_EN if en else config.TTS_PITCH
         self.volume = config.TTS_VOLUME_EN if en else config.TTS_VOLUME
+        self.lang = "en" if en else "ru"
     
     async def synthesize(self, text: str) -> bytes:
-        """Synthesize text to audio (full)."""
+        """Озвучить текст целиком."""
+        text = _tts_clean(text, self.lang)   # словарь произношения + чистка
         if not text or not text.strip():
             return b""
         
@@ -921,6 +1053,7 @@ class EdgeTTSTurbo:
         Собираем весь аудио для текста, потом отправляем — без щелчков между кусками.
         🛡️ С RETRY логикой при сбоях.
         """
+        text = _tts_clean(text, self.lang)   # словарь произношения + чистка
         if not text or not text.strip():
             return
         
@@ -1139,7 +1272,7 @@ class VoiceSessionTurbo:
             audio_buffer = io.BytesIO()
             
             communicate = edge_tts.Communicate(
-                self.cached_filler_text,
+                _tts_clean(self.cached_filler_text, self.lang),
                 self.tts.voice,
                 rate=self.tts.rate,
                 pitch=self.tts.pitch,
@@ -1408,7 +1541,9 @@ async def websocket_voice(websocket: WebSocket):
     logger.info(f"[{session_id}] 🌐 Language: {session.lang} | voice: {session.tts.voice} @ {session.tts.rate}")
     
     # 🧠 Определяем user_id: admin → query param → cookie → IP
-    _admin_secret_ws = os.getenv("ADMIN_SECRET", "")
+    # ключ хозяина: на Амвере переменная звалась ADMIN_SECRET,
+    # на Render уже есть QUANTAREON_PASSWORD — принимаем любую из них
+    _admin_secret_ws = os.getenv("ADMIN_SECRET", "") or os.getenv("QUANTAREON_PASSWORD", "")
     _admin_cookie_ws = websocket.cookies.get("quantarion_admin", "")
     uid_query = websocket.query_params.get("uid", "")
     uid_cookie = websocket.cookies.get("quantarion_uid", "")
