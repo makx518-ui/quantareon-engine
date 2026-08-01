@@ -42,6 +42,14 @@ from fastapi.responses import JSONResponse, Response
 import aiohttp
 import edge_tts
 
+# связь с Deepgram идёт по websockets; если библиотеки нет — голос
+# просто не поднимется, но остальной движок работать не перестанет
+try:
+    import websockets
+except ImportError:
+    websockets = None
+    logging.getLogger(__name__).error("VOICE: библиотека websockets не установлена")
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
