@@ -762,7 +762,12 @@ class DeepgramSTT:
                     # Deepgram шлёт одну и ту же фразу дважды: сначала как
                     # is_final, потом как speech_final. Раньше обе попадали
                     # в буфер — отсюда «Привет, брат. Привет, брат.»
-                    ok = (is_final and confidence > 0.7) or (speech_final and confidence > 0.5)
+                    # РАНЬШЕ: is_final требовал уверенности выше 0.7 — и всё,
+                    # что распозналось «неуверенно» (быстрая речь, шум, редкое
+                    # слово), ВЫБРАСЫВАЛОСЬ молча. Отсюда «то слышит, то нет».
+                    # Теперь берём почти всё: лучше расслышать неточно, чем
+                    # промолчать.
+                    ok = (is_final or speech_final) and confidence > 0.25
                     if transcript and ok:
                         if transcript == getattr(self, "_last_sent", None):
                             pass          # тот же кусок пришёл повторно — молчим
@@ -1336,6 +1341,7 @@ class VoiceSessionTurbo:
         self.is_active = False
         self.is_processing = False
         self._processing_since = 0     # когда началась обработка (для сторожа)
+        self._flush_task = None        # 🛟 задача автообработки
         self.is_speaking = False
         self.barge_in_requested = False
         self.first_message = True
@@ -1464,6 +1470,32 @@ class VoiceSessionTurbo:
         if self.stt and self.stt.is_connected:
             await self.stt.send_audio(audio_data)
     
+    def _schedule_autoflush(self):
+        """🛟 СТРАХОВКА: если браузер не пришлёт «я договорил» (детектор речи
+        иногда не срабатывает на коротких фразах), сами обработаем накопленное
+        через полторы секунды тишины. Иначе реплика пропадает молча."""
+        try:
+            if getattr(self, "_flush_task", None):
+                self._flush_task.cancel()
+        except Exception:
+            pass
+
+        async def _later():
+            try:
+                await asyncio.sleep(1.6)
+                if self.transcript_buffer.strip() and not self.is_processing:
+                    logger.info(f"[{self.session_id}] 🛟 Браузер молчит — обрабатываю сам")
+                    await self.on_speech_end()
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.warning(f"[{self.session_id}] автообработка не вышла: {e}")
+
+        try:
+            self._flush_task = asyncio.create_task(_later())
+        except Exception:
+            self._flush_task = None
+
     def _on_transcript(self, text: str):
         """Buffer transcripts."""
         if not self.is_active:
@@ -1480,6 +1512,7 @@ class VoiceSessionTurbo:
             "type": "transcript_interim",
             "content": self.transcript_buffer
         }))
+        self._schedule_autoflush()   # 🛟 на случай, если браузер промолчит
     
     def _on_stt_error(self, error):
         logger.error(f"[{self.session_id}] STT error: {error}")
