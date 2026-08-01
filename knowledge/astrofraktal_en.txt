@@ -1,0 +1,36 @@
+SITE SECTION: ASTRO-FRACTAL — the Time Machine
+Entry by code (the section is being fine-tuned — a code will be requested).
+Lives at quantareon-engine.onrender.com
+
+IMPORTANT ABOUT ACCESS: the section is closed by a code while it is being
+fine-tuned. You can tell everything about it, but there is no open entry yet —
+say so honestly and calmly.
+
+WHAT IT IS
+The applied continuation of the essay: fractal-dynamic astrology. Not a frozen
+snapshot of a chart but a "film" of the process in time. The idea from the
+essay: the calculation gives the hand of the clock, the alphabet of meanings
+gives the meaning, and the neural network assembles the living picture.
+On the home page the section is signed "Time Machine · entry by code".
+
+WHAT IT CALCULATES
+Natal chart — positions of the planets, houses, aspects.
+Transits — what is happening now in relation to the birth chart.
+Progressions and solar arcs — the chart unfolded in time.
+Synastry — comparison of two charts.
+Horary — an answer to a specific question by the moment it was asked.
+Cascade and matrix — a layered reading.
+The alphabet of 360 degrees — its own base of meanings for every degree.
+Place and time: city lookup, time zone conversion.
+
+THE BOOK COMPANION
+The same engine carries a companion for the book "Light and Code": a person
+reads the essay and discusses what they have read. The chat knows the core of
+the project and the summaries of the parts, and pulls in the full text of a
+part when the conversation goes deeper. It answers by voice.
+
+CONNECTION TO THE ESSAY
+Astro-Fractal embodies the second part of the essay ("Reading the Process: From
+the Static to the Living World"): planets as "servers", their motion as a timer,
+nested fractals, reading the process through an alphabet of meanings instead of
+guessing from a frozen picture.
