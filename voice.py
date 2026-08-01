@@ -1150,6 +1150,52 @@ async def warm_greetings():
     except Exception as e:
         logger.error(f"VOICE: не удалось озвучить приветствие: {e}")
 
+    start_keep_awake()   # ⏰ не даём Render усыпить приложение
+
+
+
+
+# ============================================================
+# ⏰ БУДИЛЬНИК: не даём Render усыпить приложение
+# ------------------------------------------------------------
+# На бесплатном тарифе Render гасит приложение после ~15 минут тишины,
+# и следующий заход ждёт пробуждения полминуты-минуту. Для голоса это
+# плохо: человек нажал на имя и сидит. Поэтому раз в 10 минут стучимся
+# сами себе — приложение считает это живым трафиком и не засыпает.
+# Адрес Render подставляет сам в переменную RENDER_EXTERNAL_URL.
+# Выключается переменной KEEP_AWAKE=0.
+# ============================================================
+_keep_awake_task = None
+
+
+async def _keep_awake_loop():
+    url = (os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/")
+           or os.getenv("SELF_URL", "").rstrip("/"))
+    if not url:
+        logger.info("БУДИЛЬНИК: адрес приложения неизвестен — пропускаю")
+        return
+
+    logger.info(f"БУДИЛЬНИК: держу приложение живым, стучусь в {url}/health каждые 10 мин")
+    await asyncio.sleep(60)          # дать серверу спокойно подняться
+    while True:
+        try:
+            async with aiohttp.ClientSession() as s:
+                async with s.get(url + "/health",
+                                 timeout=aiohttp.ClientTimeout(total=20)) as r:
+                    logger.debug(f"БУДИЛЬНИК: {r.status}")
+        except Exception as e:
+            logger.debug(f"БУДИЛЬНИК: не достучался ({e})")
+        await asyncio.sleep(600)     # 10 минут
+
+
+def start_keep_awake():
+    """Запустить будильник. Зовётся при старте приложения."""
+    global _keep_awake_task
+    if os.getenv("KEEP_AWAKE", "1") == "0":
+        logger.info("БУДИЛЬНИК: выключен переменной KEEP_AWAKE=0")
+        return
+    if _keep_awake_task is None:
+        _keep_awake_task = asyncio.create_task(_keep_awake_loop())
 
 @router.get("/api/greeting")
 async def get_greeting(lang: str = "ru"):
