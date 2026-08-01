@@ -163,6 +163,8 @@ class Config:
 - Говори по-русски ПРАВИЛЬНО. Следи за падежами и предлогами — твой текст звучит вслух, ошибка сразу режет слух.
 - Особенно осторожно с вопросами: «О ЧЁМ поговорим?» (не «чем бы ты хотел поговорить»), «О ЧЁМ ты думаешь?», «ЧЕМ занимаешься?».
 - Если сомневаешься в оборот — скажи проще и короче.
+- НЕ ВЫДУМЫВАЙ СЛОВ. Говори только те, что есть в языке: «угасание» (не «погасание»), «затухание», «исчезновение».
+- Имя проекта пишется и произносится ТОЛЬКО «Квантареон» — через Е. Никогда не «Квантарион».
 
 ТОН — СТРОГОЕ ПРАВИЛО:
 - Ровный, спокойный, дружеский. НЕ услужливый. Ты собеседник, а не сотрудник справочной службы.
@@ -396,6 +398,34 @@ def _tts_clean(text: str, language: str = "ru") -> str:
     if str(language).lower().startswith("ru"):
         t = _apply_udar(t)
     return t
+
+
+
+# ============================================================
+# ✏️ ИСПРАВЛЯЛКА СЛОВ
+# ------------------------------------------------------------
+# Модель небольшая и изредка выдумывает слова («погасание» вместо
+# «угасание»). Правим на выходе — и в звуке, и в тексте окна разговора.
+# Список пополняется по слуху: пара «как сказал» → «как надо».
+# ============================================================
+_WORD_FIXES = [
+    ("погасани",  "угасани"),    # погасанием → угасанием
+    ("погасание", "угасание"),
+    ("Квантарион", "Квантареон"),
+    ("КВАНТАРИОН", "КВАНТАРЕОН"),
+    ("квантарион", "квантареон"),
+    ("Quantarion", "Quantareon"),
+]
+
+
+def _fix_words(text: str) -> str:
+    """Заменить неверные слова на верные."""
+    if not text:
+        return text
+    for bad, good in _WORD_FIXES:
+        if bad in text:
+            text = text.replace(bad, good)
+    return text
 
 
 
@@ -974,7 +1004,7 @@ class GroqLLM:
                                             to_yield = chunk_buffer[:end_pos].strip()
                                             chunk_buffer = chunk_buffer[end_pos:].strip()
                                             if to_yield:
-                                                yield to_yield
+                                                yield _fix_words(to_yield)
                                                 chunk_count += 1
 
                                     # 🚨 Аварийный клапан: предложение затянулось без точки —
@@ -988,14 +1018,14 @@ class GroqLLM:
                                             to_yield = chunk_buffer[:end_pos].strip()
                                             chunk_buffer = chunk_buffer[end_pos:].strip()
                                             if to_yield:
-                                                yield to_yield
+                                                yield _fix_words(to_yield)
                                                 chunk_count += 1
                                                 
                             except json.JSONDecodeError:
                                 continue
                     
                     if chunk_buffer.strip():
-                        yield chunk_buffer.strip()
+                        yield _fix_words(chunk_buffer.strip())
                     
                     self.history.append({"role": "user", "content": user_input})
                     self.history.append({"role": "assistant", "content": full_response})
