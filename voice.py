@@ -614,6 +614,7 @@ class DeepgramSTT:
         self._receive_task = None
         self._keepalive_task = None
         self._connected = False
+        self._last_sent = None   # последний отданный кусок — чтобы не задваивать
         self._reconnecting = False
         self._should_reconnect = True
     
@@ -758,12 +759,17 @@ class DeepgramSTT:
                     transcript = alternatives[0].get("transcript", "").strip()
                     confidence = alternatives[0].get("confidence", 0)
                     
-                    if transcript and is_final and confidence > 0.7:
-                        if self.on_transcript:
-                            self.on_transcript(transcript)
-                    elif transcript and speech_final and confidence > 0.5:
-                        if self.on_transcript:
-                            self.on_transcript(transcript)
+                    # Deepgram шлёт одну и ту же фразу дважды: сначала как
+                    # is_final, потом как speech_final. Раньше обе попадали
+                    # в буфер — отсюда «Привет, брат. Привет, брат.»
+                    ok = (is_final and confidence > 0.7) or (speech_final and confidence > 0.5)
+                    if transcript and ok:
+                        if transcript == getattr(self, "_last_sent", None):
+                            pass          # тот же кусок пришёл повторно — молчим
+                        else:
+                            self._last_sent = transcript
+                            if self.on_transcript:
+                                self.on_transcript(transcript)
             
             elif msg_type == "UtteranceEnd":
                 pass
@@ -994,7 +1000,10 @@ class GroqLLM:
                     groq_keys.get_current_url(),
                     headers=headers,
                     json=payload,
-                    timeout=aiohttp.ClientTimeout(total=30)
+                    # 15 сек вместо 30: если мозги молчат дольше — не ждём,
+                    # а сразу переключаемся на следующий ключ. Человеку лучше
+                    # быстрый переход, чем полминуты тишины.
+                    timeout=aiohttp.ClientTimeout(total=15, connect=5)
                 ) as response:
                     if response.status == 429:
                         if rotation_start is None:
@@ -1326,6 +1335,7 @@ class VoiceSessionTurbo:
         # State
         self.is_active = False
         self.is_processing = False
+        self._processing_since = 0     # когда началась обработка (для сторожа)
         self.is_speaking = False
         self.barge_in_requested = False
         self.first_message = True
@@ -1490,15 +1500,33 @@ class VoiceSessionTurbo:
             logger.info(f"[{self.session_id}] Empty transcript, skipping")
             return
         
+        # 🛡 СТОРОЖ: если прошлая обработка висит слишком долго — она застряла,
+        # снимаем флаг, иначе помощник замолчит навсегда
+        stuck_for = time.time() - getattr(self, "_processing_since", 0)
+        if self.is_processing and getattr(self, "_processing_since", 0) and stuck_for > 45:
+            logger.warning(f"[{self.session_id}] ⚠️ Обработка висит {stuck_for:.0f}с — снимаю флаг")
+            self.is_processing = False
+
         if self.is_processing:
-            logger.info(f"[{self.session_id}] Already processing, skipping")
-            return
+            # РАНЬШЕ реплику молча выбрасывали — отсюда «отвечает через раз».
+            # Теперь: обрываем предыдущий ответ и берём новый вопрос.
+            logger.info(f"[{self.session_id}] 🔁 Пришла новая реплика — обрываю прошлый ответ")
+            self.barge_in_requested = True
+            try:
+                stopPlayback = getattr(self, "_stop_playback", None)
+                if callable(stopPlayback):
+                    stopPlayback()
+            except Exception:
+                pass
+            self.is_processing = False
+            await asyncio.sleep(0.15)
         
         logger.info(f"[{self.session_id}] ⚡ TURBO Processing: '{transcript}'")
         if self.user_id:
             logger.info(f"🎤 [{self.user_id}]: \"{transcript[:120]}\"")
         
         self.is_processing = True
+        self._processing_since = time.time()
         
         try:
             await self._send_json({
@@ -1644,6 +1672,7 @@ class VoiceSessionTurbo:
         finally:
             self.is_processing = False
             self.is_speaking = False
+            self._processing_since = 0
     
     async def _refresh_memory_cache(self):
         """🧠 Обновление глубокой памяти отключено на голосе (только сессионная история)."""
