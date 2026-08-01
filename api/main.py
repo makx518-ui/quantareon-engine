@@ -106,7 +106,7 @@ async def login_post(request: Request):
 @app.middleware("http")
 async def gate(request: Request, call_next):
     p = request.url.path
-    if p.startswith("/login") or p.startswith("/health") or p.startswith("/chat") or p.startswith("/transcribe") or p.startswith("/tts") or p.startswith("/quantareon-chat.js"):
+    if p.startswith("/login") or p.startswith("/health") or p.startswith("/chat") or p.startswith("/transcribe") or p.startswith("/tts") or p.startswith("/quantareon-chat.js") or p.startswith("/ws/voice") or p.startswith("/api/greeting") or p.startswith("/api/voice-health"):
         return await call_next(request)
     if not _ok(request.cookies.get(COOKIE)):
         if request.method == "GET" and ("text/html" in request.headers.get("accept","")):
@@ -117,6 +117,23 @@ async def gate(request: Request, call_next):
 @app.get("/health")
 def health():
     return {"ok": True}
+
+# ============================================================
+# 🎙 ГОЛОСОВОЙ КВАНТАРЕОН (перенесён с Амверы 01.08.2026)
+# Даёт: WS /ws/voice · GET /api/greeting · GET /api/voice-health
+# ============================================================
+try:
+    from voice import router as voice_router, warm_greetings
+    app.include_router(voice_router)
+
+    @app.on_event("startup")
+    async def _warm_voice_greetings():
+        await warm_greetings()
+
+    print("🎙 Голосовой Квантареон: подключён")
+except Exception as _e:
+    print(f"⚠️ Голосовой модуль не подключился: {_e}")
+
 
 FRONT = ROOT / "frontend"
 
