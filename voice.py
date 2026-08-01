@@ -311,6 +311,41 @@ _CITIES_RU = {
 }
 
 
+_TZ_CITY_RU = {
+    "Europe/Moscow": "Москве", "Asia/Tbilisi": "Тбилиси", "Europe/Paris": "Париже",
+    "Europe/London": "Лондоне", "Europe/Berlin": "Берлине", "Europe/Madrid": "Мадриде",
+    "Europe/Rome": "Риме", "Europe/Vienna": "Вене", "Europe/Prague": "Праге",
+    "Europe/Warsaw": "Варшаве", "Europe/Amsterdam": "Амстердаме", "Europe/Lisbon": "Лиссабоне",
+    "Europe/Athens": "Афинах", "Europe/Istanbul": "Стамбуле", "Europe/Kyiv": "Киеве",
+    "Europe/Kiev": "Киеве", "Europe/Minsk": "Минске", "Asia/Yerevan": "Ереване",
+    "Asia/Baku": "Баку", "Asia/Almaty": "Алматы", "Asia/Tashkent": "Ташкенте",
+    "Asia/Dubai": "Дубае", "Asia/Jerusalem": "Иерусалиме", "Asia/Tokyo": "Токио",
+    "Asia/Seoul": "Сеуле", "Asia/Shanghai": "Шанхае", "America/New_York": "Нью-Йорке",
+    "America/Los_Angeles": "Лос-Анджелесе", "America/Chicago": "Чикаго",
+    "America/Toronto": "Торонто", "Europe/Belgrade": "Белграде", "Asia/Bangkok": "Бангкоке",
+    # российские пояса: город по поясу однозначно не определить (один пояс —
+    # много городов), поэтому имя не называем, говорим просто «у вас»
+    "Europe/Samara": "", "Europe/Kaliningrad": "", "Europe/Volgograd": "",
+    "Europe/Saratov": "", "Europe/Astrakhan": "", "Europe/Ulyanovsk": "",
+    "Europe/Kirov": "", "Asia/Yekaterinburg": "", "Asia/Omsk": "",
+    "Asia/Novosibirsk": "", "Asia/Krasnoyarsk": "", "Asia/Irkutsk": "",
+    "Asia/Yakutsk": "", "Asia/Vladivostok": "", "Asia/Magadan": "",
+    "Asia/Kamchatka": "", "Asia/Sakhalin": "", "Asia/Barnaul": "",
+    "Asia/Tomsk": "", "Asia/Novokuznetsk": "", "Asia/Chita": "",
+    "Asia/Khandyga": "", "Asia/Ust-Nera": "", "Asia/Srednekolymsk": "",
+    "Asia/Anadyr": "",
+}
+
+
+def _city_from_tz(tz: str) -> str:
+    """Название города из часового пояса. Не знаем — вернём пустое."""
+    if not tz:
+        return ""
+    if tz in _TZ_CITY_RU:
+        return _TZ_CITY_RU[tz]
+    return ""
+
+
 def _time_ru(hhmm: str) -> str:
     """«07:37» → «семь тридцать семь» (без «ноль семь двоеточие»)."""
     try:
@@ -456,6 +491,7 @@ class GeoLocation:
     
     def __init__(self):
         self.city: str = ""
+        self.browser_tz: str = ""     # 🕐 часовой пояс от браузера, главнее IP
         self.timezone: str = ""
         self.country: str = ""
         self._session: Optional[aiohttp.ClientSession] = None
@@ -498,10 +534,14 @@ class GeoLocation:
             msk_tz = ZoneInfo("Europe/Moscow")
             msk_now = datetime.now(msk_tz)
             
+            # 🕐 ПРИОРИТЕТ: часовой пояс браузера. Определение по адресу в сети
+            # врёт при VPN и у провайдеров с чужими адресами — берём его только
+            # если браузер молчит.
+            tz_name = getattr(self, "browser_tz", "") or self.timezone or ""
             user_tz = msk_tz
             try:
-                if self.timezone and self.timezone != "Europe/Moscow":
-                    user_tz = ZoneInfo(self.timezone)
+                if tz_name and tz_name != "Europe/Moscow":
+                    user_tz = ZoneInfo(tz_name)
             except Exception:
                 user_tz = msk_tz
             
@@ -515,18 +555,29 @@ class GeoLocation:
                 weekday = self.WEEKDAYS_EN[msk_now.weekday()]
                 msk_time = msk_now.strftime("%H:%M")
                 filler = f"Today is {weekday}, {month} {day}, {msk_time} Moscow time"
-                if self.timezone != "Europe/Moscow" and self.city and user_tz != msk_tz:
+                if user_tz != msk_tz:
                     user_time = user_now.strftime("%H:%M")
-                    filler += f", {user_time} where you are ({self.city})"
+                    btz = getattr(self, "browser_tz", "")
+                    place = (btz.split("/")[-1].replace("_", " ")
+                             if btz and not btz.startswith(("Europe/Samara", "Asia/Yekaterinburg",
+                                                            "Asia/Omsk", "Asia/Novosibirsk"))
+                             else ("" if btz else self.city))
+                    filler += (f", {user_time} where you are ({place})" if place
+                               else f", {user_time} your time")
             else:
                 month = self.MONTHS_RU[msk_now.month]
                 weekday = self.WEEKDAYS_RU[msk_now.weekday()]
                 msk_time = msk_now.strftime("%H:%M")
                 day_word = _DAYS_RU.get(day, str(day))
                 filler = f"Сегодня {day_word} {month}, {weekday}, {_time_ru(msk_time)} по Москве"
-                if self.timezone != "Europe/Moscow" and self.city and user_tz != msk_tz:
+                # если браузер назвал пояс — доверяем только ему; адрес в сети
+                # при VPN врёт, и город оттуда брать нельзя
+                btz = getattr(self, "browser_tz", "")
+                city = _city_from_tz(btz) if btz else (_city_ru(self.city) if self.city else "")
+                if user_tz != msk_tz:
                     user_time = _time_ru(user_now.strftime("%H:%M"))
-                    filler += f", {user_time} у вас в городе {_city_ru(self.city)}"
+                    filler += (f", {user_time} у вас в городе {city}" if city
+                               else f", {user_time} у вас")
 
             filler += "."
             
@@ -1281,6 +1332,7 @@ class VoiceSessionTurbo:
         
         self.lang: str = "ru"          # 🌐 язык страницы, с которой пришли
         self._last_topic = None        # 📚 раздел сайта, о котором сейчас речь
+        self.user_tz: str = ""         # 🕐 часовой пояс браузера (точнее, чем по IP)
         self.cached_filler_audio: bytes = b""
         self.cached_filler_text: str = ""
         self.filler_ready = asyncio.Event()
@@ -1642,6 +1694,9 @@ async def websocket_voice(websocket: WebSocket):
     session.lang = "en" if str(_lang_q).lower().startswith("en") else "ru"
     # голос пересобираем под язык: движок создавался до того, как язык стал известен
     session.tts = EdgeTTSTurbo(session.lang)
+    # 🕐 часовой пояс от браузера — точнее определения по адресу в сети
+    session.user_tz = websocket.query_params.get("tz", "")
+    session.geo.browser_tz = session.user_tz
     logger.info(f"[{session_id}] 🌐 Language: {session.lang} | voice: {session.tts.voice} @ {session.tts.rate}")
     
     # 🧠 Определяем user_id: admin → query param → cookie → IP
