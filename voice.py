@@ -714,8 +714,12 @@ class DeepgramSTT:
             "encoding=linear16",
             "sample_rate=16000",
             "channels=1",
-            "endpointing=300",
-            "utterance_end_ms=1000",
+            # 700 вместо 300: раньше сервер решал «договорил» уже через
+            # треть секунды тишины — фраза рвалась посередине, и вторая
+            # половина приходила отдельным куском
+            "endpointing=700",
+            # 1800 вместо 1000: окончательное «человек закончил»
+            "utterance_end_ms=1800",
             "vad_events=true",
             "interim_results=true",
         ]
@@ -1623,7 +1627,7 @@ class VoiceSessionTurbo:
 
         async def _later():
             try:
-                await asyncio.sleep(1.6)
+                await asyncio.sleep(2.2)   # ждём дольше: вдруг человек ещё говорит
                 if self.transcript_buffer.strip() and not self.is_processing:
                     logger.info(f"[{self.session_id}] 🛟 Браузер молчит — обрабатываю сам")
                     await self.on_speech_end()
