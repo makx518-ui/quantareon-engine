@@ -523,6 +523,32 @@ def _check_owner(key: str) -> bool:
 
 
 
+# ============================================================
+# 🔍 ДНЕВНИК СОБЫТИЙ (для разбора «почему молчит»)
+# ------------------------------------------------------------
+# Кольцевая память на последние ~120 событий: что пришло от браузера,
+# что решил сервер, где оборвалось. Читается по адресу
+# /api/voice-health/debug?key=<ключ хозяина> — чтобы не лазить в логи.
+# ============================================================
+from collections import deque
+
+_diary = deque(maxlen=120)
+
+
+def note(session_id: str, what: str, detail: str = ""):
+    """Записать событие в дневник."""
+    try:
+        _diary.append({
+            "t": datetime.now().strftime("%H:%M:%S"),
+            "сессия": str(session_id)[-6:],
+            "событие": what,
+            "подробности": detail[:160],
+        })
+    except Exception:
+        pass
+
+
+
 class GeoLocation:
     """Определение локации по IP и генерация умного филлера."""
     
@@ -1391,6 +1417,22 @@ async def set_voice_model(request: Request):
     return {"ok": True, "current": current_model()}
 
 
+@router.get("/api/voice-health/debug")
+async def voice_debug(key: str = ""):
+    """Дневник последних событий голоса. Только с ключом хозяина.
+
+    Адрес нарочно начинается с /api/voice-health — этот путь уже открыт
+    в движке, значит не нужно править список исключений из пароля.
+    """
+    if not _check_owner(key):
+        return JSONResponse({"error": "нет доступа"}, status_code=403)
+    return {
+        "модель": current_model(),
+        "событий": len(_diary),
+        "дневник": list(_diary),
+    }
+
+
 @router.get("/api/greeting")
 async def get_greeting(lang: str = "ru"):
     """Отдать заранее озвученное приветствие (ru/en)."""
@@ -1606,6 +1648,7 @@ class VoiceSessionTurbo:
             self.transcript_buffer = text
         
         logger.info(f"[{self.session_id}] 📝 Buffer: '{self.transcript_buffer}'")
+        note(self.session_id, "услышал", self.transcript_buffer)
         
         asyncio.create_task(self._send_json({
             "type": "transcript_interim",
@@ -1629,6 +1672,7 @@ class VoiceSessionTurbo:
         self.transcript_buffer = ""
         
         if not transcript:
+            note(self.session_id, "ПУСТО — нечего обрабатывать", "браузер сказал «договорил», а текста нет")
             logger.info(f"[{self.session_id}] Empty transcript, skipping")
             return
         
@@ -1642,6 +1686,7 @@ class VoiceSessionTurbo:
         if self.is_processing:
             # РАНЬШЕ реплику молча выбрасывали — отсюда «отвечает через раз».
             # Теперь: обрываем предыдущий ответ и берём новый вопрос.
+            note(self.session_id, "ОБРЫВ прошлого ответа", "пришла новая реплика")
             logger.info(f"[{self.session_id}] 🔁 Пришла новая реплика — обрываю прошлый ответ")
             self.barge_in_requested = True
             try:
@@ -1658,6 +1703,7 @@ class VoiceSessionTurbo:
         # обрывался тем же флагом, не успев начаться. Отсюда было молчание.
         self.barge_in_requested = False
 
+        note(self.session_id, "обрабатываю", transcript)
         logger.info(f"[{self.session_id}] ⚡ TURBO Processing: '{transcript}'")
         if self.user_id:
             logger.info(f"🎤 [{self.user_id}]: \"{transcript[:120]}\"")
@@ -1807,6 +1853,7 @@ class VoiceSessionTurbo:
             logger.error(f"[{self.session_id}] Error: {e}")
             await self._send_json({"type": "error", "message": str(e)})
         finally:
+            note(self.session_id, "ответ завершён", "")
             self.is_processing = False
             self.is_speaking = False
             self._processing_since = 0
@@ -1928,6 +1975,7 @@ async def websocket_voice(websocket: WebSocket):
                             
                             elif cmd in ("barge_in", "stop"):
                                 session.barge_in_requested = True
+                                note(session.session_id, "ПЕРЕБИЛИ", "браузер: barge_in")
                                 session.is_speaking = False
                                 session.is_processing = False  # 🔧 FIX: Останавливаем обработку
                                 session.transcript_buffer = ""
