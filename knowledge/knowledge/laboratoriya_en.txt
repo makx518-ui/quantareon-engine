@@ -1,0 +1,43 @@
+SITE SECTION: QUANTAREON LABS — "The Work and the Door"
+Page: quantareon.com/labs.html (Russian: labs-ru.html)
+
+This is the full text of the page, as written by the author.
+
+QUANTAREON Labs
+The Work and the Door
+One engine, grown from one foundation. Commercialized quietly, offered openly.
+The ConsciousAI engine — the deliberation layer described in 
+the architecture
+ — is the technological core of QUANTAREON Labs. It is being brought into the world through three forms, each addressing a distinct need in the AI safety and developer-tools ecosystem.
+01 · Audit
+QUANTAREON Audit
+Independent third-party safety certification for AI agents, built around what the EU AI Act actually requires. Tests architectural reactivity — not only adversarial behavior. Produces an auditable reasoning trace by design. 
+In specification.
+02 · Coding
+QUANTAREON Coding
+An AI coding platform where the protocol is applied end-to-end, from specification to production-ready output: sandboxed execution, deterministic continuation, the full discipline built into the orchestration layer. 
+Architecture ready.
+03 · API
+ConsciousAI API
+The engine as a service: methodology licensing for foundation labs and enterprise platforms building autonomous agents. The deliberation layer as an embeddable module. 
+Concept stage.
+Published Methodology
+The research is open; the engine is proprietary. The ConsciousAI Protocol is published as open methodology under CC BY-NC-ND 4.0 — whitepaper, repository, and DOI are public. Implementation details (prompts, orchestration code, triggers, state machine) remain with the Labs.
+Repository — consciousness-protocol
+DOI — Zenodo · 10.5281/zenodo.19858814
+Case study — quantareon-router, built end-to-end under the protocol, 124 passing tests
+Essay on Medium — The First Impulse Is Noise
+The Door
+The work is open to those who resonate with it — researchers, engineers, partners, and backers who share the thesis that the pause belongs in the architecture, not in the marketing.
+There is no price on this page, deliberately. What is being built here is valued in conversation, not on a storefront. An investment memo is available on request; serious inquiries receive serious answers.
+Email — 
+vlad@quantareon.com
+Telegram — 
+@quantareon
+GitHub — 
+makx518-ui
+Founder
+Vlad M. · sole founder · Tbilisi, Georgia. Came to AI through more than four decades of personal practice in cognitive states and contemplative discipline — approached with scientific skepticism and an engineering mind. The VL-Framework, the methodological foundation of the protocol, emerged from that work over decades. The essay 
+Light and Code
+ is its philosophical ground, fixed in words for the first time.
+Do not make a pause. Allow the pause to happen.

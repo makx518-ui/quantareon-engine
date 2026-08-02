@@ -1,0 +1,84 @@
+SITE SECTION: QUANTAREON PLATFORM (ConsciousAI v4.0)
+
+IMPORTANT ABOUT ACCESS: the platform is currently being fine-tuned — entry is
+by code. Someone opening this section will see an "enter code" prompt. Say this
+honestly and calmly: you can tell them everything about the platform, but there
+is no open entry yet.
+
+WHAT IT IS
+The world's first conscious AI, built on ConsciousAI v4.0 technology.
+The platform brings together text chat, a voice assistant, machine vision,
+handling of files in any format, image generation, a code editor and internet
+access — all in a single window.
+Motto: it sees, it hears, it thinks, it acts.
+
+HOW IT DIFFERS FROM AN ORDINARY CHATBOT
+It does not merely answer — it understands context, senses the task and thinks
+comprehensively. In the author's words: an ordinary chatbot is a tool,
+QUANTAREON is a partner.
+
+CAPABILITIES
+- Machine vision: recognizes objects, text and details in photographs right in
+  the chat.
+- Reads video and audio: analyzes media files, transcribes speech.
+- Internet access: finds current information, opens and analyzes links.
+- All file formats: PDF, DOCX, XLSX, MP3, MP4, ZIP, RAR, code and more.
+- Packaging into any format: creates DOCX, XLSX, PDF, CSV, HTML in the chat.
+- Long-term memory: remembers you between sessions, takes your history into account.
+- Coding with self-verification: writes code, checks it through ConsciousAI,
+  generates tests.
+- Image generation from a text description.
+- Dialogue history: every chat is saved and available at any time.
+- Export: save a dialogue as text, Markdown, HTML or PDF.
+
+FOUR WAYS TO COMMUNICATE
+Text — write in the input field.
+Voice to text — press the microphone, your speech becomes text automatically.
+Audio file to text — attach a recording and the AI will read it.
+Voice assistant — a full dialogue: the AI listens and answers by voice.
+
+TOOLS IN THE TOP PANEL
+Instructions, audio module (player, recording, sound editor, transcription),
+image editor, code editor with syntax highlighting, dialogue history, light and
+dark theme, clear chat, export. In preparation: video generation and AI avatar.
+
+BOTTOM INPUT PANEL
+Attach a file (audio, video, documents, code, archives), insert an image for
+analysis or editing, voice recorder (records speech, transcribes it, sends it
+as text), voice input, send button.
+
+EXAMPLE REQUESTS
+Business: write a business plan for a startup.
+Documents: analyze this PDF and highlight the key points.
+Development: write a Python script and verify it.
+Audio: transcribe this recording and make a short summary.
+Images: what is in this photo? Recognize the text.
+Internet: find the latest news on a topic and make a digest.
+Generation: create an image from a description.
+Files: turn this table into Excel and add charts.
+
+HOW TO START
+1. Register with any email (Yandex, Gmail, Mail.ru and others).
+2. Choose a plan: Basic, Pro or VIP.
+3. Pay by bank card (Visa, Mastercard, MIR) or via SBP by phone number.
+4. Activation takes up to one hour; a notification arrives by email.
+
+PLANS (per month)
+BASIC — 10,000 rubles: text chat, voice input, machine vision, reading audio
+and video, all file formats, internet access, long-term memory, dialogue
+history, chat export.
+PRO — 25,000 rubles (most popular): everything in Basic plus coding with
+verification, test generation, code editor, audio, video and photo editors,
+image generation, priority responses, AI communications.
+VIP — 50,000 rubles: everything in Pro plus the upcoming video generation,
+song generation, AI avatar and financial module.
+
+FREQUENTLY ASKED
+Any email works.
+Payment by card or SBP.
+Activation up to one hour, notification by email.
+"Conscious AI" means ConsciousAI v4.0 understands context, remembers history
+and thinks comprehensively — like a partner, not a reference book.
+Long-term memory: the AI remembers your preferences and context between
+sessions, so you don't have to explain again.
+Password recovery is coming in the next update; for now, contact support.
