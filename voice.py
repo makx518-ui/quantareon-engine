@@ -825,6 +825,15 @@ class FluxSTT:
             # человек продолжил говорить после предварительного «закончил»
             note(getattr(self, "session_id", "-"), "продолжил говорить", "")
 
+    @property
+    def is_connected(self) -> bool:
+        """Сервер спрашивает это перед каждой отправкой звука."""
+        return self._connected
+
+    async def close(self):
+        """Так закрывает сервер. Имя должно совпадать со старым классом."""
+        await self.disconnect()
+
     async def disconnect(self):
         self._should_reconnect = False
         self._connected = False
