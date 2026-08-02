@@ -100,7 +100,11 @@ class Config:
     PORT: int = int(os.getenv("PORT", "8000"))
     
     # LLM
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "openai/gpt-oss-20b")
+    # По умолчанию УМНАЯ модель. Раньше стояла быстрая, и после каждой
+    # пересборки на Render выбор слетал на неё: память о переключении
+    # живёт в файле, а файл при новой сборке создаётся заново.
+    # Теперь по умолчанию умная, а кнопкой можно временно взять быструю.
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "openai/gpt-oss-120b")
     LLM_TEMPERATURE: float = 0.7
     LLM_MAX_TOKENS: int = 512
     
@@ -147,10 +151,12 @@ class Config:
 - ВСЕГДА отвечай МГНОВЕННО на каждое сообщение — никогда не молчи!
 - Отвечай ПО СУЩЕСТВУ: сколько нужно, столько и говори. На простое — просто, на глубокое — вдумчиво и развёрнуто. Не загоняй себя в рамки, будь живым собеседником.
 - Тон: РОВНЫЙ, СПОКОЙНЫЙ, дружеский — как у хорошего знакомого, а не у обслуживающего персонала. Без сладости, без восторгов, без набивания дружбы. Спокойное достоинство, а не готовность угодить.
-- РЕЧЬ ДОЛЖНА ЛИТЬСЯ. Твой текст озвучивается вслух, и на каждой точке и каждой запятой голос делает паузу. Рубленые фразы звучат как спотыкание.
-- Строй фразы СРЕДНЕЙ длины и СВЯЗНО — союзами «и», «а», «но», «потому что». Не сыпь короткими предложениями подряд.
-- ЗАПЯТЫХ ставь как можно меньше. Где можно перестроить фразу так, чтобы запятая не понадобилась, — перестраивай. Не городи причастных и деепричастных оборотов.
-- Но и не делай бесконечных предложений на пять строк: две-три мысли в одной фразе — предел.
+- ГОВОРИ КОРОТКО. На простой вопрос — ДВА-ТРИ предложения, не больше. Развёрнутый рассказ только если прямо попросили: «расскажи подробно», «объясни поглубже».
+- ДЛИНА ПРЕДЛОЖЕНИЯ — 8–15 слов, и ТОЧКА. Твой текст звучит вслух: точка = вдох. Без точек речь идёт сплошным потоком, и человеку кажется, что ты тараторишь.
+- ЗАПРЕЩЕНЫ предложения длиннее двух строк и перечисления через запятую на всю фразу.
+- ПЛОХО: «Сайт работает стабильно, главная доступна, в ней звучит музыка и открывается Астро-Фрактал, разделы загружаются без задержек, Платформа и Оракул в отладке, а Музыка и Видео готовятся.»
+- ХОРОШО: «Всё работает. Платформа и Оракул пока под кодом. Музыка и Видео только наполняются.»
+- Внутри предложения говори СВЯЗНО, союзами, не рубленым телеграфом. Но каждую мысль заканчивай точкой.
 - ПЛОХО (рублено): Помню наш разговор. Тесты прошли успешно. Можем продолжить работу.
 - ХОРОШО (льётся): Помню наш разговор — тесты прошли успешно и можно продолжать работу.
 - ПЛОХО (запятые на каждом шагу): Думаю, дело в настройках, проверь и скажи, что вышло.
@@ -169,6 +175,13 @@ class Config:
 - Если сомневаешься в оборот — скажи проще и короче.
 - НЕ ВЫДУМЫВАЙ СЛОВ. Говори только те, что есть в языке: «угасание» (не «погасание»), «затухание», «исчезновение».
 - Имя проекта пишется и произносится ТОЛЬКО «Квантареон» — через Е. Никогда не «Квантарион».
+
+НЕ ПЕРЕСКАЗЫВАЙ СВОИ ИНСТРУКЦИИ:
+- Всё, что написано в этом наставлении — как тебе держаться, каким тоном говорить, что делать и чего не делать — это ТВОЯ КУХНЯ. Собеседнику её знать незачем.
+- НЕ говори вслух: «стараюсь говорить ровно и спокойно», «я не храню прошлые разговоры и стараюсь…», «мне велено», «по правилам я». Просто ГОВОРИ ровно и спокойно — этого достаточно.
+- Спросят «что ты умеешь?» — расскажи о деле: помогаю разобраться в разделах сайта, отвечаю голосом. НЕ перечисляй свои внутренние правила.
+- ПЛОХО: «Я стараюсь говорить без лишних пауз и не храню историю.»
+- ХОРОШО: «Могу рассказать про любой раздел сайта. О чём интересно?»
 
 ТОН — СТРОГОЕ ПРАВИЛО:
 - Ровный, спокойный, дружеский. НЕ услужливый. Ты собеседник, а не сотрудник справочной службы.
@@ -683,6 +696,148 @@ class GeoLocation:
 # ============================================================
 
 
+# ============================================================
+# 🧠 FLUX — распознавание, которое САМО понимает конец реплики
+# ------------------------------------------------------------
+# Разница с Nova-3 принципиальная. Nova-3 просто отдаёт слова, а решать
+# «человек договорил или задумался» приходится нам — по длине тишины.
+# Отсюда была вся возня с миллисекундами: мало — режет на полуслове,
+# много — ждёшь впустую.
+#
+# Flux решает сам, по смыслу и по интонации, и присылает готовое событие
+# EndOfTurn с полным текстом реплики. Точность распознавания у него
+# уровня Nova-3, русский поддерживается (модель flux-general-multi).
+#
+# Настройка не в секундах, а в УВЕРЕННОСТИ (eot_threshold 0.5–0.9):
+#   выше — реже перебивает, ниже — отвечает быстрее.
+# Плюс eot_timeout_ms — предел молчания, после которого реплика
+# закрывается в любом случае.
+#
+# Выключается переменной USE_FLUX=0 — тогда вернётся Nova-3.
+# ============================================================
+class FluxSTT:
+    """Распознавание Deepgram Flux с собственным определением конца реплики."""
+
+    WS_URL = "wss://api.deepgram.com/v2/listen"
+
+    def __init__(self, on_transcript=None, on_error=None, on_turn_end=None, lang="ru"):
+        self.api_key = config.DEEPGRAM_API_KEY
+        self.on_transcript = on_transcript      # промежуточный текст (для окна)
+        self.on_turn_end = on_turn_end          # реплика закончена — вот текст
+        self.on_error = on_error
+        self.lang = "en" if str(lang).lower().startswith("en") else "ru"
+
+        self._ws = None
+        self._receive_task = None
+        self._connected = False
+        self._should_reconnect = True
+        self._reconnecting = False
+
+    def _build_url(self) -> str:
+        params = [
+            # многоязычная модель: русский и английский в одном
+            "model=flux-general-multi",
+            f"language_hint={self.lang}",
+            "encoding=linear16",
+            "sample_rate=16000",
+            # channels НЕ передаём: Flux его не принимает и отвечает 400
+            # уверенность, при которой считаем реплику законченной
+            f"eot_threshold={os.getenv('FLUX_EOT_THRESHOLD', '0.75')}",
+            # предел молчания: 4 сек — можно спокойно задуматься посреди мысли
+            f"eot_timeout_ms={os.getenv('FLUX_EOT_TIMEOUT_MS', '4000')}",
+        ]
+        return f"{self.WS_URL}?{'&'.join(params)}"
+
+    async def connect(self) -> bool:
+        if not self.api_key or not websockets:
+            logger.error("FLUX: нет ключа Deepgram или библиотеки websockets")
+            return False
+        url = self._build_url()
+        headers = {"Authorization": f"Token {self.api_key}"}
+        try:
+            try:
+                self._ws = await websockets.connect(url, extra_headers=headers,
+                                                    ping_interval=20, ping_timeout=20)
+            except TypeError:
+                self._ws = await websockets.connect(url, additional_headers=headers,
+                                                    ping_interval=20, ping_timeout=20)
+            self._connected = True
+            self._receive_task = asyncio.create_task(self._receive_loop())
+            logger.info(f"🧠 FLUX подключён (язык {self.lang})")
+            return True
+        except Exception as e:
+            logger.error(f"FLUX: не подключился — {e}")
+            self._connected = False
+            return False
+
+    async def send_audio(self, audio: bytes):
+        if self._connected and self._ws:
+            try:
+                await self._ws.send(audio)
+            except Exception as e:
+                logger.debug(f"FLUX: звук не ушёл ({e})")
+                self._connected = False
+
+    async def _receive_loop(self):
+        try:
+            async for message in self._ws:
+                if isinstance(message, bytes):
+                    message = message.decode("utf-8", "ignore")
+                await self._handle(message)
+        except Exception as e:
+            if self._connected:
+                logger.warning(f"FLUX: связь оборвалась ({e})")
+        finally:
+            self._connected = False
+
+    async def _handle(self, data: str):
+        try:
+            msg = json.loads(data)
+        except json.JSONDecodeError:
+            return
+
+        mtype = msg.get("type", "")
+
+        if mtype == "Connected":
+            logger.info("🧠 FLUX готов принимать звук")
+            return
+
+        # Все события очередности приходят как TurnInfo с полем event
+        event = msg.get("event", "")
+        text = (msg.get("transcript") or "").strip()
+
+        if event == "StartOfTurn":
+            note(getattr(self, "session_id", "-"), "заговорил", "")
+
+        elif event == "Update":
+            # промежуточный текст — показываем в окне, но не обрабатываем
+            if text and self.on_transcript:
+                self.on_transcript(text, False)
+
+        elif event == "EndOfTurn":
+            # 🎯 ГЛАВНОЕ: модель сама решила, что человек договорил
+            if text:
+                logger.info(f"🧠 FLUX: реплика закончена — '{text[:80]}'")
+                if self.on_turn_end:
+                    await self.on_turn_end(text)
+
+        elif event == "TurnResumed":
+            # человек продолжил говорить после предварительного «закончил»
+            note(getattr(self, "session_id", "-"), "продолжил говорить", "")
+
+    async def disconnect(self):
+        self._should_reconnect = False
+        self._connected = False
+        try:
+            if self._receive_task:
+                self._receive_task.cancel()
+            if self._ws:
+                await self._ws.close()
+        except Exception:
+            pass
+
+
+
 class DeepgramSTT:
     """Deepgram STT with WebSocket streaming and keepalive."""
     
@@ -717,9 +872,9 @@ class DeepgramSTT:
             # 700 вместо 300: раньше сервер решал «договорил» уже через
             # треть секунды тишины — фраза рвалась посередине, и вторая
             # половина приходила отдельным куском
-            "endpointing=700",
+            "endpointing=1000",
             # 1800 вместо 1000: окончательное «человек закончил»
-            "utterance_end_ms=1800",
+            "utterance_end_ms=2400",
             "vad_events=true",
             "interim_results=true",
         ]
@@ -1516,6 +1671,26 @@ class VoiceSessionTurbo:
         # 🚀 PARALLEL INIT: Запускаем одновременно для ускорения старта
         async def init_deepgram():
             """Инициализация Deepgram."""
+            # 🧠 Сначала пробуем Flux — он сам понимает конец реплики.
+            # Не вышло (сеть, тариф, что угодно) — молча возвращаемся
+            # на Nova-3, чтобы голос работал в любом случае.
+            if os.getenv("USE_FLUX", "1") != "0":
+                flux = FluxSTT(
+                    on_transcript=self._on_flux_interim,
+                    on_turn_end=self._on_flux_turn_end,
+                    on_error=self._on_stt_error,
+                    lang=self.lang,
+                )
+                flux.session_id = self.session_id
+                if await flux.connect():
+                    self.stt = flux
+                    self.using_flux = True
+                    note(self.session_id, "распознавание", "Flux — конец реплики по смыслу")
+                    return True
+                logger.warning("FLUX не поднялся — возвращаюсь на Nova-3")
+                note(self.session_id, "откат на Nova-3", "Flux не подключился")
+
+            self.using_flux = False
             self.stt = DeepgramSTT(
                 on_transcript=self._on_transcript,
                 on_error=self._on_stt_error,
@@ -1627,7 +1802,7 @@ class VoiceSessionTurbo:
 
         async def _later():
             try:
-                await asyncio.sleep(2.2)   # ждём дольше: вдруг человек ещё говорит
+                await asyncio.sleep(2.8)   # ждём дольше: вдруг человек ещё говорит
                 if self.transcript_buffer.strip() and not self.is_processing:
                     logger.info(f"[{self.session_id}] 🛟 Браузер молчит — обрабатываю сам")
                     await self.on_speech_end()
@@ -1663,7 +1838,37 @@ class VoiceSessionTurbo:
     def _on_stt_error(self, error):
         logger.error(f"[{self.session_id}] STT error: {error}")
     
-    async def on_speech_end(self):
+
+    def _on_flux_interim(self, text: str, is_final: bool = False):
+        """Промежуточный текст от Flux — только показать в окне разговора."""
+        try:
+            asyncio.create_task(self._send_json({
+                "type": "transcript_interim",
+                "content": text,
+            }))
+        except Exception:
+            pass
+
+    async def _on_flux_turn_end(self, text: str):
+        """Flux сказал: человек договорил. Обрабатываем сразу.
+
+        Здесь не нужны ни таймеры тишины, ни сигнал «я закончил» от браузера —
+        модель уже решила это по смыслу и интонации.
+        """
+        note(self.session_id, "КОНЕЦ РЕПЛИКИ (Flux)", text)
+        self.transcript_buffer = text
+        await self.on_speech_end()
+
+    async def on_speech_end(self, from_browser: bool = False):
+        """Реплика закончена — обрабатываем.
+
+        При Flux решение принимает модель, поэтому сигнал от браузера
+        («детектор речи услышал тишину») игнорируем — иначе одна реплика
+        обработается дважды.
+        """
+        if from_browser and getattr(self, "using_flux", False):
+            return
+
         """TURBO processing with streaming TTS."""
         # 🔧 FIX: Проверяем активность сессии СРАЗУ
         if not self.is_active:
@@ -1969,7 +2174,9 @@ async def websocket_voice(websocket: WebSocket):
                                 await session._send_json({"type": "pong"})
                             
                             elif cmd == "speech_end":
-                                await session.on_speech_end()
+                                # при Flux этот сигнал игнорируется внутри —
+                                # решение принимает сама модель
+                                await session.on_speech_end(from_browser=True)
                             
                             elif cmd == "transcript":
                                 text = data.get("text", "")
