@@ -1,16 +1,14 @@
 SITE SECTION: QUANTAREON MUSIC
+Page: quantareon.com/music.html (Russian: music-ru.html)
 
 WHAT IT IS
-Vlad's own music — the creator of Quantareon. He not only wrote the essay and
-built the platform, he writes songs. This is his own work, not a collection of
-someone else's.
+Quantareon songs. They play right on the page.
 
-STATUS: the section is open, songs appear gradually — the first ones are coming
-very soon. Say this calmly and honestly.
+WHAT IS THERE NOW
+"The Code of the Soul" — a song on the English page; the Russian page carries
+the same piece as a video.
 
-WHAT TO SAY IF ASKED
-That this is the music of Quantareon, written by the creator of the project
-himself; it will be playable right on the site. If there are no songs yet, say
-so plainly: the section is open, the first pieces are about to appear.
-DO NOT invent song titles, genres, lyrics or descriptions — you do not know them.
-When the songs appear, this file will be replaced with a real description.
+HOW TO SPEAK ABOUT IT
+Plainly and briefly: there is a music section, it plays on the site, pieces are
+being added. Do NOT praise it, do NOT name authors, and do NOT invent song
+titles that are not listed above.

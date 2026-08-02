@@ -10,11 +10,11 @@ The ConsciousAI engine — the deliberation layer described in
 the architecture
  — is the technological core of QUANTAREON Labs. It is being brought into the world through three forms, each addressing a distinct need in the AI safety and developer-tools ecosystem.
 01 · Audit
-QUANTARION Audit
+QUANTAREON Audit
 Independent third-party safety certification for AI agents, built around what the EU AI Act actually requires. Tests architectural reactivity — not only adversarial behavior. Produces an auditable reasoning trace by design. 
 In specification.
 02 · Coding
-QUANTARION Coding
+QUANTAREON Coding
 An AI coding platform where the protocol is applied end-to-end, from specification to production-ready output: sandboxed execution, deterministic continuation, the full discipline built into the orchestration layer. 
 Architecture ready.
 03 · API
@@ -25,7 +25,7 @@ Published Methodology
 The research is open; the engine is proprietary. The ConsciousAI Protocol is published as open methodology under CC BY-NC-ND 4.0 — whitepaper, repository, and DOI are public. Implementation details (prompts, orchestration code, triggers, state machine) remain with the Labs.
 Repository — consciousness-protocol
 DOI — Zenodo · 10.5281/zenodo.19858814
-Case study — quantarion-router, built end-to-end under the protocol, 124 passing tests
+Case study — quantareon-router, built end-to-end under the protocol, 124 passing tests
 Essay on Medium — The First Impulse Is Noise
 The Door
 The work is open to those who resonate with it — researchers, engineers, partners, and backers who share the thesis that the pause belongs in the architecture, not in the marketing.

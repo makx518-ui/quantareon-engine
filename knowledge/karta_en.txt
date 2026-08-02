@@ -37,10 +37,11 @@ WHAT IS ON THE SITE
    interpretation, numerology, runes, blood mystery, astrology, luck forecast.
    ENTRY BY CODE — the section is being fine-tuned.
 
-8. QUANTAREON MUSIC — Vlad's own music, made by the creator of the project.
-   The section is opening, the first songs are about to appear.
+8. QUANTAREON MUSIC — songs, playable right on the page.
+   Currently: "The Code of the Soul".
 
-9. QUANTAREON VIDEO — the creator's own video. Also opening, first clips soon.
+
+9. QUANTAREON VIDEO — clips, opened by tapping a title.
 
 
 HOW TO ANSWER ABOUT SECTIONS
