@@ -106,7 +106,7 @@ async def login_post(request: Request):
 @app.middleware("http")
 async def gate(request: Request, call_next):
     p = request.url.path
-    if p.startswith("/login") or p.startswith("/health") or p.startswith("/chat") or p.startswith("/transcribe") or p.startswith("/tts") or p.startswith("/quantareon-chat.js") or p.startswith("/ws/voice") or p.startswith("/api/greeting") or p.startswith("/api/voice-health"):
+    if p.startswith("/login") or p.startswith("/health") or p.startswith("/chat") or p.startswith("/transcribe") or p.startswith("/tts") or p.startswith("/quantareon-chat.js") or p.startswith("/ws/voice") or p.startswith("/api/greeting") or p.startswith("/api/voice-health") or p.startswith("/api/voice-model"):
         return await call_next(request)
     if not _ok(request.cookies.get(COOKIE)):
         if request.method == "GET" and ("text/html" in request.headers.get("accept","")):
@@ -120,7 +120,7 @@ def health():
 
 # ============================================================
 # 🎙 ГОЛОСОВОЙ КВАНТАРЕОН (перенесён с Амверы 01.08.2026)
-# Даёт: WS /ws/voice · GET /api/greeting · GET /api/voice-health
+# Даёт: WS /ws/voice · GET /api/greeting · GET /api/voice-health · GET+POST /api/voice-model
 # ============================================================
 try:
     from voice import router as voice_router, warm_greetings
