@@ -30,6 +30,7 @@ import time
 import io
 import re
 import socket as _socket
+from pathlib import Path
 import hashlib as _hashlib
 import uuid as _uuid
 from typing import Optional, AsyncGenerator, List, Dict
@@ -484,6 +485,31 @@ MODELS = {
 }
 
 _model_override: Optional[str] = None
+
+# файл, куда запоминаем выбор — чтобы после перезапуска сервера
+# модель осталась та же, а не сбросилась на исходную
+_MODEL_FILE = Path("/tmp/quantareon_voice_model.txt")
+
+
+def _load_saved_model():
+    """Прочитать запомненный выбор при старте."""
+    global _model_override
+    try:
+        if _MODEL_FILE.exists():
+            saved = _MODEL_FILE.read_text(encoding="utf-8").strip()
+            if saved in [m["id"] for m in MODELS.values()]:
+                _model_override = saved
+                logger.info(f"🔀 Восстановлена модель: {saved}")
+    except Exception as e:
+        logger.debug(f"выбор модели не прочитался: {e}")
+
+
+def _save_model(model_id: str):
+    """Запомнить выбор."""
+    try:
+        _MODEL_FILE.write_text(model_id, encoding="utf-8")
+    except Exception as e:
+        logger.debug(f"выбор модели не записался: {e}")
 
 
 def current_model() -> str:
@@ -1278,6 +1304,7 @@ async def warm_greetings():
     except Exception as e:
         logger.error(f"VOICE: не удалось озвучить приветствие: {e}")
 
+    _load_saved_model()  # 🔀 вернуть модель, выбранную в прошлый раз
     start_keep_awake()   # ⏰ не даём Render усыпить приложение
 
 
@@ -1359,6 +1386,7 @@ async def set_voice_model(request: Request):
         return JSONResponse({"error": "неизвестная модель"}, status_code=400)
 
     _model_override = want
+    _save_model(want)
     logger.info(f"🔀 Модель голоса переключена на {want}")
     return {"ok": True, "current": current_model()}
 
@@ -1624,7 +1652,12 @@ class VoiceSessionTurbo:
                 pass
             self.is_processing = False
             await asyncio.sleep(0.15)
-        
+
+        # 🔻 ОБЯЗАТЕЛЬНО опустить флаг перебивания перед новым ответом.
+        # Раньше он оставался поднятым после обрыва старого — и новый ответ
+        # обрывался тем же флагом, не успев начаться. Отсюда было молчание.
+        self.barge_in_requested = False
+
         logger.info(f"[{self.session_id}] ⚡ TURBO Processing: '{transcript}'")
         if self.user_id:
             logger.info(f"🎤 [{self.user_id}]: \"{transcript[:120]}\"")
