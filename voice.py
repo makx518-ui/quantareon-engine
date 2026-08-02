@@ -720,8 +720,10 @@ class FluxSTT:
 
     WS_URL = "wss://api.deepgram.com/v2/listen"
 
-    def __init__(self, on_transcript=None, on_error=None, on_turn_end=None, lang="ru"):
+    def __init__(self, on_transcript=None, on_error=None, on_turn_end=None,
+                 on_speech_start=None, lang="ru"):
         self.api_key = config.DEEPGRAM_API_KEY
+        self.on_speech_start = on_speech_start   # человек заговорил (перебивание)
         self.on_transcript = on_transcript      # промежуточный текст (для окна)
         self.on_turn_end = on_turn_end          # реплика закончена — вот текст
         self.on_error = on_error
@@ -742,7 +744,7 @@ class FluxSTT:
             "sample_rate=16000",
             # channels НЕ передаём: Flux его не принимает и отвечает 400
             # уверенность, при которой считаем реплику законченной
-            f"eot_threshold={os.getenv('FLUX_EOT_THRESHOLD', '0.75')}",
+            f"eot_threshold={os.getenv('FLUX_EOT_THRESHOLD', '0.85')}",
             # предел молчания: 4 сек — можно спокойно задуматься посреди мысли
             f"eot_timeout_ms={os.getenv('FLUX_EOT_TIMEOUT_MS', '4000')}",
         ]
@@ -808,6 +810,14 @@ class FluxSTT:
 
         if event == "StartOfTurn":
             note(getattr(self, "session_id", "-"), "заговорил", "")
+            # 🔇 Настоящее перебивание: человек ЗАГОВОРИЛ по мнению модели,
+            # а не «микрофон услышал громкий звук». Браузерное перебивание
+            # при Flux отключено — оно ловило хвост своей же фразы.
+            if self.on_speech_start:
+                try:
+                    self.on_speech_start()
+                except Exception:
+                    pass
 
         elif event == "Update":
             # промежуточный текст — показываем в окне, но не обрабатываем
@@ -1687,6 +1697,7 @@ class VoiceSessionTurbo:
                 flux = FluxSTT(
                     on_transcript=self._on_flux_interim,
                     on_turn_end=self._on_flux_turn_end,
+                    on_speech_start=self._on_flux_speech_start,
                     on_error=self._on_stt_error,
                     lang=self.lang,
                 )
@@ -1857,6 +1868,18 @@ class VoiceSessionTurbo:
             }))
         except Exception:
             pass
+
+    def _on_flux_speech_start(self):
+        """Flux says: человек заговорил. Если помощник говорит — перебиваем."""
+        if self.is_speaking or self.is_processing:
+            note(self.session_id, "перебивание (Flux)", "человек заговорил")
+            self.barge_in_requested = True
+            try:
+                stop = getattr(self, "_stop_playback", None)
+                if callable(stop):
+                    stop()
+            except Exception:
+                pass
 
     async def _on_flux_turn_end(self, text: str):
         """Flux сказал: человек договорил. Обрабатываем сразу.
@@ -2194,7 +2217,13 @@ async def websocket_voice(websocket: WebSocket):
                                     await session.on_speech_end()
                             
                             elif cmd in ("barge_in", "stop"):
-                                session.barge_in_requested = True
+                                # При Flux перебивание решает модель, а не
+                                # громкость в браузере: тот ловил хвост своей же
+                                # фразы и обрывал ответ на полуслове.
+                                if cmd == "barge_in" and getattr(session, "using_flux", False):
+                                    pass
+                                else:
+                                    session.barge_in_requested = True
                                 note(session.session_id, "ПЕРЕБИЛИ", "браузер: barge_in")
                                 session.is_speaking = False
                                 session.is_processing = False  # 🔧 FIX: Останавливаем обработку
