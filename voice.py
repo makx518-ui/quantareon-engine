@@ -36,7 +36,7 @@ from typing import Optional, AsyncGenerator, List, Dict
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, Response
 
 import aiohttp
@@ -99,7 +99,7 @@ class Config:
     PORT: int = int(os.getenv("PORT", "8000"))
     
     # LLM
-    LLM_MODEL: str = "openai/gpt-oss-20b"
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "openai/gpt-oss-20b")
     LLM_TEMPERATURE: float = 0.7
     LLM_MAX_TOKENS: int = 512
     
@@ -467,6 +467,33 @@ def _fix_words(text: str) -> str:
         if bad in text:
             text = text.replace(bad, good)
     return text
+
+
+
+# ============================================================
+# 🔀 ПЕРЕКЛЮЧАТЕЛЬ МОДЕЛИ (только для хозяина)
+# ------------------------------------------------------------
+# Маленькая модель отвечает быстрее, большая — грамотнее и глубже.
+# Меняется на ходу, без пересборки: кнопка на сайте видна только тому,
+# у кого есть ключ хозяина. Значение живёт до перезапуска сервера;
+# чтобы закрепить навсегда — задать переменную LLM_MODEL на Render.
+# ============================================================
+MODELS = {
+    "small": {"id": "openai/gpt-oss-20b",  "name": "Быстрая (20B)"},
+    "big":   {"id": "openai/gpt-oss-120b", "name": "Умная (120B)"},
+}
+
+_model_override: Optional[str] = None
+
+
+def current_model() -> str:
+    """Какая модель отвечает прямо сейчас."""
+    return _model_override or config.LLM_MODEL
+
+
+def _check_owner(key: str) -> bool:
+    secret = os.getenv("ADMIN_SECRET", "") or os.getenv("QUANTAREON_PASSWORD", "")
+    return bool(secret) and key == secret
 
 
 
@@ -974,7 +1001,7 @@ class GroqLLM:
         session = await self._get_session()
         
         payload = {
-            "model": config.LLM_MODEL,
+            "model": current_model(),
             "messages": self._build_messages(user_input, memory_ctx),
             "temperature": config.LLM_TEMPERATURE,
             "max_tokens": config.LLM_MAX_TOKENS,
@@ -1298,6 +1325,44 @@ def start_keep_awake():
     if _keep_awake_task is None:
         _keep_awake_task = asyncio.create_task(_keep_awake_loop())
 
+@router.get("/api/voice-model")
+async def get_voice_model(key: str = ""):
+    """Какая модель сейчас отвечает. Список моделей — только хозяину."""
+    out = {"current": current_model()}
+    if _check_owner(key):
+        out["owner"] = True
+        out["models"] = [
+            {"key": k, "id": m["id"], "name": m["name"], "active": m["id"] == current_model()}
+            for k, m in MODELS.items()
+        ]
+    return out
+
+
+@router.post("/api/voice-model")
+async def set_voice_model(request: Request):
+    """Переключить модель. Только с ключом хозяина."""
+    global _model_override
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    key = str(body.get("key", "") or request.query_params.get("key", ""))
+    if not _check_owner(key):
+        return JSONResponse({"error": "нет доступа"}, status_code=403)
+
+    want = str(body.get("model", "")).strip()
+    # принимаем и короткое имя (small/big), и полный идентификатор
+    if want in MODELS:
+        want = MODELS[want]["id"]
+    if want not in [m["id"] for m in MODELS.values()]:
+        return JSONResponse({"error": "неизвестная модель"}, status_code=400)
+
+    _model_override = want
+    logger.info(f"🔀 Модель голоса переключена на {want}")
+    return {"ok": True, "current": current_model()}
+
+
 @router.get("/api/greeting")
 async def get_greeting(lang: str = "ru"):
     """Отдать заранее озвученное приветствие (ru/en)."""
@@ -1312,7 +1377,7 @@ async def voice_health():
     """Быстрая проверка: что настроено и готово ли приветствие."""
     return {
         "ok": True,
-        "llm": config.LLM_MODEL,
+        "llm": current_model(),
         "stt": "Deepgram Nova-3",
         "tts_ru": f"{config.TTS_VOICE} @ {config.TTS_RATE}",
         "tts_en": f"{config.TTS_VOICE_EN} @ {config.TTS_RATE_EN}",
