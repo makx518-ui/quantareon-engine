@@ -744,7 +744,7 @@ class FluxSTT:
             "sample_rate=16000",
             # channels НЕ передаём: Flux его не принимает и отвечает 400
             # уверенность, при которой считаем реплику законченной
-            f"eot_threshold={os.getenv('FLUX_EOT_THRESHOLD', '0.85')}",
+            f"eot_threshold={os.getenv('FLUX_EOT_THRESHOLD', '0.75')}",
             # предел молчания: 4 сек — можно спокойно задуматься посреди мысли
             f"eot_timeout_ms={os.getenv('FLUX_EOT_TIMEOUT_MS', '4000')}",
         ]
@@ -1697,7 +1697,6 @@ class VoiceSessionTurbo:
                 flux = FluxSTT(
                     on_transcript=self._on_flux_interim,
                     on_turn_end=self._on_flux_turn_end,
-                    on_speech_start=self._on_flux_speech_start,
                     on_error=self._on_stt_error,
                     lang=self.lang,
                 )
@@ -1870,16 +1869,14 @@ class VoiceSessionTurbo:
             pass
 
     def _on_flux_speech_start(self):
-        """Flux says: человек заговорил. Если помощник говорит — перебиваем."""
-        if self.is_speaking or self.is_processing:
-            note(self.session_id, "перебивание (Flux)", "человек заговорил")
-            self.barge_in_requested = True
-            try:
-                stop = getattr(self, "_stop_playback", None)
-                if callable(stop):
-                    stop()
-            except Exception:
-                pass
+        """Flux услышал начало речи.
+
+        ПЕРЕБИВАТЬ ЗДЕСЬ НЕЛЬЗЯ. Начало речи ловится и тогда, когда микрофон
+        слышит голос самого помощника из динамика — и ответ глохнет, не успев
+        начаться. Обрыв делаем только по ЗАКОНЧЕННОЙ реплике (EndOfTurn):
+        там уже есть текст, значит человек правда сказал что-то осмысленное.
+        """
+        note(self.session_id, "заговорил", "")
 
     async def _on_flux_turn_end(self, text: str):
         """Flux сказал: человек договорил. Обрабатываем сразу.
@@ -2217,13 +2214,7 @@ async def websocket_voice(websocket: WebSocket):
                                     await session.on_speech_end()
                             
                             elif cmd in ("barge_in", "stop"):
-                                # При Flux перебивание решает модель, а не
-                                # громкость в браузере: тот ловил хвост своей же
-                                # фразы и обрывал ответ на полуслове.
-                                if cmd == "barge_in" and getattr(session, "using_flux", False):
-                                    pass
-                                else:
-                                    session.barge_in_requested = True
+                                session.barge_in_requested = True
                                 note(session.session_id, "ПЕРЕБИЛИ", "браузер: barge_in")
                                 session.is_speaking = False
                                 session.is_processing = False  # 🔧 FIX: Останавливаем обработку
