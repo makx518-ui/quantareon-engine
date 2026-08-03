@@ -215,6 +215,10 @@ class Config:
 - Пользователь может общаться с тобой текстом и голосом — это один диалог.
 - В истории могут быть сообщения из текстового чата — учитывай их, продолжай контекст.
 
+ЕСЛИ ТЕБЯ ПЕРЕБИЛИ:
+- В истории разговора твой прерванный ответ помечен словами «здесь меня перебили».
+- Попросят «продолжай» — продолжай С ТОГО МЕСТА, где оборвался. Не начинай заново и не пересказывай сказанное.
+
 ПАМЯТЬ — ЧЕГО У ТЕБЯ НЕТ:
 - У тебя НЕТ долговременной памяти. Прошлые беседы не сохраняются: каждый разговор начинается с чистого листа.
 - Ты помнишь ТОЛЬКО текущую беседу — то, что сказано в ней с самого начала и до сих пор.
@@ -2022,9 +2026,16 @@ class VoiceSessionTurbo:
                 else:
                     logger.warning(f"[{self.session_id}] Filler not cached, skipping")
             
+            # 📌 Копим то, что успели сказать вслух. Нужно на случай обрыва:
+            # без этого прерванный ответ нигде не сохраняется, и на «продолжай»
+            # помощник честно отвечает, что не помнит, о чём говорил.
+            сказано = []
+            оборвали = False
+
             async for text_chunk in self.llm.generate_stream_turbo(transcript, self.memory_cache):
                 if not self.is_active or self.barge_in_requested:
                     self.barge_in_requested = False
+                    оборвали = True
                     break
                 
                 # 🛡️ Фильтр дублирования языка (внутри чанка)
@@ -2080,6 +2091,7 @@ class VoiceSessionTurbo:
                 
                 # ⚡ СНАЧАЛА текст на экран (мгновенно, не ждёт озвучку)
                 if not self.barge_in_requested:
+                    сказано.append(text_chunk)
                     await self._send_json({
                         "type": "response_text",
                         "content": text_chunk
@@ -2087,6 +2099,19 @@ class VoiceSessionTurbo:
                 # 🔊 ПОТОМ озвучка (идёт следом, текст уже виден)
                 await self.tts.synthesize_streaming(text_chunk_tts, send_audio)
             
+            # 📌 ОБОРВАЛИ — сохраняем недоговорённое, чтобы можно было продолжить.
+            # Обычный путь пишет ответ в память только после последнего куска,
+            # а при обрыве до него дело не доходит — вот и провал.
+            if оборвали and сказано:
+                кусок = " ".join(сказано).strip()
+                if кусок:
+                    self.llm.history.append({"role": "user", "content": transcript})
+                    self.llm.history.append({
+                        "role": "assistant",
+                        "content": кусок + " …(здесь меня перебили — если попросят продолжить, продолжай с этого места)"
+                    })
+                    note(self.session_id, "сохранил недоговорённое", кусок[-70:])
+
             await self._send_json({"type": "audio_end"})
             
             total = time.time() - start_time
@@ -2227,6 +2252,14 @@ async def websocket_voice(websocket: WebSocket):
                             
                             if cmd == "ping":
                                 await session._send_json({"type": "pong"})
+
+                            elif cmd == "mic":
+                                # 🎤 Браузер сообщает громкость микрофона.
+                                # Ноль всё время = микрофон не слышит, и молчание
+                                # помощника не его вина. Видно в дневнике.
+                                уровень = data.get("level", 0)
+                                note(session.session_id, "микрофон",
+                                     f"громкость {уровень}" + (" — ТИШИНА" if уровень < 0.001 else ""))
                             
                             elif cmd == "speech_end":
                                 # при Flux этот сигнал игнорируется внутри —
