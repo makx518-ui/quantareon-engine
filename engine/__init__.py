@@ -1,5 +1,5 @@
 """
-Квантарион (Астро-фрактал) — расчётный движок
+Квантареон (Астро-фрактал) — расчётный движок
 """
 from .micro_cascade import micro_cascade, cascade_from_absolute, format_cascade
 from .degree_parser import DegreeDatabase

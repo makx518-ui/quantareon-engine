@@ -362,7 +362,7 @@ function InputPanel({ data, setData, layers, setLayers, timerOn, setTimerOn, clo
         textAlign: "center",
         padding: "8px 0 6px",
         textShadow: "0 0 20px rgba(240,192,64,0.3)",
-      }}>КВАНТАРИОН — АСТРО-ФРАКТАЛ</div>
+      }}>КВАНТАРЕОН — АСТРО-ФРАКТАЛ</div>
 
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "12px", marginBottom: "8px", flexWrap: "wrap" }}>
 

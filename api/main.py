@@ -1,5 +1,5 @@
 """
-api/main.py — FastAPI сервер Квантарион (Астро-фрактал)
+api/main.py — FastAPI сервер Квантареон (Астро-фрактал)
 
 Три эндпоинта:
   POST /natal    — натальная карта
@@ -31,7 +31,7 @@ from engine.degree_parser import DegreeDatabase
 # ============================================================
 
 app = FastAPI(
-    title="Квантарион — Астро-фрактал",
+    title="Квантареон — Астро-фрактал",
     version="0.1.0",
 )
 
@@ -60,7 +60,7 @@ def _ok(tok):
 
 LOGIN_HTML = """<!doctype html><html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>КВАНТАРИОН</title>
+<title>КВАНТАРЕОН</title>
 <style>
   html,body{margin:0;height:100%;background:#0b0d10;color:#e6e1d6;
     font-family:Georgia,serif;display:flex;align-items:center;justify-content:center}
@@ -172,7 +172,7 @@ async def index():
     html_path = ROOT / "frontend" / "index.html"
     if html_path.exists():
         return HTMLResponse(content=html_path.read_text(encoding='utf-8'))
-    return HTMLResponse(content="<h1>Квантарион</h1><p>frontend/index.html не найден</p>")
+    return HTMLResponse(content="<h1>Квантареон</h1><p>frontend/index.html не найден</p>")
 
 
 def _crop_svg_to_chart(svg_text, data_only=False, cut_override=None):
@@ -2042,7 +2042,7 @@ async def interpret_deep_endpoint(req: NatalRequest):
 @app.post("/chat")
 async def chat_endpoint(req: ChatRequest, request: Request):
     """
-    Диалог «Обсудить главу с Квантарионом».
+    Диалог «Обсудить главу с Квантареоном».
     Публичный (без пароля) — используется виджетом на quantareon.com.
     Защита: ограничение длины истории и вопроса на уровне engine/chat.py.
     """
@@ -2061,7 +2061,7 @@ async def chat_endpoint(req: ChatRequest, request: Request):
 
 @app.post("/transcribe")
 async def transcribe_endpoint(file: UploadFile = File(...), language: str = "ru"):
-    """Речь -> текст для голосового ввода в чате Квантариона. Публичный."""
+    """Речь -> текст для голосового ввода в чате Квантареона. Публичный."""
     from chat import transcribe_audio
     audio = await file.read()
     result = await transcribe_audio(audio, filename=file.filename or "voice.webm",
@@ -2076,7 +2076,7 @@ class TtsRequest(BaseModel):
 
 @app.post("/tts")
 async def tts_endpoint(req: TtsRequest):
-    """Озвучка ответа Квантариона. Поток mp3: первый кусок играет,
+    """Озвучка ответа Квантареона. Поток mp3: первый кусок играет,
     пока следующие синтезируются. Публичный."""
     from fastapi.responses import StreamingResponse
     from chat import tts_stream
