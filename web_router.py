@@ -390,7 +390,16 @@ async def _новости(запрос: str, сайты=None, lang: str = "ru") 
     try:
         язык = "en" if lang == "en" else "ru"
         url = f"https://newsdata.io/api/1/latest?apikey={ключ}&language={язык}&size=5"
-        if запрос and len(запрос) > 2:
+        # ⚠️ ГЛАВНАЯ ЛОВУШКА: на слово «Georgia» лента приносит ШТАТ ДЖОРДЖИЯ
+        # (Олбани, Панама-Сити, Гранд-Айленд) вместо страны — и указание
+        # страны не спасает, потому что поиск по слову сильнее. Поэтому для
+        # Грузии слово из запроса УБИРАЕМ и берём ленту страны целиком.
+        _з = (запрос or "").lower()
+        про_грузию = any(сл in _з for сл in
+                         ("georgia", "груз", "тбилиси", "tbilisi", "батуми", "batumi"))
+        if про_грузию:
+            url += "&country=ge"
+        elif запрос and len(запрос) > 2:
             from urllib.parse import quote
             url += f"&q={quote(запрос[:100])}"
         if сайты:
@@ -398,8 +407,32 @@ async def _новости(запрос: str, сайты=None, lang: str = "ru") 
         async with aiohttp.ClientSession() as s:
             async with s.get(url, timeout=aiohttp.ClientTimeout(total=10)) as r:
                 d = await r.json()
+        # ⚠️ ПРОВЕРКА НА ОСМЫСЛЕННОСТЬ. Лента любит вернуть что попало:
+        # на «Georgia» — новости штата Джорджия, на «artificial intelligence» —
+        # биржевые сводки. Если в заголовках нет того, о чём спросили,
+        # лента бесполезна: отдаём пусто и падаем в обычный поиск.
+        новости = (d.get("results") or [])
+
+        if про_грузию:
+            # Слово «Georgia» стоит и в новостях ШТАТА, поэтому по тексту
+            # различить нельзя — смотрим ТОЛЬКО страну, которую проставила
+            # сама лента. У штата будет «united states of america».
+            новости = [н for н in новости
+                       if "georgia" in " ".join(н.get("country") or []).lower()]
+        else:
+            # служебные слова выкидываем: по ним совпадёт что угодно
+            СЛУЖЕБНЫЕ = {"news", "about", "search", "latest", "today", "please",
+                         "новости", "новость", "найди", "поищи", "посмотри", "интернете"}
+            ключевые = [w for w in re.split(r"[^\wа-яёА-ЯЁ]+", _з)
+                        if len(w) > 3 and w not in СЛУЖЕБНЫЕ][:4]
+            if ключевые:
+                новости = [н for н in новости
+                           if any(к in ((н.get("title") or "") + " " +
+                                        (н.get("description") or "")).lower()
+                                  for к in ключевые)]
+
         строки = []
-        for н in (d.get("results") or [])[:4]:
+        for н in новости[:4]:
             дата = (н.get("pubDate") or "")[:16]
             строки.append(f"• {н.get('title','')} ({н.get('source_name','')}, {дата})")
         if not строки:
@@ -432,7 +465,13 @@ async def собрать(реплика: str, lang: str = "ru") -> str:
         return await _погода(реплика, lang)
 
     if тема == "новости":
-        лента = await _новости(запрос, сайты, lang)
+        # ⚠️ ЛЕНТА НЕ РАЗЛИЧАЕТ Грузию и штат Джорджия: обеим ставит
+        # country=['georgia'], поэтому на английский вопрос про Грузию она
+        # приносит Атланту и Олбани. Проверено живьём. Обходим её и идём
+        # в поиск — он с указанием страны различает верно.
+        _про_гру = any(сл in (запрос or "").lower()
+                       for сл in ("georgia", "tbilisi", "batumi"))
+        лента = "" if (lang == "en" and _про_гру) else await _новости(запрос, сайты, lang)
         if лента:
             return лента
         # лента пуста — падаем в обычный поиск
@@ -452,6 +491,15 @@ async def собрать(реплика: str, lang: str = "ru") -> str:
     # Tavily путал страну Грузию со штатом Джорджия и нёс новости Атланты.
     # На английской версии страну не задаём: аудитория со всего мира.
     страна = "georgia" if lang == "ru" else None
+    _з = (запрос or "").lower()
+    if any(сл in _з for сл in ("georgia", "груз", "тбилиси", "tbilisi", "батуми", "batumi")):
+        страна = "georgia"          # страна, а не штат — даже на английской версии
+        # ⚠️ По-английски одного указания страны мало: «Georgia» для поиска
+        # прежде всего штат США. Уточняем прямо в запросе — проверено живьём.
+        if lang == "en" and "tbilisi" not in _з and "batumi" not in _з:
+            запрос = запрос.replace("Georgia", "Georgia (the country, Tbilisi, Caucasus)")
+            if "Georgia (the country" not in запрос:
+                запрос += " (the country Georgia in the Caucasus, not the US state)"
     # Язык ответа: Tavily по русскому вопросу всё равно отвечает по-английски,
     # лечится прямой просьбой в тексте запроса. Английской версии это не нужно.
     if lang == "ru":
