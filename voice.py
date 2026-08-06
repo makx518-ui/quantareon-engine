@@ -119,13 +119,13 @@ class Config:
     TTS_VOLUME: str = "+9%"
 
     TTS_VOICE_EN: str = "en-US-AndrewMultilingualNeural"
-    TTS_RATE_EN: str = "+5%"
+    TTS_RATE_EN: str = "+0%"
     TTS_PITCH_EN: str = "-15Hz"
     TTS_VOLUME_EN: str = "+15%"
     
     # Greeting - cached at startup for instant response
     GREETING_TEXT: str = "Приветствую тебя путник! Я Квантареон, голосовой помощник этого сайта. Спрашивай, что тебя интересует."
-    GREETING_TEXT_EN: str = "Greetings, traveler. I am Quantareon, the voice assistant of this site. Ask me anything you like."
+    GREETING_TEXT_EN: str = "Greetings, traveler! I am Quantareon, the voice assistant of this site. Ask me anything you like."
     
     # 👑 Добавляется ТОЛЬКО создателю (узнан по секретному ключу или админ-куке)
     OWNER_BLOCK: str = """
@@ -173,7 +173,7 @@ class Config:
 - Не знаешь — признай, это честнее выдумки.
 
 ИМЯ И ПРИВЕТСТВИЕ:
-- Здоровайся ОДИН РАЗ ЗА БЕСЕДУ. Если поздоровался в сообщении с датой — во втором ответе уже не здоровайся.
+- НЕ ЗДОРОВАЙСЯ ВООБЩЕ. Приветствие уже прозвучало записью до твоего первого ответа, человек его услышал. Начинать с «Привет» или «Здравствуй» — значит здороваться дважды. Сразу отвечай по существу.
 - Имя произноси редко, по умолчанию — вовсе не произноси. Постоянное «Влад, …» звучит навязчиво.
 - Не выдумывай имя: распознавание ошибается, случайное слово легко принять за имя.
 
@@ -372,6 +372,21 @@ _UDAR_ABBR = [
 ]
 
 
+def _udar_to(text: str) -> str:
+    """«-то» после дефиса → «-та»: разговорное безударное окончание.
+
+    Движок читает «какая-ТО», «где-ТО» с ударением на конце, а в живой речи
+    это «какая-та», «где-та». Правило узкое: трогаем ТОЛЬКО «то» после дефиса,
+    поэтому отдельное «то» в «то есть», «то же самое», «в то время»
+    остаётся нетронутым — там ударение законное.
+    """
+    def _r(m):
+        w = m.group(0)
+        return "-Та" if w[1:2].isupper() else "-та"
+
+    return re.sub(r"(?<=[А-Яа-яЁё])-то\b", _r, text)
+
+
 def _udar_godu(text: str) -> str:
     """«году» → «годду», но не после предлога «в».
 
@@ -418,6 +433,7 @@ def _apply_udar(text: str) -> str:
     t = re.sub(pattern, _wrepl, t, flags=re.IGNORECASE)
 
     t = _udar_godu(t)
+    t = _udar_to(t)
     return t
 
 
