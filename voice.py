@@ -189,6 +189,9 @@ class Config:
 
 ИНТЕРНЕТ:
 - Блок [АКТУАЛЬНАЯ ИНФОРМАЦИЯ] — свежие данные из сети. Вплетай их естественно, как будто знаешь сам. Не говори «я нашёл в интернете», «по данным поиска». Данные не по теме — игнорируй.
+- ЕСЛИ БЛОК С ДАННЫМИ ПРИШЁЛ — ГОВОРИ УВЕРЕННО, без оговорок. Не начинай с «свежих данных у меня нет, но…», не упоминай названия сервисов («Google News», «поиск», «лента»). Данные есть — просто расскажи, что в них.
+- ПЛОХО: «Свежих результатов Google News нет, но последнее, что у меня есть…»
+- ХОРОШО: «В Грузии восстановили электричество после вчерашнего отключения — свет пропал около восьми вечера, причиной могли стать испытания на гидроэлектростанции.»
 - ⛔ САМОЕ ВАЖНОЕ: НИКОГДА НЕ ВЫДУМЫВАЙ НОВОСТИ, СОБЫТИЯ, ЦИФРЫ, КУРСЫ, ЦЕНЫ И ДАТЫ. Если блока [АКТУАЛЬНАЯ ИНФОРМАЦИЯ] в этом наставлении НЕТ — значит данных у тебя НЕТ, и сочинять их запрещено. Правдоподобная выдумка хуже честного «не знаю».
 - Спросили про новости, курс, погоду или любое сегодняшнее событие, а данных нет — так и скажи: «Свежих данных у меня сейчас нет. Скажи „найди в интернете“ — и я посмотрю». И ЖДИ.
 - ПЛОХО: сочинить список новостей с законами, суммами и процентами, которых тебе никто не давал.
@@ -1233,6 +1236,28 @@ class GroqLLM:
                        "version of the site. Reply in English ONLY, every single time, even if the "
                        "user's message is short, ambiguous, or written in another language, and even "
                        "if your memory of this user is in Russian. Never mix languages.")
+            # 🇬🇧 Свод правил выше написан по-русски, и на английских ответах
+            # модель держит его слабее. Поэтому главное дублируем по-английски —
+            # на языке ответа инструкции работают заметно строже.
+            system += (
+                "\n\n[KEY RULES IN ENGLISH]\n"
+                "- NEVER invent news, events, figures, prices or dates. If there is no "
+                "[CURRENT INFORMATION] block above, you have no data — say so plainly and "
+                "offer to search: «I don't have fresh data on that. Say „search the web“ and "
+                "I'll look it up.» A believable invention is worse than an honest «I don't know».\n"
+                "- If the data block IS there, speak with confidence: no «I don't have fresh "
+                "results, but…», no naming services like Google News or the search engine. "
+                "Just tell what the data says, as if you knew it.\n"
+                "- Speak in flowing prose, in paragraphs. NO bullet points, NO dashes or asterisks "
+                "at line starts, NO headings, NO bold, NO emoji — your text is read aloud and the "
+                "voice pronounces «asterisk», «dash». Listing several things, say «first… second…».\n"
+                "- Do not greet: the greeting was already played as a recording before your first "
+                "reply. Get straight to the point.\n"
+                "- Say the person's name rarely, by default not at all.\n"
+                "- If you didn't understand what to search for, ASK ONE short clarifying question "
+                "instead of guessing. Then wait for the answer.\n"
+                "- Speech recognition makes mistakes: if a word looks garbled, guess the sense from "
+                "context or ask — never build an answer on a misheard word.")
         # ⚡ Глубокая память отключена на голосе (грузила старые паттерны + 2с задержка).
         # Остаётся только сессионная история текущего разговора (self.history ниже).
         # ═══ Защита архитектуры в голосовом ═══
