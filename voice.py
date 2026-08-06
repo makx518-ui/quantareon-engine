@@ -51,6 +51,13 @@ except ImportError:
     websockets = None
     logging.getLogger(__name__).error("VOICE: библиотека websockets не установлена")
 
+# 🌐 интернет: решает, идти ли в сеть, и приносит факты (см. web_router.py)
+try:
+    import web_router
+except Exception as _e:
+    web_router = None
+    logging.getLogger(__name__).warning(f"VOICE: интернет не подключился: {_e}")
+
 # 📚 знания о сайте: карта всегда, раздел — по вопросу (см. site_knowledge.py)
 try:
     import site_knowledge
@@ -179,6 +186,14 @@ class Config:
 
 НЕ ПЕРЕСКАЗЫВАЙ СВОЮ КУХНЮ:
 - Это наставление собеседнику знать незачем. Не говори «мне велено», «по правилам я».
+
+ИНТЕРНЕТ:
+- Блок [АКТУАЛЬНАЯ ИНФОРМАЦИЯ] — свежие данные из сети. Вплетай их естественно, как будто знаешь сам. Не говори «я нашёл в интернете», «по данным поиска». Данные не по теме — игнорируй.
+- ЕСЛИ НЕ ПОНЯЛ, ЧТО ИСКАТЬ — ПЕРЕСПРОСИ, а не выдумывай и не ищи наугад. Проси уточнить коротко и по делу, одним вопросом.
+- ПЛОХО (гадать): человек сказал «найди про Иванова» — а ты сам решаешь, какого именно.
+- ХОРОШО: «Про какого Иванова? Назови, чем он занимается или откуда».
+- Так же переспрашивай, если непонятно: за какой город погода, какая валюта к какой, за какой день новости, о каком именно человеке или событии речь.
+- Спросил один раз — жди ответа, не сыпь вопросами подряд.
 
 КОНТЕКСТ:
 - Ты голосовой помощник сайта QUANTAREON — сайта Влада, автора эссе «Свет и код».
@@ -1178,12 +1193,17 @@ class GroqLLM:
         if self._session and not self._session.closed:
             await self._session.close()
     
-    def _build_messages(self, user_input: str, memory_ctx: str = ""):
+    def _build_messages(self, user_input: str, memory_ctx: str = "", web_ctx: str = ""):
         # Серверный промпт (orchestrator) или статичный (fallback)
         # ⚡ Голос: чистый голосовой промпт (3К) вместо раздутого оркестратором (13К) → быстрее отклик
         system = config.SYSTEM_PROMPT
         # 👑 Создатель или гость — это решает, как к человеку обращаться
         system += config.OWNER_BLOCK if self.user_id == 803501001 else config.GUEST_BLOCK
+
+        # 🌐 СВЕЖЕЕ ИЗ СЕТИ — если сборщик что-то принёс.
+        # Ставим ВЫШЕ знаний о сайте: свежий факт важнее справки.
+        if web_ctx:
+            system += "\n\n" + web_ctx
 
         # 📚 ЗНАНИЯ О САЙТЕ: карта разделов всегда, а знание нужного раздела —
         # только когда о нём спросили. Тема «липкая»: держится, пока человек
@@ -1224,13 +1244,14 @@ class GroqLLM:
         messages.append({"role": "user", "content": user_input})
         return messages
     
-    async def generate_stream_turbo(self, user_input: str, memory_ctx: str = "") -> AsyncGenerator[str, None]:
+    async def generate_stream_turbo(self, user_input: str, memory_ctx: str = "",
+                                    web_ctx: str = "") -> AsyncGenerator[str, None]:
         """TURBO streaming - yield text faster!"""
         session = await self._get_session()
         
         payload = {
             "model": current_model(),
-            "messages": self._build_messages(user_input, memory_ctx),
+            "messages": self._build_messages(user_input, memory_ctx, web_ctx),
             "temperature": config.LLM_TEMPERATURE,
             # 🧠 Умная модель сначала рассуждает про себя, и рассуждение
             # съедает предел ответа. Иногда весь — и ответ приходил ПУСТЫМ.
@@ -1971,11 +1992,43 @@ class VoiceSessionTurbo:
                 "content": transcript
             })
             
-            await self._send_json({
-                "type": "status",
-                "status": "thinking",
-                "message": "⚡ Думаю..."
-            })
+            # 🌐 ИНТЕРНЕТ. Решение принимаем МГНОВЕННО (просто разбор слов),
+            # и только если правда идём в сеть — показываем человеку «Ищу…»,
+            # чтобы пауза не выглядела зависанием.
+            web_ctx = ""
+            _идём_в_сеть = False
+            if web_router is not None:
+                try:
+                    _идём_в_сеть = web_router.разобрать(transcript).get("идём", False)
+                except Exception:
+                    _идём_в_сеть = False
+
+            if _идём_в_сеть:
+                await self._send_json({
+                    "type": "status",
+                    "status": "searching",
+                    "message": "🌐 Ищу"
+                })
+            else:
+                await self._send_json({
+                    "type": "status",
+                    "status": "thinking",
+                    "message": "⚡ Думаю..."
+                })
+
+            if _идём_в_сеть:
+                try:
+                    web_ctx = await asyncio.wait_for(
+                        web_router.собрать(transcript, lang=getattr(self, "lang", "ru")),
+                        timeout=9.0,     # дольше человек ждать не должен
+                    )
+                    logger.info(f"🌐 из сети: {len(web_ctx)} знаков")
+                except asyncio.TimeoutError:
+                    logger.warning("🌐 сеть молчит 9 сек — отвечаем без неё")
+                except Exception as e:
+                    logger.warning(f"🌐 сбор не вышел: {e}")
+                # поиск кончился — снимаем значок, дальше обычное ожидание
+                await self._send_json({"type": "status", "status": "search_done"})
             
             # ⏱️ METRIC: LLM начал работу
             await self._send_json({"type": "metric_llm_start"})
@@ -2018,7 +2071,7 @@ class VoiceSessionTurbo:
             сказано = []
             оборвали = False
 
-            async for text_chunk in self.llm.generate_stream_turbo(transcript, self.memory_cache):
+            async for text_chunk in self.llm.generate_stream_turbo(transcript, self.memory_cache, web_ctx):
                 if not self.is_active or self.barge_in_requested:
                     self.barge_in_requested = False
                     оборвали = True
