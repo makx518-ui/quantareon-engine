@@ -2003,11 +2003,27 @@ class VoiceSessionTurbo:
             # чтобы пауза не выглядела зависанием.
             web_ctx = ""
             _идём_в_сеть = False
+            _текст_поиска = transcript
             if web_router is not None:
                 try:
                     _идём_в_сеть = web_router.разобрать(transcript).get("идём", False)
                 except Exception:
                     _идём_в_сеть = False
+
+                # 🔁 ПРОДОЛЖЕНИЕ ПРОШЛОГО ПОИСКА. Человек после ответа уточняет
+                # одним словом: «Сегодня», «Культура», «А подробнее» — глагола
+                # поиска там нет, и раньше помощник отвечал «данных нет».
+                # Если ПРОШЛЫЙ ход был поиском, а новая реплика короткая и не
+                # болтовня — считаем её уточнением и ищем «старый запрос + слово».
+                if not _идём_в_сеть and getattr(self, "_прошлый_поиск", ""):
+                    _к = transcript.strip().lower()
+                    _болтовня = ("спасибо", "понял", "ясно", "хорошо", "отлично",
+                                 "супер", "класс", "молодец", "привет", "пока",
+                                 "как дела", "ок", "okay", "thanks", "thank")
+                    if len(_к) <= 30 and not any(б in _к for б in _болтовня):
+                        _текст_поиска = self._прошлый_поиск + " " + transcript.strip()
+                        _идём_в_сеть = True
+                        logger.info(f"🔁 уточнение поиска: «{_текст_поиска[:60]}»")
 
             if _идём_в_сеть:
                 await self._send_json({
@@ -2025,10 +2041,15 @@ class VoiceSessionTurbo:
             if _идём_в_сеть:
                 try:
                     web_ctx = await asyncio.wait_for(
-                        web_router.собрать(transcript, lang=getattr(self, "lang", "ru")),
+                        web_router.собрать(_текст_поиска, lang=getattr(self, "lang", "ru")),
                         timeout=9.0,     # дольше человек ждать не должен
                     )
                     logger.info(f"🌐 из сети: {len(web_ctx)} знаков")
+                    # запоминаем удачный запрос — для коротких уточнений следом
+                    if web_ctx:
+                        self._прошлый_поиск = _текст_поиска
+                    else:
+                        self._прошлый_поиск = ""
                 except asyncio.TimeoutError:
                     logger.warning("🌐 сеть молчит 9 сек — отвечаем без неё")
                 except Exception as e:
