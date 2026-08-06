@@ -1229,35 +1229,9 @@ class GroqLLM:
                 self._last_topic = topic
             except Exception as e:
                 logger.warning(f"VOICE: знания не подмешались: {e}")
-        # 🌐 Английская версия сайта: характер описан по-русски, и память тянет
-        # ассистента обратно в русский. Поэтому язык задаём прямо и жёстко.
+        # Правила одни для обоих языков — они выше. Здесь только язык ответа.
         if getattr(self, "lang", "ru") == "en":
-            system += ("\n\n[LANGUAGE - OVERRIDES EVERYTHING ABOVE]: The user is on the English "
-                       "version of the site. Reply in English ONLY, every single time, even if the "
-                       "user's message is short, ambiguous, or written in another language, and even "
-                       "if your memory of this user is in Russian. Never mix languages.")
-            # 🇬🇧 Свод правил выше написан по-русски, и на английских ответах
-            # модель держит его слабее. Поэтому главное дублируем по-английски —
-            # на языке ответа инструкции работают заметно строже.
-            system += (
-                "\n\n[KEY RULES IN ENGLISH]\n"
-                "- NEVER invent news, events, figures, prices or dates. If there is no "
-                "[CURRENT INFORMATION] block above, you have no data — say so plainly and "
-                "offer to search: «I don't have fresh data on that. Say „search the web“ and "
-                "I'll look it up.» A believable invention is worse than an honest «I don't know».\n"
-                "- If the data block IS there, speak with confidence: no «I don't have fresh "
-                "results, but…», no naming services like Google News or the search engine. "
-                "Just tell what the data says, as if you knew it.\n"
-                "- Speak in flowing prose, in paragraphs. NO bullet points, NO dashes or asterisks "
-                "at line starts, NO headings, NO bold, NO emoji — your text is read aloud and the "
-                "voice pronounces «asterisk», «dash». Listing several things, say «first… second…».\n"
-                "- Do not greet: the greeting was already played as a recording before your first "
-                "reply. Get straight to the point.\n"
-                "- Say the person's name rarely, by default not at all.\n"
-                "- If you didn't understand what to search for, ASK ONE short clarifying question "
-                "instead of guessing. Then wait for the answer.\n"
-                "- Speech recognition makes mistakes: if a word looks garbled, guess the sense from "
-                "context or ask — never build an answer on a misheard word.")
+            system += "\n\n[LANGUAGE]: Reply in English. Never mix languages."
         # ⚡ Глубокая память отключена на голосе (грузила старые паттерны + 2с задержка).
         # Остаётся только сессионная история текущего разговора (self.history ниже).
         # ═══ Защита архитектуры в голосовом ═══
