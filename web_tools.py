@@ -304,33 +304,53 @@ async def ddg_news(
     max_results: int = 5,
     region: str = "wt-wt",
 ) -> Dict[str, Any]:
-    """DuckDuckGo News — fallback для NewsData.io."""
-    try:
-        try:
-            from ddgs import DDGS as _DDGS          # новая библиотека
-            _новая = True
-        except ImportError:
-            from duckduckgo_search import AsyncDDGS  # старая, на всякий случай
-            _новая = False
-        raw = await AsyncDDGS().news(query, max_results=max_results, region=region)
-        results = [
-            {"title": r.get("title", ""), "url": r.get("url", ""),
-             "content": r.get("body", ""), "score": None,
+    """DuckDuckGo News — запасной новостной источник.
+
+    ⚠️ ПОЧЕМУ РАНЬШЕ НЕ РАБОТАЛ (найдено 07.08): код определял новую
+    библиотеку `ddgs`, но вызывал класс `AsyncDDGS` из старой
+    `duckduckgo_search`, которой в окружении нет. Итог — ошибка на каждом
+    вызове, и очередь запасных источников на нём обрывалась.
+    Теперь для каждой библиотеки зовём её собственный класс, а
+    блокирующий вызов уводим в отдельный поток, чтобы не тормозить голос.
+    """
+    def _собрать(raw) -> list:
+        return [
+            {"title": r.get("title", ""), "url": r.get("url", "") or r.get("href", ""),
+             "content": r.get("body", "") or r.get("excerpt", ""), "score": None,
              "date": r.get("date"), "source_name": r.get("source")}
             for r in raw
         ]
-        logger.info(f"✅ DDG News: {len(results)} for '{query[:50]}'")
+
+    # 1) новая библиотека ddgs — синхронная, уводим в поток
+    try:
+        from ddgs import DDGS
+    except ImportError:
+        DDGS = None
+
+    if DDGS is not None:
+        try:
+            def _искать():
+                with DDGS() as d:
+                    return list(d.news(query, max_results=max_results, region=region))
+            raw = await asyncio.to_thread(_искать)
+            results = _собрать(raw)
+            logger.info(f"✅ DDG News: {len(results)} for '{query[:50]}'")
+            return _ok("duckduckgo_news", results)
+        except Exception as e:
+            logger.warning(f"DDG News (ddgs): {type(e).__name__}: {e}")
+
+    # 2) старая библиотека duckduckgo_search — асинхронная
+    try:
+        from duckduckgo_search import AsyncDDGS
+        raw = await AsyncDDGS().news(query, max_results=max_results, region=region)
+        results = _собрать(raw)
+        logger.info(f"✅ DDG News (старая библиотека): {len(results)}")
         return _ok("duckduckgo_news", results)
     except ImportError:
-        return _err("duckduckgo_news", "pip install duckduckgo-search")
+        return _err("duckduckgo_news", "нет ни ddgs, ни duckduckgo_search")
     except Exception as e:
-        logger.warning(f"❌ DDG News error: {e}")
-        return _err("duckduckgo_news", str(e))
+        return _err("duckduckgo_news", f"{type(e).__name__}: {e}")
 
-
-# ============================================================
-# СЛОЙ 2: ИЗВЛЕЧЕНИЕ КОНТЕНТА
-# ============================================================
 
 async def jina_read(url: str) -> Dict[str, Any]:
     """
