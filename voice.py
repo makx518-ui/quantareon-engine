@@ -757,10 +757,17 @@ class FluxSTT:
             "sample_rate=16000",
             # channels НЕ передаём: Flux его не принимает и отвечает 400
             # уверенность, при которой считаем реплику законченной
-            f"eot_threshold={os.getenv('FLUX_EOT_THRESHOLD', '0.75')}",
+            # 0.9 вместо 0.75: замер 07.08 — при 0.75 Flux РВАЛ длинную
+            # фразу надвое («…брат?» отдельно, «Посмотри в интернете»
+            # отдельно), и половина уходила помощнику самостоятельным
+            # сообщением. При 0.9 фраза остаётся целой, сигнал «договорил»
+            # приходит через 1.1–2.3 сек после последнего слова.
+            # Выше 0.95 Flux перестаёт срабатывать вовсе — не поднимать.
+            f"eot_threshold={os.getenv('FLUX_EOT_THRESHOLD', '0.9')}",
             # предел молчания: 4 сек — можно спокойно задуматься посреди мысли
             f"eot_timeout_ms={os.getenv('FLUX_EOT_TIMEOUT_MS', '4000')}",
         ]
+        params += _подсказки_слов(self.lang)
         return f"{self.WS_URL}?{'&'.join(params)}"
 
     async def connect(self) -> bool:
@@ -870,6 +877,54 @@ class FluxSTT:
 
 
 
+# ═══════════════════════════════════════════════════════
+#  ПОДСКАЗКИ СЛОВ ДЛЯ РАСПОЗНАВАТЕЛЯ (keyterm)
+# ═══════════════════════════════════════════════════════
+# Deepgram даёт слушать «с уклоном» в заданные слова. Замер 07.08 на десяти
+# фразах, наговорённых по-русски:
+#   Flux + подсказка языка (было)   — 89% слов, 6/10 фраз без ошибок
+#   Flux + подсказки слов           — 92% слов, 7/10
+#   Nova-3 русская                  — 94% слов, 8/10
+#   Nova-3 русская + подсказки слов — 100% слов, 10/10
+# Без подсказок путались ровно те слова, что важны нам: «Тбилиси» слышалось
+# как «Белиси», «лари» как «Клари», «Квантареон» как «Квантарион»,
+# «Батуми» как «Батоми».
+
+_ПОДСКАЗКИ_RU = [
+    # команды поиска — из-за них ломались целые ответы («поищи» → «поэти»)
+    "поищи", "найди", "посмотри", "глянь", "узнай", "погугли",
+    "расскажи", "почитай", "выясни", "проверь",
+    # имена
+    "Квантареон", "Влад", "брат",
+    # география, с которой он работает каждый день
+    "Тбилиси", "Грузия", "Батуми", "Кутаиси", "Гори", "Рустави", "лари",
+    # темы, по которым ходим в сеть
+    "новости", "погода", "курс", "биткоин", "доллар", "евро", "рубль",
+]
+
+_ПОДСКАЗКИ_EN = [
+    "Quantareon", "Tbilisi", "Georgia", "Batumi", "lari",
+    "news", "weather", "rate", "bitcoin", "dollar", "euro",
+]
+
+
+def _подсказки_слов(lang: str = "ru") -> list:
+    """Список параметров keyterm для адреса распознавателя.
+
+    Свои слова можно дописать переменной STT_KEYTERMS (через запятую),
+    выключить целиком — STT_KEYTERMS=нет.
+    """
+    свои = os.getenv("STT_KEYTERMS", "").strip()
+    if свои.lower() in ("нет", "no", "off", "0"):
+        return []
+    слова = list(_ПОДСКАЗКИ_EN if str(lang).lower().startswith("en") else _ПОДСКАЗКИ_RU)
+    if свои:
+        слова += [с.strip() for с in свои.split(",") if с.strip()]
+    from urllib.parse import quote
+    # многословную подсказку склеиваем плюсом — так велит Deepgram
+    return [f"keyterm={quote(с.replace(' ', '+'), safe='+')}" for с in слова[:100]]
+
+
 class DeepgramSTT:
     """Deepgram STT with WebSocket streaming and keepalive."""
     
@@ -910,6 +965,7 @@ class DeepgramSTT:
             "vad_events=true",
             "interim_results=true",
         ]
+        params += _подсказки_слов(self.lang)
         return f"{self.DEEPGRAM_WS_URL}?{'&'.join(params)}"
     
     async def connect(self) -> bool:
@@ -1083,6 +1139,145 @@ class DeepgramSTT:
     @property
     def is_connected(self):
         return self._connected
+
+
+class ДваУха:
+    """Nova-3 слышит слова, Flux ловит конец реплики.
+
+    ЗАЧЕМ. У каждого своя сильная сторона, и они не пересекаются:
+      · Nova-3 (русская, с подсказками слов) разбирает речь точнее —
+        замер 07.08: 100% против 89% у Flux на тех же десяти фразах;
+      · Flux понимает, ДОГОВОРИЛ человек или просто задумался посреди
+        мысли. Nova-3 судит об этом грубо, по длине тишины, и потому
+        перебивала — из-за чего когда-то и перешли на Flux, потеряв
+        качество слов.
+
+    КАК РАБОТАЕТ. Один и тот же звук уходит обоим. Слова копятся от
+    Nova-3 и никуда не идут, пока Flux не скажет «реплика закончена».
+    Тогда накопленное отдаётся помощнику. Flux же сообщает и о начале
+    речи — это перебивание.
+
+    ЕСЛИ ОДИН ОТВАЛИЛСЯ. Не поднялся Flux — работаем на одной Nova-3 по
+    её собственной паузе. Не поднялась Nova-3 — берём слова у Flux.
+    Молчит Nova-3 к моменту конца хода — ждём её ещё чуть-чуть, потом
+    берём то, что расслышал Flux. Немой остаться нельзя.
+    """
+
+    def __init__(self, on_transcript=None, on_error=None, on_turn_end=None,
+                 on_speech_start=None, lang="ru"):
+        self.lang = lang
+        self._на_текст = on_transcript          # бегущий текст в окно
+        self._на_конец = on_turn_end            # реплика закончена
+        self._на_ошибку = on_error
+
+        self._копилка = []                      # готовые куски от Nova-3
+        self._последний_flux = ""               # запасной текст
+        self._жду_нову = float(os.getenv("DUO_WAIT_MS", "700")) / 1000.0
+
+        self.nova = DeepgramSTT(on_transcript=self._слово_от_новы,
+                                on_error=on_error, lang=lang)
+        self.flux = FluxSTT(on_transcript=self._промежуточный_flux,
+                            on_turn_end=self._конец_хода,
+                            on_speech_start=on_speech_start,
+                            on_error=None, lang=lang)
+        self.nova_жива = False
+        self.flux_жив = False
+        self.session_id = None
+
+    # ── приём от распознавателей ──
+    def _слово_от_новы(self, text: str):
+        if text and text.strip():
+            self._копилка.append(text.strip())
+
+    def _промежуточный_flux(self, text: str, is_final: bool = False):
+        # бегущий текст в окно берём у Flux: он видит речь раньше, чем
+        # Nova-3 отдаёт готовый кусок
+        if text:
+            self._последний_flux = text
+        if self._на_текст:
+            try:
+                self._на_текст(text, is_final)
+            except Exception:
+                pass
+
+    async def _конец_хода(self, текст_flux: str):
+        """Flux решил, что человек договорил."""
+        if текст_flux:
+            self._последний_flux = текст_flux
+        # Nova-3 могла не успеть прислать последний кусок — подождём её
+        ждали = 0.0
+        while ждали < self._жду_нову and not self._копилка:
+            await asyncio.sleep(0.05)
+            ждали += 0.05
+
+        готово = " ".join(self._копилка).strip()
+        self._копилка = []
+        источник = "Nova-3"
+        if not готово:
+            готово = (текст_flux or self._последний_flux or "").strip()
+            источник = "Flux (Nova-3 промолчала)"
+        self._последний_flux = ""
+        if not готово:
+            return
+        logger.info(f"[{self.session_id}] 👂 реплика от {источник}: {готово[:60]}")
+        if self._на_конец:
+            await self._на_конец(готово)
+
+    # ── тот же набор действий, что у одиночных распознавателей ──
+    async def connect(self) -> bool:
+        self.nova.session_id = self.session_id
+        self.flux.session_id = self.session_id
+        рез = await asyncio.gather(self.nova.connect(), self.flux.connect(),
+                                   return_exceptions=True)
+        self.nova_жива = (рез[0] is True)
+        self.flux_жив = (рез[1] is True)
+        if not self.nova_жива and not self.flux_жив:
+            return False
+        if not self.flux_жив:
+            # некому сказать «договорил» — пусть Nova-3 решает сама
+            self.nova.on_transcript = self._одиночная_нова
+            logger.warning(f"[{self.session_id}] Flux не поднялся — только Nova-3")
+        if not self.nova_жива:
+            logger.warning(f"[{self.session_id}] Nova-3 не поднялась — слова от Flux")
+        return True
+
+    def _одиночная_нова(self, text: str):
+        """Запасной путь: Flux мёртв, Nova-3 работает одна."""
+        if not text or not text.strip():
+            return
+        if self._на_конец:
+            asyncio.create_task(self._на_конец(text.strip()))
+
+    async def send_audio(self, audio: bytes):
+        if self.nova_жива:
+            try:
+                await self.nova.send_audio(audio)
+            except Exception:
+                pass
+        if self.flux_жив:
+            try:
+                await self.flux.send_audio(audio)
+            except Exception:
+                pass
+
+    async def _закрыть(self, у):
+        for имя in ("disconnect", "close", "stop"):
+            м = getattr(у, имя, None)
+            if callable(м):
+                try:
+                    r = м()
+                    if asyncio.iscoroutine(r):
+                        await r
+                except Exception:
+                    pass
+                return
+
+    async def disconnect(self):
+        await self._закрыть(self.nova)
+        await self._закрыть(self.flux)
+
+    async def close(self):
+        await self.disconnect()
 
 
 # ============================================================
@@ -1717,7 +1912,40 @@ class VoiceSessionTurbo:
             # 🧠 Сначала пробуем Flux — он сам понимает конец реплики.
             # Не вышло (сеть, тариф, что угодно) — молча возвращаемся
             # на Nova-3, чтобы голос работал в любом случае.
-            if os.getenv("USE_FLUX", "1") != "0":
+            # 🎙️ ТРИ РЕЖИМА СЛУХА, переменная STT_MODE на Render:
+            #   duo  (по умолчанию) — слова от Nova-3, конец реплики от Flux
+            #   nova — одна Nova-3 (точные слова, конец реплики по паузе)
+            #   flux — один Flux (как было до 07.08)
+            # Замер 07.08 на десяти русских фразах: Nova-3 с подсказками слов
+            # 100% против 89% у Flux. Но Flux лучше чувствует, договорил
+            # человек или задумался — ради этого его когда-то и ставили,
+            # заплатив качеством слов. Режим duo берёт у каждого его сильное.
+            режим = os.getenv("STT_MODE", "duo").strip().lower()
+            if os.getenv("USE_FLUX", "") == "1":     # старая ручка, уважаем
+                режим = "flux"
+
+            if режим == "duo":
+                дуэт = ДваУха(
+                    on_transcript=self._on_flux_interim,
+                    on_turn_end=self._on_flux_turn_end,
+                    on_speech_start=getattr(self, "_on_flux_speech_start", None),
+                    on_error=self._on_stt_error,
+                    lang=self.lang,
+                )
+                дуэт.session_id = self.session_id
+                if await дуэт.connect():
+                    self.stt = дуэт
+                    # для остального кода это «как Flux»: конец реплики
+                    # приходит событием, а не по тишине
+                    self.using_flux = True
+                    note(self.session_id, "распознавание",
+                         f"дуэт: слова Nova-3 ({'жива' if дуэт.nova_жива else 'молчит'}), "
+                         f"конец реплики Flux ({'жив' if дуэт.flux_жив else 'молчит'})")
+                    return True
+                logger.warning("дуэт не поднялся — возвращаюсь на одну Nova-3")
+                режим = "nova"
+
+            if режим == "flux":
                 flux = FluxSTT(
                     on_transcript=self._on_flux_interim,
                     on_turn_end=self._on_flux_turn_end,
