@@ -1248,6 +1248,21 @@ class ДваУха:
         if self._на_конец:
             asyncio.create_task(self._на_конец(text.strip()))
 
+    @property
+    def is_connected(self) -> bool:
+        """⚠️ БЕЗ ЭТОГО ЗВУК НЕ УХОДИЛ ВОВСЕ.
+
+        Сессия перед отправкой каждого куска звука спрашивает
+        `self.stt.is_connected`. У одиночных распознавателей это поле есть,
+        а у связки я его сперва не завёл — обращение падало, и микрофон
+        говорил в пустоту: сервер жив, отвечает на текст, а голос молчит.
+        УРОК: новый распознаватель обязан повторять ВЕСЬ набор обращений,
+        какими пользуется сессия — connect, is_connected, send_audio, close.
+        """
+        return bool(getattr(self.nova, "is_connected", False)
+                    or getattr(self.flux, "is_connected", False)
+                    or self.nova_жива or self.flux_жив)
+
     async def send_audio(self, audio: bytes):
         if self.nova_жива:
             try:
@@ -1273,6 +1288,8 @@ class ДваУха:
                 return
 
     async def disconnect(self):
+        self.nova_жива = False
+        self.flux_жив = False
         await self._закрыть(self.nova)
         await self._закрыть(self.flux)
 
