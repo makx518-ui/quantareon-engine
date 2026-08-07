@@ -1576,8 +1576,29 @@ class GroqLLM:
                         вызовы = {}
                         continue                        # тем же ключом, ещё раз
 
+                    # 🔇 МОДЕЛЬ ВЕРНУЛА ПУСТОТУ — НЕ МОЛЧАТЬ.
+                    # С включённым инструментом такое бывает: всё уходит во
+                    # внутреннее рассуждение, а текста наружу нет. Раньше мы
+                    # тут молча выходили, и человек оставался без ответа —
+                    # он это и поймал: «ни ответа, ни привета». Пробуем ещё
+                    # раз, уже без инструмента: так надёжнее всего.
+                    if not full_response.strip() and not chunk_buffer.strip():
+                        if payload.get("tools"):
+                            logger.warning("модель промолчала — повторяю без инструмента")
+                            payload.pop("tools", None)
+                            payload.pop("tool_choice", None)
+                            вызовы = {}
+                            continue
+                        logger.warning("модель промолчала и без инструмента")
+
                     if chunk_buffer.strip():
                         yield _fix_words(chunk_buffer.strip())
+
+                    if not full_response.strip():
+                        # совсем нечего сказать — лучше короткая живая фраза,
+                        # чем тишина в трубке
+                        yield "Прости, я не расслышал. Повтори, пожалуйста."
+                        return
 
                     self.history.append({"role": "user", "content": user_input})
                     self.history.append({"role": "assistant", "content": full_response})
@@ -2252,10 +2273,17 @@ class VoiceSessionTurbo:
             if self.first_message:
                 self.first_message = False
                 
+                # ⏳ ВОТ ОНА, ПАУЗА НА ПЕРВОЙ РЕПЛИКЕ. Здесь ждали, пока
+                # досинтезируется присказка про дату, — до ДВУХ СЕКУНД.
+                # Присказка приятна, но она не ответ: лучше начать говорить
+                # по делу, чем молчать ради неё. Ждём коротко и идём дальше.
+                # Крутится переменной FILLER_WAIT_SEC.
                 try:
-                    await asyncio.wait_for(self.filler_ready.wait(), timeout=2.0)
+                    await asyncio.wait_for(
+                        self.filler_ready.wait(),
+                        timeout=float(os.getenv("FILLER_WAIT_SEC", "0.7")))
                 except asyncio.TimeoutError:
-                    logger.warning(f"[{self.session_id}] Filler timeout, skipping")
+                    logger.warning(f"[{self.session_id}] присказка не готова — отвечаю сразу")
                 
                 if self.cached_filler_audio and not self.barge_in_requested:
                     first_audio_time = time.time()
