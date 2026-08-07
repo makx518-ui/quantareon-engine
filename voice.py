@@ -1132,6 +1132,82 @@ class DeepgramSTT:
 # ============================================================
 
 
+
+# ═══════════════════════════════════════════════════════
+#  ИНСТРУМЕНТ ПОИСКА — модель решает сама
+# ═══════════════════════════════════════════════════════
+# Так это устроено в индустрии: модели дают описание инструмента, и она
+# сама решает, звать его или нет, и сама пишет запрос. Никаких словарей
+# слов-приманок в коде, никакого второго «судьи» — она понимает смысл
+# лучше любого списка. Описание намеренно ПОДРОБНОЕ: по рекомендациям
+# OpenAI и Anthropic длинное описание с примерами и краевыми случаями
+# работает лучше короткого, и в нём обязательно надо сказать не только
+# КОГДА вызывать, но и КОГДА НЕ НАДО.
+
+ИНСТРУМЕНТЫ = [{
+    "type": "function",
+    "function": {
+        "name": "поиск_в_интернете",
+        "description": (
+            "Найти в сети то, чего ты знать не можешь: что происходит в мире "
+            "прямо сейчас или менялось со временем.\n\n"
+            "ВЫЗЫВАЙ, когда ответ зависит от текущего момента: новости и события, "
+            "погода, курсы валют и криптовалют, цены на что угодно, спортивные "
+            "результаты, кто сейчас занимает должность, состояние компаний, "
+            "расписания, слова «сейчас», «сегодня», «последние», «актуальный», "
+            "«правда ли что», «не подорожал ли», «что слышно про».\n"
+            "Примеры: «какая погода в Ижевске» · «найди новости Грузии» · "
+            "«сколько стоит доллар к лари» · «а чё там в мире деется» · "
+            "«не подорожал ли бензин» · «Маск ещё владеет Твиттером».\n\n"
+            "НЕ ВЫЗЫВАЙ НИКОГДА:\n"
+            "— про сайт QUANTAREON и всё его содержимое: эссе «Свет и код» и его "
+            "главы, Машина времени, Колесо, Азбука 360, Оракул, фрактальная "
+            "астрология, разделы, страницы, аудиокниги, озвучка, платформа, "
+            "проект. ЭТО ТВОЙ ДОМ — ты знаешь его сам;\n"
+            "— про себя, свои умения и про наш разговор;\n"
+            "— счёт, перевод слов, объяснения устройства вещей, история, "
+            "определения, всё что не меняется со временем;\n"
+            "— просьбы написать, придумать, пошутить, помочь с текстом;\n"
+            "— время и дату: ты их знаешь и так.\n\n"
+            "⚠️ Распознавание речи ошибается. В реплике попадаются покорёженные "
+            "и лишние слова («Поэти» вместо «поищи», «брак» вместо «брат», "
+            "«Удмурьте» вместо «Удмуртия»). Отбрасывай их сам и бери то, что "
+            "человек хотел сказать."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "запрос": {
+                    "type": "string",
+                    "description": (
+                        "Чистая суть того, что искать. Без вежливости («я бы "
+                        "хотел», «можешь»), без слов-просьб («найди», «поищи»), "
+                        "без места поиска («в интернете»). На языке собеседника. "
+                        "Пример: «Я бы хотел чтобы ты нашёл в интернете новости "
+                        "Москва» → «Москва»."
+                    ),
+                },
+                "тема": {
+                    "type": "string",
+                    "enum": ["новости", "погода", "валюта", "крипта",
+                             "спорт", "финансы", "поиск"],
+                    "description": "Куда идти за данными. Если не подходит ничего — «поиск».",
+                },
+                "город": {
+                    "type": "string",
+                    "description": (
+                        "Только для погоды: название города В ИМЕНИТЕЛЬНОМ "
+                        "падеже. «в Ижевске» → «Ижевск», «во Флоренции» → "
+                        "«Флоренция». Иначе пустая строка."
+                    ),
+                },
+            },
+            "required": ["запрос", "тема"],
+        },
+    },
+}]
+
+
 class GroqLLM:
     """Groq LLM with TURBO streaming - yield chunks faster."""
     
@@ -1287,22 +1363,35 @@ class GroqLLM:
         return messages
     
     async def generate_stream_turbo(self, user_input: str, memory_ctx: str = "",
-                                    web_ctx: str = "") -> AsyncGenerator[str, None]:
-        """TURBO streaming - yield text faster!"""
+                                    web_ctx: str = "", на_поиск=None,
+                                    lang: str = "ru") -> AsyncGenerator[str, None]:
+        """Поток ответа. Модель сама решает, звать ли поиск.
+
+        Если она вызвала инструмент — мы выполняем поиск, кладём данные
+        в разговор и спрашиваем её ещё раз, уже с фактами на руках.
+        `на_поиск` — колбэк, чтобы зажечь человеку значок «Ищу…».
+        """
         session = await self._get_session()
-        
+
+        сообщения = self._build_messages(user_input, memory_ctx, web_ctx)
         payload = {
             "model": current_model(),
-            "messages": self._build_messages(user_input, memory_ctx, web_ctx),
+            "messages": сообщения,
             "temperature": config.LLM_TEMPERATURE,
             # 🧠 Умная модель сначала рассуждает про себя, и рассуждение
             # съедает предел ответа. Иногда весь — и ответ приходил ПУСТЫМ.
             # Для разговора глубокие раздумья не нужны: ставим слабые.
             "reasoning_effort": os.getenv("REASONING_EFFORT", "low"),
             "max_tokens": config.LLM_MAX_TOKENS,
-            "stream": True
+            "stream": True,
+            "tools": ИНСТРУМЕНТЫ,
+            "tool_choice": "auto",
         }
-        
+
+        # сюда собираем вызов инструмента, если модель его сделает:
+        # в потоке аргументы приходят по кусочкам, их надо склеить
+        вызовы = {}
+
         full_response = ""
         chunk_buffer = ""
         
@@ -1314,7 +1403,7 @@ class GroqLLM:
         natural_break = re.compile(r'[,;:\-]\s')
         
         rotation_start = None
-        for attempt in range(groq_keys.total_keys):
+        for attempt in range(groq_keys.total_keys + 2):   # +2 круга на вызов инструмента
             try:
                 current_key = groq_keys.get_current_key()
                 if not current_key:
@@ -1378,7 +1467,19 @@ class GroqLLM:
                         if line_text.startswith("data: "):
                             try:
                                 data = json.loads(line_text[6:])
-                                content = data.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                                дельта = data.get("choices", [{}])[0].get("delta", {})
+
+                                # 🔧 модель зовёт инструмент — копим по кусочкам
+                                for тк in (дельта.get("tool_calls") or []):
+                                    н = тк.get("index", 0)
+                                    я = вызовы.setdefault(н, {"имя": "", "арг": ""})
+                                    ф = тк.get("function") or {}
+                                    if ф.get("name"):
+                                        я["имя"] = ф["name"]
+                                    if ф.get("arguments"):
+                                        я["арг"] += ф["arguments"]
+
+                                content = дельта.get("content", "")
                                 
                                 if content:
                                     chunk_buffer += content
@@ -1417,9 +1518,67 @@ class GroqLLM:
                             except json.JSONDecodeError:
                                 continue
                     
+                    # 🔧 МОДЕЛЬ ПОПРОСИЛА ПОИСК. Сходим и спросим её снова —
+                    # теперь у неё будут факты, и она договорит ответ сама.
+                    if вызовы and not full_response.strip():
+                        try:
+                            import web_router
+                        except Exception:
+                            web_router = None
+
+                        первый = вызовы[sorted(вызовы)[0]]
+                        try:
+                            арг = json.loads(первый["арг"] or "{}")
+                        except Exception:
+                            арг = {}
+                        logger.info(f"🔧 модель зовёт поиск: {арг}")
+
+                        if на_поиск:
+                            try:
+                                await на_поиск()
+                            except Exception:
+                                pass
+
+                        данные = ""
+                        if web_router is not None:
+                            try:
+                                данные = await asyncio.wait_for(
+                                    web_router.выполнить(
+                                        запрос=арг.get("запрос", ""),
+                                        тема=арг.get("тема", "поиск"),
+                                        город=арг.get("город", ""),
+                                        lang=lang),
+                                    timeout=float(os.getenv("SEARCH_TIMEOUT", "9")))
+                            except asyncio.TimeoutError:
+                                logger.warning("🌐 поиск не уложился в срок")
+                            except Exception as e:
+                                logger.warning(f"🌐 поиск не вышел: {e}")
+
+                        # кладём вызов и его результат в разговор — так модель
+                        # понимает, что инструмент отработал, и продолжает
+                        сообщения.append({
+                            "role": "assistant",
+                            "tool_calls": [{
+                                "id": "поиск_1",
+                                "type": "function",
+                                "function": {"name": первый["имя"] or "поиск_в_интернете",
+                                             "arguments": первый["арг"] or "{}"},
+                            }],
+                        })
+                        сообщения.append({
+                            "role": "tool",
+                            "tool_call_id": "поиск_1",
+                            "content": данные or "Ничего не нашлось.",
+                        })
+                        payload["messages"] = сообщения
+                        payload.pop("tools", None)      # второй круг — без инструмента
+                        payload.pop("tool_choice", None)
+                        вызовы = {}
+                        continue                        # тем же ключом, ещё раз
+
                     if chunk_buffer.strip():
                         yield _fix_words(chunk_buffer.strip())
-                    
+
                     self.history.append({"role": "user", "content": user_input})
                     self.history.append({"role": "assistant", "content": full_response})
                     return
@@ -2040,56 +2199,37 @@ class VoiceSessionTurbo:
             # 🌐 ИНТЕРНЕТ. Решение принимаем МГНОВЕННО (просто разбор слов),
             # и только если правда идём в сеть — показываем человеку «Ищу…»,
             # чтобы пауза не выглядела зависанием.
+            # 🌐 РЕШЕНИЕ ПРИНИМАЕТ САМА МОДЕЛЬ, а не код.
+            # Ей дано описание инструмента поиска (см. ИНСТРУМЕНТЫ выше) —
+            # она вызывает его, когда считает нужным, и сама пишет запрос.
+            # Раньше здесь стояли словари слов-приманок и отдельный «судья»
+            # на второй модели: они угадывали намерение по буквам, и каждое
+            # новое слово требовало заплатки. Всё это убрано.
+            # Значок «Ищу…» зажигается по сигналу от модели — колбэк ниже.
             web_ctx = ""
-            _идём_в_сеть = False
-            _решение = None
-            if web_router is not None:
-                try:
-                    # решить() = мгновенные словари; сетевой судья будится
-                    # ТОЛЬКО если реплика пахнет внешним миром (замер 07.08:
-                    # обычный разговор — 0 мс, ни одного вызова)
-                    _решение = await web_router.решить(
-                        transcript, lang=getattr(self, "lang", "ru"))
-                    _идём_в_сеть = _решение.get("идём", False)
-                except Exception as e:
-                    logger.warning(f"🌐 решение не вышло: {e}")
-                    _идём_в_сеть = False
 
-            if _идём_в_сеть:
-                await self._send_json({
-                    "type": "status",
-                    "status": "searching",
-                    "message": "🌐 Ищу"
-                })
-            else:
-                await self._send_json({
-                    "type": "status",
-                    "status": "thinking",
-                    "message": "⚡ Думаю..."
-                })
+            await self._send_json({
+                "type": "status",
+                "status": "thinking",
+                "message": "⚡ Думаю..."
+            })
 
-            if _идём_в_сеть:
-                try:
-                    web_ctx = await asyncio.wait_for(
-                        web_router.собрать(transcript,
-                                           lang=getattr(self, "lang", "ru"),
-                                           решение=_решение),
-                        timeout=9.0,     # дольше человек ждать не должен
-                    )
-                    logger.info(f"🌐 из сети: {len(web_ctx)} знаков")
-                except asyncio.TimeoutError:
-                    logger.warning("🌐 сеть молчит 9 сек — отвечаем без неё")
-                except Exception as e:
-                    logger.warning(f"🌐 сбор не вышел: {e}")
-                # ⚠️ ЗНАЧОК НЕ СНИМАЕМ ЗДЕСЬ: данные принесены, но человеку
-                # ещё нечего слушать — впереди работа модели и озвучка.
-                # Гасим ровно в тот миг, когда пошёл первый кусок ответа.
-            
             # ⏱️ METRIC: LLM начал работу
             await self._send_json({"type": "metric_llm_start"})
 
-            # 🌐 Значок «Ищу…» горит, пока не пошёл первый кусок ответа.
-            _значок_горит = _идём_в_сеть
+            # 🌐 Значок «Ищу…»: зажигается, когда модель ПОПРОСИЛА поиск,
+            # и горит до первого слова настоящего ответа.
+            _значок_горит = False
+
+            async def _зажечь_значок():
+                nonlocal _значок_горит
+                _значок_горит = True
+                try:
+                    await self._send_json({"type": "status",
+                                           "status": "searching",
+                                           "message": "🌐 Ищу"})
+                except Exception:
+                    pass
 
             async def _снять_значок():
                 nonlocal _значок_горит
@@ -2145,7 +2285,10 @@ class VoiceSessionTurbo:
             сказано = []
             оборвали = False
 
-            async for text_chunk in self.llm.generate_stream_turbo(transcript, self.memory_cache, web_ctx):
+            async for text_chunk in self.llm.generate_stream_turbo(
+                    transcript, self.memory_cache, web_ctx,
+                    на_поиск=_зажечь_значок,
+                    lang=getattr(self, "lang", "ru")):
                 if not self.is_active or self.barge_in_requested:
                     self.barge_in_requested = False
                     оборвали = True
