@@ -1242,7 +1242,13 @@ class DeepgramSTT:
             "⚠️ Распознавание речи ошибается. В реплике попадаются покорёженные "
             "и лишние слова («Поэти» вместо «поищи», «брак» вместо «брат», "
             "«Удмурьте» вместо «Удмуртия»). Отбрасывай их сам и бери то, что "
-            "человек хотел сказать."
+            "человек хотел сказать.\n"
+            "⚠️ ОСОБЕННО СТРАДАЮТ НАЗВАНИЯ ГОРОДОВ И ИМЕНА: у них съедаются "
+            "первые и последние звуки. «Bilisi» — это Тбилиси, «Batum» — "
+            "Батуми, «Kutais» — Кутаиси, «Izhevs» — Ижевск, «Moscou» — Москва. "
+            "ВОССТАНАВЛИВАЙ правильное название сам и передавай в поиск уже "
+            "исправленным — иначе не найдётся ничего. Если название похоже на "
+            "известный город с потерянным звуком, смело правь его."
         ),
         "parameters": {
             "type": "object",
@@ -2311,10 +2317,12 @@ class VoiceSessionTurbo:
             # 🌐 Значок «Ищу…»: зажигается, когда модель ПОПРОСИЛА поиск,
             # и горит до первого слова настоящего ответа.
             _значок_горит = False
+            _значок_зажжён_в = [0.0]
 
             async def _зажечь_значок():
                 nonlocal _значок_горит
                 _значок_горит = True
+                _значок_зажжён_в[0] = time.time()
                 try:
                     await self._send_json({"type": "status",
                                            "status": "searching",
@@ -2323,14 +2331,27 @@ class VoiceSessionTurbo:
                     pass
 
             async def _снять_значок():
+                """Гасим значок — но не раньше, чем человек успеет его увидеть.
+
+                Он жаловался 07.08: значок мелькнул, потом пауза, и только
+                потом голос. Причина в том, что текст ответа приходит РАНЬШЕ
+                звука: пока кусок синтезируется, экран уже пуст. Поэтому
+                держим значок не меньше МИН_ЗНАЧОК секунд и гасим его на
+                первом настоящем ЗВУКЕ, а не на первой букве.
+                """
                 nonlocal _значок_горит
-                if _значок_горит:
-                    _значок_горит = False
-                    try:
-                        await self._send_json({"type": "status",
-                                               "status": "search_done"})
-                    except Exception:
-                        pass
+                if not _значок_горит:
+                    return
+                прошло = time.time() - (_значок_зажжён_в[0] or time.time())
+                мин = float(os.getenv("МИН_ЗНАЧОК", os.getenv("MIN_BADGE_SEC", "1.2")))
+                if прошло < мин:
+                    await asyncio.sleep(мин - прошло)
+                _значок_горит = False
+                try:
+                    await self._send_json({"type": "status",
+                                           "status": "search_done"})
+                except Exception:
+                    pass
             
             await self._send_json({"type": "audio_start"})
             self.is_speaking = True
@@ -2437,6 +2458,8 @@ class VoiceSessionTurbo:
                     nonlocal first_audio_time
                     if first_audio_time is None:
                         first_audio_time = time.time()
+                        # 🌐 вот теперь человек СЛЫШИТ ответ — значок своё отслужил
+                        await _снять_значок()
                         latency = first_audio_time - start_time
                         logger.info(f"[{self.session_id}] ⚡ First audio: {latency:.2f}s")
                     
@@ -2446,7 +2469,6 @@ class VoiceSessionTurbo:
                 # ⚡ СНАЧАЛА текст на экран (мгновенно, не ждёт озвучку)
                 if not self.barge_in_requested:
                     сказано.append(text_chunk)
-                    await _снять_значок()
                     await self._send_json({
                         "type": "response_text",
                         "content": text_chunk
