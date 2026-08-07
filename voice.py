@@ -1997,10 +1997,18 @@ class VoiceSessionTurbo:
             # чтобы пауза не выглядела зависанием.
             web_ctx = ""
             _идём_в_сеть = False
+            _решение = None
             if web_router is not None:
                 try:
-                    _идём_в_сеть = web_router.разобрать(transcript).get("идём", False)
-                except Exception:
+                    # решить() = мгновенные списки, а если они промолчали —
+                    # судья на маленькой модели, понимающий смысл реплики.
+                    # На явном «найди новости» задержки нет вовсе (0 мс),
+                    # судья стоит ~0.2-0.5 сек и только на непокрытых фразах.
+                    _решение = await web_router.решить(
+                        transcript, lang=getattr(self, "lang", "ru"))
+                    _идём_в_сеть = _решение.get("идём", False)
+                except Exception as e:
+                    logger.warning(f"🌐 решение не вышло: {e}")
                     _идём_в_сеть = False
 
             if _идём_в_сеть:
@@ -2019,7 +2027,9 @@ class VoiceSessionTurbo:
             if _идём_в_сеть:
                 try:
                     web_ctx = await asyncio.wait_for(
-                        web_router.собрать(transcript, lang=getattr(self, "lang", "ru")),
+                        web_router.собрать(transcript,
+                                           lang=getattr(self, "lang", "ru"),
+                                           решение=_решение),
                         timeout=9.0,     # дольше человек ждать не должен
                     )
                     logger.info(f"🌐 из сети: {len(web_ctx)} знаков")
@@ -2027,11 +2037,29 @@ class VoiceSessionTurbo:
                     logger.warning("🌐 сеть молчит 9 сек — отвечаем без неё")
                 except Exception as e:
                     logger.warning(f"🌐 сбор не вышел: {e}")
-                # поиск кончился — снимаем значок, дальше обычное ожидание
-                await self._send_json({"type": "status", "status": "search_done"})
+                # ⚠️ ЗНАЧОК НЕ СНИМАЕМ ЗДЕСЬ. Данные принесены, но человеку
+                # ещё нечего слушать: впереди работа модели и озвучка. Если
+                # погасить сейчас, остаётся немая пауза, будто всё повисло.
+                # Гасим ровно в тот миг, когда пошёл ПЕРВЫЙ кусок ответа —
+                # см. _снять_значок ниже.
             
             # ⏱️ METRIC: LLM начал работу
             await self._send_json({"type": "metric_llm_start"})
+
+            # 🌐 Значок «Ищу…» горит, пока не пошёл первый кусок ответа.
+            # Гасим строго один раз, из какого бы места ни начался ответ
+            # (филлер, обычный кусок, ошибка или конец очереди).
+            _значок_горит = _идём_в_сеть
+
+            async def _снять_значок():
+                nonlocal _значок_горит
+                if _значок_горит:
+                    _значок_горит = False
+                    try:
+                        await self._send_json({"type": "status",
+                                               "status": "search_done"})
+                    except Exception:
+                        pass
             
             await self._send_json({"type": "audio_start"})
             self.is_speaking = True
@@ -2055,7 +2083,8 @@ class VoiceSessionTurbo:
                     logger.info(f"[{self.session_id}] ⚡ INSTANT Filler: {latency:.3f}s ({len(self.cached_filler_audio)} bytes)")
                     
                     await self.websocket.send_bytes(self.cached_filler_audio)
-                    
+
+                    await _снять_значок()
                     await self._send_json({
                         "type": "response_text",
                         "content": self.cached_filler_text
@@ -2131,6 +2160,7 @@ class VoiceSessionTurbo:
                 # ⚡ СНАЧАЛА текст на экран (мгновенно, не ждёт озвучку)
                 if not self.barge_in_requested:
                     сказано.append(text_chunk)
+                    await _снять_значок()
                     await self._send_json({
                         "type": "response_text",
                         "content": text_chunk
@@ -2151,6 +2181,9 @@ class VoiceSessionTurbo:
                     })
                     note(self.session_id, "сохранил недоговорённое", кусок[-70:])
 
+            # страховка: ответ кончился, а значок мог не погаснуть (пустой
+            # ответ, обрыв, ошибка модели) — гасим, чтобы не висел вечно
+            await _снять_значок()
             await self._send_json({"type": "audio_end"})
             
             total = time.time() - start_time
@@ -2179,6 +2212,11 @@ class VoiceSessionTurbo:
             
         except Exception as e:
             logger.error(f"[{self.session_id}] Error: {e}")
+            # значок «Ищу…» гасим и на ошибке, иначе точки бегут вечно
+            try:
+                await self._send_json({"type": "status", "status": "search_done"})
+            except Exception:
+                pass
             await self._send_json({"type": "error", "message": str(e)})
         finally:
             note(self.session_id, "ответ завершён", "")
