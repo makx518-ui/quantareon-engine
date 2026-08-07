@@ -465,6 +465,49 @@ def _tts_clean(text: str, language: str = "ru") -> str:
     t = re.sub(r"`+", "", t)                                             # `код`
     t = re.sub(r"\s+", " ", t).strip()
 
+    # ≈ и прочие значки голос читает невнятно или пропускает
+    t = t.replace("≈", " about ").replace("~", " about ") if not str(language).lower().startswith("ru") \
+        else t.replace("≈", " примерно ").replace("~", " примерно ")
+
+    if not str(language).lower().startswith("ru"):
+        # 🔢 АНГЛИЙСКИЕ ЧИСЛА. Раньше их не трогали вовсе, и голос читал
+        # «81.29 rubles» как «восемьдесят один точка двадцать девять».
+        # Округляем так же, как в русской ветке: погода и крупные суммы —
+        # до целых, курс валют — до сотых.
+        def _окр_en(м):
+            try:
+                ч = float(м.group(1))
+            except Exception:
+                return м.group(0)
+            return f"{round(ч)} {м.group(2).strip()}"
+
+        t = re.sub(r"(-?\d+\.\d+)\s*(°\s?[CF]\b|degrees?\b)", _окр_en, t)
+        t = re.sub(r"(\d+\.\d+)\s*(km/h|mph|m/s)", _окр_en, t)
+
+        def _деньги_en(м):
+            """Крупные суммы — без копеек, мелкие — не длиннее двух знаков.
+
+            ⚠️ Раньше правило ловило только дроби в ТРИ знака и длиннее, а
+            «64 852.49» проскакивало — голос читал «64 852 точка 49» с
+            паузой посреди числа. Он это и услышал 07.08.
+            """
+            цел, дроб = м.group(1).strip(), м.group(2)
+            голая = цел.replace(",", "").replace("\u00a0", "").replace(" ", "")
+            try:
+                крупное = int(голая) >= 1000
+            except Exception:
+                крупное = False
+            if крупное:
+                return цел            # 64 852.49 → «64 852»
+            return f"{цел}.{дроб[:2]}"
+
+        t = re.sub(r"(\d[\d,\u00a0 ]*)\.(\d+)", _деньги_en, t)
+        t = re.sub(r"\babout\s+about\b", "about", t, flags=re.IGNORECASE)
+        t = re.sub(r"(\d)\s?%", r"\1 percent", t)
+        t = re.sub(r"\s?°\s?C\b", " degrees Celsius", t)
+        t = re.sub(r"\bkm/h\b", "kilometers per hour", t)
+        t = re.sub(r"\s+", " ", t).strip()
+
     if str(language).lower().startswith("ru"):
         # 🔢 ЧИСЛА С ЗАПЯТОЙ голос читает слитно: «32,2» звучит как
         # «триста двадцать два». Он это и поймал 07.08. Готовим числа
@@ -529,6 +572,8 @@ def _tts_clean(text: str, language: str = "ru") -> str:
             return f"{цел} целых {int(дроб)} {слово}"
 
         t = re.sub(r"(\d[\d \u00a0]*)[.,](\d+)", _дробь, t)
+        # хвост вида «64 852 .49» после округления — убрать
+        t = re.sub(r"\s+\.\d+", "", t)
 
         # проценты — со склонением: 53 % → «53 процента»
         t = re.sub(r"(\d+)\s?%",
