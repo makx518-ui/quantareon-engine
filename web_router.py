@@ -784,13 +784,23 @@ async def _новостная_очередь(запрос: str, lang: str = "ru"
     if not текст:
         текст = "главные новости" if lang == "ru" else "top news"
 
+    # ⏰ ТРЕБУЕМ СВЕЖЕСТИ. Запасные источники ищут по всему архиву и
+    # охотно отдают материал недельной давности — 08.08 он услышал новость
+    # про сборную Испании от конца июня, поданную как сегодняшняя.
+    if lang == "ru" and "сегодня" not in текст.lower():
+        текст_свежий = f"{текст} сегодня"
+    elif lang != "ru" and "today" not in текст.lower():
+        текст_свежий = f"{текст} today"
+    else:
+        текст_свежий = текст
+
     попытки = [
         ("Tavily новости",
-         lambda: WT.tavily_search(текст, max_results=4, topic="news",
+         lambda: WT.tavily_search(текст_свежий, max_results=4, topic="news",
                                   time_range="day",
                                   country="georgia" if lang == "ru" else None)),
         ("Serper новости",
-         lambda: WT.serper_search(текст, max_results=4, search_type="news")),
+         lambda: WT.serper_search(текст_свежий, max_results=4, search_type="news")),
         # ⏱️ DuckDuckGo — последний и самый ненадёжный: у него нет ключа,
         # библиотека просто изображает браузер. Замер 07.08 на восьми
         # запросах: срабатывает 6 из 8, медиана 3.1 с, худшее 5.4 с, и
@@ -798,7 +808,7 @@ async def _новостная_очередь(запрос: str, lang: str = "ru"
         # Поэтому короткий поводок: не уложился — не судьба, лучше
         # промолчать, чем заставлять человека ждать впустую.
         ("DuckDuckGo новости",
-         lambda: asyncio.wait_for(WT.ddg_news(текст, max_results=4),
+         lambda: asyncio.wait_for(WT.ddg_news(текст_свежий, max_results=4),
                                   timeout=float(os.getenv("DDG_TIMEOUT", "2.5")))),
     ]
 
@@ -845,6 +855,9 @@ async def выполнить(запрос: str = "", тема: str = "поиск
         # конкретный источник — наша работа, не модели.
         суть = _суть_новостей(запрос)
         лента = await _новости(суть, None, lang)
+        # ⏰ Лента отдаёт свежее сама (latest), поэтому здесь ничего не
+        # добавляем — а вот запасным источникам ниже свежесть надо
+        # спрашивать явно, они ищут по всему архиву.
         if лента:
             logger.info("📰 новости: лента NewsData")
             return лента
