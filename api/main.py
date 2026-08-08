@@ -103,9 +103,22 @@ async def login_post(request: Request):
     r.set_cookie(COOKIE, tok, max_age=DAYS*86400, httponly=True, samesite="lax", secure=sec)
     return r
 
+# 📊 Адреса счётчика посещений, которые проходную минуют.
+# ПОЧЕМУ ЭТО БЕЗОПАСНО:
+#   /api/hit  — отметка захода. Её и должен звать сайт от лица любого
+#               посетителя, пароля у него нет и быть не может. Ничего не
+#               отдаёт наружу: в ответ приходит прозрачная точка 1×1.
+#   /stats и /api/stats — просмотр цифр. Пароль движка тут не нужен,
+#               потому что у них СВОЯ защита: без верного STATS_KEY
+#               отвечают отказом. Проверено — и без ключа, и с чужим.
+_СЧЁТЧИК_БЕЗ_ПАРОЛЯ = ("/api/hit", "/stats", "/api/stats")
+
+
 @app.middleware("http")
 async def gate(request: Request, call_next):
     p = request.url.path
+    if p.startswith(_СЧЁТЧИК_БЕЗ_ПАРОЛЯ):
+        return await call_next(request)
     if p.startswith("/login") or p.startswith("/health") or p.startswith("/chat") or p.startswith("/transcribe") or p.startswith("/tts") or p.startswith("/quantareon-chat.js") or p.startswith("/ws/voice") or p.startswith("/api/greeting") or p.startswith("/api/voice-health") or p.startswith("/api/voice-model"):
         return await call_next(request)
     if not _ok(request.cookies.get(COOKIE)):
@@ -2173,31 +2186,4 @@ async def stt_stream(ws: WebSocket):
                 await dg.send(chunk)
             elif msg.get("text") == "stop":
                 break
-    except WebSocketDisconnect:
-        pass
-    except Exception:
-        pass
-    finally:
-        try:
-            await dg.send(json.dumps({"type": "CloseStream"}))
-        except Exception:
-            pass
-        task_ka.cancel()
-        task_dg.cancel()
-        try:
-            await dg.close()
-        except Exception:
-            pass
-        try:
-            await ws.close()
-        except Exception:
-            pass
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
-
-# статика — в самом конце, чтоб не перебивала эндпоинты
-app.mount("/", StaticFiles(directory=str(FRONT), html=True), name="front")
+    except WebSo
