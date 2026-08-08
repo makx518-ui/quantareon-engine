@@ -156,12 +156,15 @@ except Exception as _e:
 # Ключи: R2_ACCOUNT_ID · R2_ACCESS_KEY · R2_SECRET_KEY · R2_BUCKET · STATS_KEY
 # Подключено так же, как голос: если модуль не встанет — движок живёт дальше.
 # ============================================================
+# Ищем stats.py и в корне, и рядом с этим файлом — чтобы не зависело
+# от того, куда он лёг при заливке.
+sys.path.insert(0, str(Path(__file__).parent))
 try:
     import stats as _stats
     app.include_router(_stats.router)
     print("📊 Счётчик посещений: подключён")
 except Exception as _e:
-    print(f"⚠️ Счётчик посещений не подключился: {_e}")
+    print(f"⚠️ Счётчик посещений не подключился: {type(_e).__name__}: {_e}")
 
 
 FRONT = ROOT / "frontend"
