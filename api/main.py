@@ -2186,4 +2186,31 @@ async def stt_stream(ws: WebSocket):
                 await dg.send(chunk)
             elif msg.get("text") == "stop":
                 break
-    except WebSo
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        try:
+            await dg.send(json.dumps({"type": "CloseStream"}))
+        except Exception:
+            pass
+        task_ka.cancel()
+        task_dg.cancel()
+        try:
+            await dg.close()
+        except Exception:
+            pass
+        try:
+            await ws.close()
+        except Exception:
+            pass
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+# статика — в самом конце, чтоб не перебивала эндпоинты
+app.mount("/", StaticFiles(directory=str(FRONT), html=True), name="front")
