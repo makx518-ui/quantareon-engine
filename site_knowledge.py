@@ -78,19 +78,6 @@ TOPICS: Dict[str, Dict] = {
             "progression", "synastry", "horary", "degree", "zodiac",
         ],
     },
-    "platforma": {
-        "file": "platforma.txt",
-        "words": [
-            "платформ", "quantarion platform", "тариф", "подписк", "цена",
-            "стоимост", "оплат", "базовый тариф", "тариф про", "вип", "vip",
-            "зрени", "распозна", "файл", "pdf", "docx", "excel", "код",
-            "программир", "генерац", "картинк", "изображен",
-            "регистрац", "аккаунт", "сбп",
-            "platform", "plan", "pricing", "price", "cost", "subscription",
-            "basic", "vip", "vision", "file", "coding", "generate image",
-            "memory", "register", "account",
-        ],
-    },
     "oracle": {
         "file": "oracle.txt",
         "words": [
@@ -150,7 +137,7 @@ def _read_lang(name: str, lang: str = "ru") -> str:
     """Прочитать файл знаний на нужном языке.
 
     Для английского сначала ищем файл с хвостом _en (например
-    platforma_en.txt) — это отдельный английский текст, а не перевод
+    muzyka_en.txt) — это отдельный английский текст, а не перевод
     на лету. Нет такого файла — берём русский, лучше так, чем ничего.
     """
     if str(lang).lower().startswith("en"):
