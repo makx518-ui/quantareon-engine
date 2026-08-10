@@ -119,7 +119,7 @@ async def gate(request: Request, call_next):
     p = request.url.path
     if p.startswith(_СЧЁТЧИК_БЕЗ_ПАРОЛЯ):
         return await call_next(request)
-    if p.startswith("/login") or p.startswith("/health") or p.startswith("/chat") or p.startswith("/transcribe") or p.startswith("/tts") or p.startswith("/quantareon-chat.js") or p.startswith("/ws/voice") or p.startswith("/api/greeting") or p.startswith("/api/voice-health") or p.startswith("/api/voice-model"):
+    if p.startswith("/login") or p.startswith("/health") or p.startswith("/chat") or p.startswith("/transcribe") or p.startswith("/tts") or p.startswith("/quantareon-chat.js") or p.startswith("/ws/voice") or p.startswith("/api/greeting") or p.startswith("/api/voice-health") or p.startswith("/api/voice-model") or p.startswith("/api/voice-image-mode"):
         return await call_next(request)
     if not _ok(request.cookies.get(COOKIE)):
         if request.method == "GET" and ("text/html" in request.headers.get("accept","")):
