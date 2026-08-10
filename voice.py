@@ -867,6 +867,41 @@ def current_model() -> str:
     return _model_override or config.LLM_MODEL
 
 
+# ============================================================
+# 🎨 РЕЖИМ КАРТИНКИ (только хозяин)
+# ------------------------------------------------------------
+# Кнопка «картинка» в окне (видна только хозяину) включает режим:
+# тогда следующая реплика — голосом ИЛИ текстом — уходит не в
+# разговор, а в рисование. Флаг общий (рисует только хозяин),
+# хранится в файле, чтобы пережить перезапуск сервиса.
+# Ключ Gemini в код НЕ пишем — берём из окружения GEMINI_API_KEY.
+# ============================================================
+IMAGE_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/"
+IMAGE_MODEL = os.getenv("IMAGE_MODEL", "gemini-2.5-flash-image")
+
+_image_mode: bool = False
+_IMAGE_MODE_FILE = Path("/tmp/quantareon_voice_image_mode.txt")
+
+
+def _load_image_mode():
+    global _image_mode
+    try:
+        if _IMAGE_MODE_FILE.exists():
+            _image_mode = _IMAGE_MODE_FILE.read_text(encoding="utf-8").strip() == "1"
+    except Exception:
+        pass
+
+
+def _save_image_mode(on: bool):
+    try:
+        _IMAGE_MODE_FILE.write_text("1" if on else "0", encoding="utf-8")
+    except Exception as e:
+        logger.debug(f"режим картинки не записался: {e}")
+
+
+_load_image_mode()
+
+
 def _check_owner(key: str) -> bool:
     secret = os.getenv("ADMIN_SECRET", "") or os.getenv("QUANTAREON_PASSWORD", "")
     return bool(secret) and key == secret
@@ -2288,6 +2323,32 @@ async def set_voice_model(request: Request):
     return {"ok": True, "current": current_model()}
 
 
+@router.get("/api/voice-image-mode")
+async def get_image_mode(key: str = ""):
+    """Включён ли режим картинки. Управление — только хозяину."""
+    out = {"on": _image_mode}
+    if _check_owner(key):
+        out["owner"] = True
+    return out
+
+
+@router.post("/api/voice-image-mode")
+async def set_image_mode(request: Request):
+    """Включить/выключить режим картинки. Только с ключом хозяина."""
+    global _image_mode
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    key = str(body.get("key", "") or request.query_params.get("key", ""))
+    if not _check_owner(key):
+        return JSONResponse({"error": "нет доступа"}, status_code=403)
+    _image_mode = bool(body.get("on", not _image_mode))
+    _save_image_mode(_image_mode)
+    logger.info(f"🎨 Режим картинки: {'вкл' if _image_mode else 'выкл'}")
+    return {"ok": True, "on": _image_mode}
+
+
 @router.get("/api/voice-health/debug")
 async def voice_debug(key: str = ""):
     """Дневник последних событий голоса. Только с ключом хозяина.
@@ -2698,7 +2759,14 @@ class VoiceSessionTurbo:
                 "type": "transcript_final",
                 "content": transcript
             })
-            
+
+            # 🎨 РЕЖИМ КАРТИНКИ: хозяин включил кнопку — рисуем и выходим,
+            # реплику в разговор НЕ пускаем. Работает и с голоса, и с текста.
+            if _image_mode and self.user_id == 803501001:
+                await self._generate_image(transcript)
+                self.is_processing = False
+                return
+
             # 🌐 ИНТЕРНЕТ. Решение принимаем МГНОВЕННО (просто разбор слов),
             # и только если правда идём в сеть — показываем человеку «Ищу…»,
             # чтобы пауза не выглядела зависанием.
@@ -2994,6 +3062,70 @@ class VoiceSessionTurbo:
             # Игнорируем ошибки отправки после закрытия соединения
             if "close message has been sent" not in str(e):
                 logger.error(f"[{self.session_id}] Send error: {e}")
+
+    async def _generate_image(self, prompt: str):
+        """🎨 Нарисовать картинку по промпту (только хозяин, режим картинки).
+
+        Ключ Gemini берём из окружения — в коде его нет. Готовую картинку
+        шлём клиенту одним сообщением type=image; окно всплывает поверх сайта.
+        """
+        prompt = (prompt or "").strip()
+        if not prompt:
+            return
+        key = os.getenv("GEMINI_API_KEY", "").strip()
+        if not key:
+            await self._send_json({"type": "error",
+                "message": "🎨 Картинки не настроены: нет ключа GEMINI_API_KEY"})
+            return
+
+        await self._send_json({"type": "status", "status": "drawing",
+                               "message": "🎨 Рисую"})
+        logger.info(f"[{self.session_id}] 🎨 Рисую: \"{prompt[:100]}\"")
+
+        url = IMAGE_API_BASE + IMAGE_MODEL + ":generateContent?key=" + key
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"responseModalities": ["IMAGE"]},
+        }
+        try:
+            timeout = aiohttp.ClientTimeout(total=120)
+            async with aiohttp.ClientSession(timeout=timeout) as sess:
+                async with sess.post(url, json=payload) as resp:
+                    status = resp.status
+                    data = await resp.json()
+
+            if status != 200:
+                msg = ((data or {}).get("error", {}) or {}).get("message", "ошибка генерации")
+                await self._send_json({"type": "error",
+                    "message": "🎨 " + str(msg)[:300]})
+                return
+
+            b64, mime = None, "image/png"
+            for cand in (data.get("candidates", []) or []):
+                for part in cand.get("content", {}).get("parts", []) or []:
+                    inline = part.get("inlineData") or part.get("inline_data")
+                    if inline and inline.get("data"):
+                        b64 = inline["data"]
+                        mime = inline.get("mimeType") or inline.get("mime_type") or "image/png"
+                        break
+                if b64:
+                    break
+
+            if not b64:
+                await self._send_json({"type": "error",
+                    "message": "🎨 Модель не вернула картинку — попробуй иначе описать"})
+                return
+
+            await self._send_json({
+                "type": "image",
+                "mime": mime,
+                "data": b64,
+                "prompt": prompt[:200],
+            })
+            logger.info(f"[{self.session_id}] 🎨 Готово ({len(b64)//1024} KB base64)")
+        except Exception as e:
+            logger.error(f"[{self.session_id}] 🎨 Ошибка генерации: {e}")
+            await self._send_json({"type": "error", "message": "🎨 " + str(e)[:200]})
 
 
 # ============================================================
