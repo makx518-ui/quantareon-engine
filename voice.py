@@ -3120,6 +3120,32 @@ class VoiceSessionTurbo:
                                "message": подпись})
         logger.info(f"[{self.session_id}] 🎨 Рисую [{режим}]: \"{prompt[:100]}\"")
 
+        # 🛡 ПУЛЬС ВО ВРЕМЯ РИСОВАНИЯ.
+        # В браузере сторож рвёт связь, если 30 секунд от сервера тишина
+        # (CONFIG.WATCHDOG_MS). PRO рисует 30+ секунд — и картинка прилетала
+        # уже в оборванное соединение, окно висело на «Рисую». Поэтому пока
+        # рисуем, каждые 5 секунд подаём признак жизни: сторож видит, что
+        # связь живая, и не трогает её. Сам сторож не меняем — он нужен для
+        # настоящих зависаний.
+        _пульс_жив = True
+
+        async def _пульс():
+            секунд = 0
+            while _пульс_жив:
+                await asyncio.sleep(5)
+                if not _пульс_жив:
+                    break
+                секунд += 5
+                try:
+                    await self._send_json({
+                        "type": "status", "status": "drawing",
+                        "message": подпись + f" · {секунд}с",
+                    })
+                except Exception:
+                    break
+
+        задача_пульса = asyncio.create_task(_пульс())
+
         выбор = IMAGE_MODELS.get(режим) or IMAGE_MODELS["lite"]
         gen_cfg = {"responseModalities": ["IMAGE"]}
         img_cfg = {}
@@ -3222,6 +3248,10 @@ class VoiceSessionTurbo:
         except Exception as e:
             logger.error(f"[{self.session_id}] 🎨 Ошибка генерации: {e}")
             await self._send_json({"type": "error", "message": "🎨 " + str(e)[:200]})
+        finally:
+            # пульс глушим при любом исходе — и на удаче, и на ошибке
+            _пульс_жив = False
+            задача_пульса.cancel()
 
 
 # ============================================================
