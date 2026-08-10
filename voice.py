@@ -877,9 +877,19 @@ def current_model() -> str:
 # Ключ Gemini в код НЕ пишем — берём из окружения GEMINI_API_KEY.
 # ============================================================
 IMAGE_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/"
-IMAGE_MODEL = os.getenv("IMAGE_MODEL", "gemini-2.5-flash-image")
+# Две кнопки — два режима рисования:
+#   lite — gemini-3.1-flash-lite-image, ~2.5 сек, 1K. Для быстрых набросков.
+#   pro  — gemini-3-pro-image, ~25 сек, до 4K. Для серьёзных вещей.
+# gemini-2.5-flash-image СНЯТА Google — её здесь быть не должно. Живые
+# модели всегда можно проверить: GET /v1beta/models?key=…
+IMAGE_MODELS = {
+    "lite": {"id": "gemini-3.1-flash-lite-image", "size": None,  "ratio": "16:9"},
+    "pro":  {"id": "gemini-3-pro-image",          "size": "4K",  "ratio": "16:9"},
+}
+# запасная модель, если основная отказала
+IMAGE_FALLBACK = "gemini-3.1-flash-image"
 
-_image_mode: bool = False
+_image_mode: str = ""          # "" — выключено, "lite" или "pro"
 _IMAGE_MODE_FILE = Path("/tmp/quantareon_voice_image_mode.txt")
 
 
@@ -887,14 +897,15 @@ def _load_image_mode():
     global _image_mode
     try:
         if _IMAGE_MODE_FILE.exists():
-            _image_mode = _IMAGE_MODE_FILE.read_text(encoding="utf-8").strip() == "1"
+            v = _IMAGE_MODE_FILE.read_text(encoding="utf-8").strip()
+            _image_mode = v if v in IMAGE_MODELS else ""
     except Exception:
         pass
 
 
-def _save_image_mode(on: bool):
+def _save_image_mode(режим: str):
     try:
-        _IMAGE_MODE_FILE.write_text("1" if on else "0", encoding="utf-8")
+        _IMAGE_MODE_FILE.write_text(режим or "", encoding="utf-8")
     except Exception as e:
         logger.debug(f"режим картинки не записался: {e}")
 
@@ -2325,16 +2336,17 @@ async def set_voice_model(request: Request):
 
 @router.get("/api/voice-image-mode")
 async def get_image_mode(key: str = ""):
-    """Включён ли режим картинки. Управление — только хозяину."""
-    out = {"on": _image_mode}
+    """Какой режим картинки включён: "" (выкл), "lite" или "pro"."""
+    out = {"mode": _image_mode, "on": bool(_image_mode)}
     if _check_owner(key):
         out["owner"] = True
+        out["models"] = {k: v["id"] for k, v in IMAGE_MODELS.items()}
     return out
 
 
 @router.post("/api/voice-image-mode")
 async def set_image_mode(request: Request):
-    """Включить/выключить режим картинки. Только с ключом хозяина."""
+    """Включить режим рисования ("lite"/"pro") или выключить (""). Только хозяину."""
     global _image_mode
     try:
         body = await request.json()
@@ -2343,10 +2355,15 @@ async def set_image_mode(request: Request):
     key = str(body.get("key", "") or request.query_params.get("key", ""))
     if not _check_owner(key):
         return JSONResponse({"error": "нет доступа"}, status_code=403)
-    _image_mode = bool(body.get("on", not _image_mode))
+
+    хочет = str(body.get("mode", "")).strip().lower()
+    if хочет and хочет not in IMAGE_MODELS:
+        return JSONResponse({"error": "неизвестный режим"}, status_code=400)
+    # нажал ту же кнопку второй раз — выключаем
+    _image_mode = "" if хочет == _image_mode else хочет
     _save_image_mode(_image_mode)
-    logger.info(f"🎨 Режим картинки: {'вкл' if _image_mode else 'выкл'}")
-    return {"ok": True, "on": _image_mode}
+    logger.info(f"🎨 Режим картинки: {_image_mode or 'выкл'}")
+    return {"ok": True, "mode": _image_mode, "on": bool(_image_mode)}
 
 
 @router.get("/api/voice-health/debug")
@@ -2763,7 +2780,7 @@ class VoiceSessionTurbo:
             # 🎨 РЕЖИМ КАРТИНКИ: хозяин включил кнопку — рисуем и выходим,
             # реплику в разговор НЕ пускаем. Работает и с голоса, и с текста.
             if _image_mode and self.user_id == 803501001:
-                await self._generate_image(transcript)
+                await self._generate_image(transcript, _image_mode)
                 self.is_processing = False
                 return
 
@@ -3063,7 +3080,7 @@ class VoiceSessionTurbo:
             if "close message has been sent" not in str(e):
                 logger.error(f"[{self.session_id}] Send error: {e}")
 
-    async def _generate_image(self, prompt: str):
+    async def _generate_image(self, prompt: str, режим: str = "lite"):
         """🎨 Нарисовать картинку по промпту (только хозяин, режим картинки).
 
         Ключ Gemini берём из окружения — в коде его нет. Готовую картинку
@@ -3072,23 +3089,55 @@ class VoiceSessionTurbo:
         prompt = (prompt or "").strip()
         if not prompt:
             return
+
+        # Убираем обращение-команду в начале: рисовать надо то, что ПОСЛЕ неё.
+        # «Сделай картинку, кот на окне» → «кот на окне».
+        _мусор = [
+            "сделай картинку", "сделай изображение", "сделай рисунок", "сделай фото",
+            "нарисуй картинку", "нарисуй изображение", "нарисуй мне", "нарисуй",
+            "покажи картинку", "создай картинку", "создай изображение", "сгенерируй картинку",
+            "сгенерируй изображение", "картинка", "картинку",
+            "draw me", "draw a", "draw", "generate an image of", "generate image",
+            "make an image of", "make a picture of", "create an image of", "picture of",
+        ]
+        _низ = prompt.lower()
+        for _ф in sorted(_мусор, key=len, reverse=True):
+            if _низ.startswith(_ф):
+                prompt = prompt[len(_ф):].lstrip(" ,.:;—-").strip()
+                break
+        if not prompt:
+            await self._send_json({"type": "error",
+                "message": "🎨 Скажи, что именно нарисовать"})
+            return
         key = os.getenv("GEMINI_API_KEY", "").strip()
         if not key:
             await self._send_json({"type": "error",
                 "message": "🎨 Картинки не настроены: нет ключа GEMINI_API_KEY"})
             return
 
+        подпись = "🎨 Рисую в PRO (это дольше)" if режим == "pro" else "🎨 Рисую"
         await self._send_json({"type": "status", "status": "drawing",
-                               "message": "🎨 Рисую"})
-        logger.info(f"[{self.session_id}] 🎨 Рисую: \"{prompt[:100]}\"")
+                               "message": подпись})
+        logger.info(f"[{self.session_id}] 🎨 Рисую [{режим}]: \"{prompt[:100]}\"")
 
-        url = IMAGE_API_BASE + IMAGE_MODEL + ":generateContent?key=" + key
+        выбор = IMAGE_MODELS.get(режим) or IMAGE_MODELS["lite"]
+        gen_cfg = {"responseModalities": ["IMAGE"]}
+        img_cfg = {}
+        if выбор.get("size"):
+            img_cfg["imageSize"] = выбор["size"]
+        if выбор.get("ratio"):
+            img_cfg["aspectRatio"] = выбор["ratio"]
+        if img_cfg:
+            gen_cfg["imageConfig"] = img_cfg
+
+        url = IMAGE_API_BASE + выбор["id"] + ":generateContent?key=" + key
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"responseModalities": ["IMAGE"]},
+            "generationConfig": gen_cfg,
         }
         try:
-            timeout = aiohttp.ClientTimeout(total=120)
+            # Pro думает дольше и рисует 4K — даём ему запас времени
+            timeout = aiohttp.ClientTimeout(total=300 if режим == "pro" else 120)
             async with aiohttp.ClientSession(timeout=timeout) as sess:
                 async with sess.post(url, json=payload) as resp:
                     status = resp.status
@@ -3111,10 +3160,57 @@ class VoiceSessionTurbo:
                 if b64:
                     break
 
+            # Модель может ответить без картинки. Причину она пишет в
+            # finishReason — говорим человеку прямо, а не молчим:
+            #   PROHIBITED_CONTENT / SAFETY — фильтр Google не пропустил
+            #     (часто это сказочные и киногерои: права на образ);
+            #   NO_IMAGE — просто не нарисовала, второй заход обычно берёт.
             if not b64:
-                await self._send_json({"type": "error",
-                    "message": "🎨 Модель не вернула картинку — попробуй иначе описать"})
-                return
+                причина = ""
+                for cand in (data.get("candidates", []) or []):
+                    причина = str(cand.get("finishReason") or "")
+                    break
+
+                if причина in ("NO_IMAGE", "PROHIBITED_CONTENT", "SAFETY", "IMAGE_SAFETY"):
+                    # Модель отвечает неровно: тот же запрос то проходит, то
+                    # режется фильтром. Поэтому пробуем ещё раз ею же, а если
+                    # снова пусто — запасной моделью. Молчать нельзя.
+                    попытки = [(url, payload)]
+                    зап_url = IMAGE_API_BASE + IMAGE_FALLBACK + ":generateContent?key=" + key
+                    попытки.append((зап_url, {
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {"responseModalities": ["IMAGE"]},
+                    }))
+                    for _u, _p in попытки:
+                        try:
+                            async with aiohttp.ClientSession(timeout=timeout) as sess:
+                                async with sess.post(_u, json=_p) as resp2:
+                                    data2 = await resp2.json()
+                            for cand in (data2.get("candidates", []) or []):
+                                for part in cand.get("content", {}).get("parts", []) or []:
+                                    inline = part.get("inlineData") or part.get("inline_data")
+                                    if inline and inline.get("data"):
+                                        b64 = inline["data"]
+                                        mime = inline.get("mimeType") or inline.get("mime_type") or "image/png"
+                                        break
+                                if b64:
+                                    break
+                        except Exception:
+                            pass
+                        if b64:
+                            break
+                if not b64:
+                    if причина in ("PROHIBITED_CONTENT", "SAFETY", "IMAGE_SAFETY"):
+                        текст = ("🎨 Гугл не пропустил этот запрос — так бывает с "
+                                 "known-персонажами и брендами. Опиши своими словами: "
+                                 "например «кот в высоких кожаных сапогах и шляпе с пером»")
+                    elif причина == "RECITATION":
+                        текст = "🎨 Запрос отклонён из-за авторских прав — опиши образ своими словами"
+                    else:
+                        текст = "🎨 Не нарисовалось — попробуй описать подробнее"
+                    logger.info(f"[{self.session_id}] 🎨 без картинки, finishReason={причина}")
+                    await self._send_json({"type": "error", "message": текст})
+                    return
 
             await self._send_json({
                 "type": "image",
