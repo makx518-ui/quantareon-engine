@@ -2163,6 +2163,21 @@ class GroqLLM:
 # Edge TTS - TURBO with streaming
 # ============================================================
 
+class ОкноЗакрылось(Exception):
+    """Браузер отсоединился — слать больше некому, ответ надо оборвать.
+
+    ⚠️ УРОК 11.08, стоивший ему полутора минут тишины. Сторож в окне ждёт
+    ответа 30 секунд и, не дождавшись, переподключается — старый сокет
+    закрывается. Сервер этого не замечал: отправка звука стояла ВНУТРИ
+    блока с повторами вместе с самим синтезом, поэтому ошибка «send once a
+    close message has been sent» принималась за сбой озвучки. Кусок
+    синтезировался ЗАНОВО, трижды, с паузами — и так на каждый кусок
+    ответа. В логах вышла красная простыня на минуту.
+    Теперь повторяем ТОЛЬКО синтез, а провал отправки поднимает эту ошибку
+    и обрывает ответ целиком.
+    """
+
+
 class EdgeTTSTurbo:
     """Edge TTS with streaming output for lower latency."""
     
@@ -2210,8 +2225,11 @@ class EdgeTTSTurbo:
         if not text or not text.strip():
             return
         
-        # 🛡️ RETRY до 3 попыток
+        # 🛡️ RETRY до 3 попыток — ТОЛЬКО НА СИНТЕЗ.
+        # Отправка вынесена ниже: слать в закрытое окно нет смысла, и
+        # повторять её тем более (см. ОкноЗакрылось).
         max_retries = 3
+        аудио = b""
         for attempt in range(max_retries):
             try:
                 communicate = edge_tts.Communicate(
@@ -2229,10 +2247,9 @@ class EdgeTTSTurbo:
                     if chunk["type"] == "audio":
                         audio_buffer.write(chunk["data"])
                 
-                # Отправляем целиком — без разрывов = без щелчков
                 if audio_buffer.tell() > 0:
-                    await send_callback(audio_buffer.getvalue())
-                    return  # ✅ Успех - выходим
+                    аудио = audio_buffer.getvalue()
+                    break  # ✅ синтез удался
                     
             except asyncio.TimeoutError:
                 if attempt < max_retries - 1:
@@ -2247,6 +2264,18 @@ class EdgeTTSTurbo:
                     await asyncio.sleep(0.5)
                     continue
                 logger.error(f"❌ TTS failed after {max_retries} attempts: {e}")
+
+        if not аудио:
+            return
+
+        # 📤 Отправка — один раз, без повторов. Не прошла, значит окна больше
+        # нет: говорим об этом наверх, чтобы ответ оборвался целиком.
+        try:
+            await send_callback(аудио)
+        except ОкноЗакрылось:
+            raise
+        except Exception as e:
+            raise ОкноЗакрылось(str(e))
 
 
 # ============================================================
@@ -2805,7 +2834,37 @@ class VoiceSessionTurbo:
         
         self.is_processing = True
         self._processing_since = time.time()
-        
+
+        # 💓 ПРИЗНАК ЖИЗНИ, ПОКА ДУМАЕМ.
+        # ⚠️ УРОК 11.08 (второй слой того же сбоя). Сторож в окне ждёт
+        # ЛЮБОГО сообщения от сервера 30 секунд и, не дождавшись, рвёт связь
+        # и переподключается. Пока сервер думает над ответом, он не отвечает
+        # даже на «ping» — приём сообщений стоит на том же ходу, что и
+        # ответ. Долгий честный ответ выходил длиннее сторожа, и окно
+        # обрывало связь само, у самого порога. Теперь на всё время
+        # обдумывания подаём «pong» каждые восемь секунд: окно видит, что
+        # сервер жив, и ждёт спокойно. Сайт трогать не нужно — «pong» он
+        # уже понимает.
+        _сердце_стоп = asyncio.Event()
+
+        async def _сердцебиение():
+            try:
+                while True:
+                    try:
+                        await asyncio.wait_for(_сердце_стоп.wait(), timeout=8.0)
+                        return                     # ответ пошёл — хватит
+                    except asyncio.TimeoutError:
+                        pass
+                    if self.websocket.client_state.name != "CONNECTED":
+                        return
+                    await self._send_json({"type": "pong"})
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass
+
+        _сердце = asyncio.create_task(_сердцебиение())
+
         try:
             await self._send_json({
                 "type": "transcript_final",
@@ -3005,8 +3064,11 @@ class VoiceSessionTurbo:
                         logger.info(f"[{self.session_id}] ⚡ First audio: {latency:.2f}s")
                     
                     if not self.barge_in_requested:
+                        # 🛡️ Окно ещё на связи? Если нет — не молотим впустую.
+                        if self.websocket.client_state.name != "CONNECTED":
+                            raise ОкноЗакрылось("сокет уже закрыт")
                         await self.websocket.send_bytes(audio_bytes)
-                
+
                 # ⚡ СНАЧАЛА текст на экран (мгновенно, не ждёт озвучку)
                 if not self.barge_in_requested:
                     сказано.append(text_chunk)
@@ -3015,7 +3077,14 @@ class VoiceSessionTurbo:
                         "content": text_chunk
                     })
                 # 🔊 ПОТОМ озвучка (идёт следом, текст уже виден)
-                await self.tts.synthesize_streaming(text_chunk_tts, send_audio)
+                try:
+                    await self.tts.synthesize_streaming(text_chunk_tts, send_audio)
+                except ОкноЗакрылось as e:
+                    # Окно ушло посреди ответа — договаривать некому.
+                    logger.warning(f"[{self.session_id}] 🔌 окно закрылось, обрываю ответ: {e}")
+                    note(self.session_id, "ОКНО ЗАКРЫЛОСЬ", "обрываю ответ, слать некому")
+                    оборвали = True
+                    break
             
             # 🇷🇺 Если фильтр языка вычистил ВЕСЬ ответ (модель ушла в чужой
             # язык целиком) — помощник не должен молчать. Говорим по-русски.
@@ -3083,6 +3152,9 @@ class VoiceSessionTurbo:
                 pass
             await self._send_json({"type": "error", "message": str(e)})
         finally:
+            _сердце_стоп.set()
+            if not _сердце.done():
+                _сердце.cancel()
             note(self.session_id, "ответ завершён", "")
             self.is_processing = False
             self.is_speaking = False
