@@ -2895,7 +2895,36 @@ class VoiceSessionTurbo:
         
         self.is_processing = True
         self._processing_since = time.time()
-        
+
+        # 💓 ПРИЗНАК ЖИЗНИ, ПОКА ДУМАЕМ.
+        # ⚠️ ЗАЧЕМ, ПО ЕГО ЖЕ ДНЕВНИКУ 11.08: ответ строился 39 секунд, и ровно
+        # на 30-й окно разорвало связь и подключилось заново — у него сторож
+        # ждёт ЛЮБОГО сообщения от сервера 30 секунд. Приём сообщений идёт тем
+        # же ходом, что и генерация ответа, поэтому сервер в это время не
+        # отвечает даже на «ping». Его реплика после разрыва ушла в новую
+        # сессию, где помощник ничего не помнил, и склеил два куска подряд.
+        # Лечение: пока думаем, каждые 8 секунд шлём «pong». Окно этот сигнал
+        # уже понимает — сайт править не надо.
+        _сердце_стоп = asyncio.Event()
+
+        async def _сердцебиение():
+            try:
+                while True:
+                    try:
+                        await asyncio.wait_for(_сердце_стоп.wait(), timeout=8.0)
+                        return                     # ответ пошёл — хватит
+                    except asyncio.TimeoutError:
+                        pass
+                    if self.websocket.client_state.name != "CONNECTED":
+                        return
+                    await self._send_json({"type": "pong"})
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass
+
+        _сердце = asyncio.create_task(_сердцебиение())
+
         try:
             await self._send_json({
                 "type": "transcript_final",
@@ -3173,6 +3202,9 @@ class VoiceSessionTurbo:
                 pass
             await self._send_json({"type": "error", "message": str(e)})
         finally:
+            _сердце_стоп.set()
+            if not _сердце.done():
+                _сердце.cancel()
             note(self.session_id, "ответ завершён", "")
             self.is_processing = False
             self.is_speaking = False
