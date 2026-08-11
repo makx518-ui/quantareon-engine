@@ -1,0 +1,144 @@
+"""🧠 СУДЬЯ КОНЦА РЕПЛИКИ — слушает звук и говорит, договорил ли человек.
+
+ЗАЧЕМ. Секундомер тишины эту задачу решить не может в принципе: пауза на
+раздумье посреди мысли и пауза в конце фразы по длине одинаковы. Судья
+слушает интонацию, темп и заминки — то, чего в тексте нет вовсе.
+
+ЧТО ВНУТРИ. Smart Turn v3 (Pipecat, лицензия BSD): энкодер Whisper Tiny
+плюс линейный классификатор, 8 миллионов параметров, файл 8 МБ.
+Обучен на 23 языках, русский в их числе.
+
+ЗАМЕРЕНО НА ИХ ЖЕ ТЕСТОВОМ НАБОРЕ (165 живых русских записей, 11.08.2026):
+    точность 95.8 % · законченные 0.946 · оборванные 0.087
+    решение 48 мс, память процесса 110 МБ
+
+⚠️ ДВЕ ЛОВУШКИ, НА КОТОРЫХ Я СПОТКНУЛСЯ — НЕ ПОВТОРЯТЬ:
+1. Речь должна КОНЧАТЬСЯ на восьмой секунде: короткий кусок добиваем
+   тишиной СЛЕВА. Если добить справа, модель выдаёт ~0.98 на что угодно,
+   даже на чистую тишину, и выглядит это как «работает».
+2. Проверять судью СИНТЕЗОМ нельзя. Edge читает обрезанную фразу с
+   законченной интонацией, и судья честно говорит «мысль закрыта».
+   Проверять только на живой речи.
+
+Зависимости: numpy и onnxruntime. Больше ничего — мел-банк считается
+формулой, поэтому лишних файлов возить не надо.
+"""
+
+import os
+import numpy as np
+
+try:
+    import onnxruntime as ort
+except Exception:                      # библиотеки нет — судья просто выключен
+    ort = None
+
+_ЧАСТОТА = 16000
+_ОКНО_СЕК = 8
+_N = _ЧАСТОТА * _ОКНО_СЕК
+_N_FFT, _ШАГ, _МЕЛ = 400, 160, 80
+
+_МОДЕЛЬ = os.getenv("TURN_MODEL_PATH", os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "smart-turn-v3.2-cpu.onnx"))
+
+
+def _мел_банк(sr=_ЧАСТОТА, n_fft=_N_FFT, n_mel=_МЕЛ) -> np.ndarray:
+    """Треугольные мел-фильтры как у Whisper (slaney). Сверено с библиотекой
+    transformers: расхождение ровно ноль, поэтому таскать .npy не нужно."""
+    def в_мел(f):
+        f = np.asarray(f, dtype=np.float64)
+        m = 3.0 * f / 200.0
+        лог = f >= 1000.0
+        m[лог] = 15.0 + np.log(f[лог] / 1000.0) / (np.log(6.4) / 27.0)
+        return m
+
+    def в_гц(m):
+        m = np.asarray(m, dtype=np.float64)
+        f = 200.0 * m / 3.0
+        лог = m >= 15.0
+        f[лог] = 1000.0 * np.exp((np.log(6.4) / 27.0) * (m[лог] - 15.0))
+        return f
+
+    точки = в_гц(np.linspace(в_мел(np.array([0.0]))[0],
+                             в_мел(np.array([sr / 2.0]))[0], n_mel + 2))
+    частоты = np.fft.rfftfreq(n_fft, 1.0 / sr)
+    б = np.zeros((len(частоты), n_mel), dtype=np.float64)
+    for i in range(n_mel):
+        л, ц, п = точки[i], точки[i + 1], точки[i + 2]
+        б[:, i] = np.maximum(0.0, np.minimum((частоты - л) / (ц - л),
+                                             (п - частоты) / (п - ц)))
+    б *= 2.0 / (точки[2:n_mel + 2] - точки[:n_mel])
+    return б.astype(np.float32)
+
+
+_БАНК = _мел_банк()
+_ОКНО_ХАННА = np.hanning(_N_FFT + 1)[:_N_FFT].astype(np.float32)
+
+_сессия = None
+_ошибка = ""
+
+
+def доступен() -> bool:
+    """Судья загружен и готов отвечать."""
+    return _сессия is not None
+
+
+def почему_нет() -> str:
+    return _ошибка
+
+
+def загрузить() -> bool:
+    """Поднять модель. Зовётся один раз при старте сервера."""
+    global _сессия, _ошибка
+    if _сессия is not None:
+        return True
+    if ort is None:
+        _ошибка = "нет библиотеки onnxruntime"
+        return False
+    if not os.path.exists(_МОДЕЛЬ):
+        _ошибка = f"нет файла модели: {_МОДЕЛЬ}"
+        return False
+    try:
+        нас = ort.SessionOptions()
+        нас.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        нас.inter_op_num_threads = 1
+        нас.intra_op_num_threads = 1
+        нас.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        _сессия = ort.InferenceSession(_МОДЕЛЬ, sess_options=нас,
+                                       providers=["CPUExecutionProvider"])
+        return True
+    except Exception as e:
+        _ошибка = str(e)
+        _сессия = None
+        return False
+
+
+def _признаки(волна: np.ndarray) -> np.ndarray:
+    """Логарифмический мел-спектр 80×800, как у Whisper."""
+    a = np.asarray(волна, dtype=np.float32)
+    a = (a - a.mean()) / np.sqrt(a.var() + 1e-7)          # нормировка волны
+    a = np.pad(a, (_N_FFT // 2, _N_FFT // 2), mode="reflect")   # центрирование
+    кадров = 1 + (len(a) - _N_FFT) // _ШАГ
+    окна = np.lib.stride_tricks.as_strided(
+        a, shape=(кадров, _N_FFT),
+        strides=(a.strides[0] * _ШАГ, a.strides[0])).copy() * _ОКНО_ХАННА
+    спектр = np.fft.rfft(окна, n=_N_FFT, axis=1)
+    мощность = (спектр.real ** 2 + спектр.imag ** 2).astype(np.float32)[:-1]
+    лог = np.log10(np.maximum(мощность @ _БАНК, 1e-10))
+    лог = np.maximum(лог, лог.max() - 8.0)
+    return ((лог + 4.0) / 4.0).T[None, ...].astype(np.float32)
+
+
+def договорил(pcm: bytes) -> float:
+    """Сырой звук реплики (16 бит, 16 кГц, моно) → вероятность 0..1.
+
+    Ближе к единице — мысль закончена, можно отвечать.
+    Ближе к нулю — человек ещё говорит, надо ждать.
+    Возвращает 1.0, если судья недоступен: тогда всё работает как раньше.
+    """
+    if _сессия is None or not pcm:
+        return 1.0
+    волна = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
+    if len(волна) < _ЧАСТОТА // 2:        # короче полсекунды — судить не о чем
+        return 1.0
+    волна = волна[-_N:] if len(волна) > _N else np.pad(волна, (_N - len(волна), 0))
+    return float(_сессия.run(None, {"input_features": _признаки(волна)})[0][0].item())

@@ -43,6 +43,13 @@ from fastapi.responses import JSONResponse, Response
 import aiohttp
 import edge_tts
 
+# 🧠 Судья конца реплики (отдельный модуль turn_judge.py рядом).
+# Если его нет или библиотека не встала — движок работает как раньше.
+try:
+    import turn_judge as _судья_модуль
+except Exception as _e:
+    _судья_модуль = None
+
 # связь с Deepgram идёт по websockets; если библиотеки нет — голос
 # просто не поднимется, но остальной движок работать не перестанет
 try:
@@ -130,6 +137,19 @@ class Config:
     TTS_PITCH_EN: str = "-15Hz"
     TTS_VOLUME_EN: str = "+15%"
     
+    # 🧠 СУДЬЯ КОНЦА РЕПЛИКИ.
+    # ⚠️ ПРИЧИНА, ПО КОТОРОЙ ОН ВООБЩЕ ПОЯВИЛСЯ (11.08.2026): секундомер
+    # тишины эту задачу решить НЕ МОЖЕТ. Пауза на раздумье посреди мысли и
+    # пауза в конце фразы по длине одинаковы — замерено по дневнику: у него
+    # между кусками одной мысли бывало 2, 4 и 6 секунд, и столько же он
+    # молчал, договорив. Любое число будет угадывать. Судья слушает
+    # интонацию и заминки, а не длину тишины.
+    # Порог: ниже него считаем, что человек ещё говорит, и ждём.
+    # Замер на 165 живых русских записях: законченные 0.95, оборванные 0.09 —
+    # между ними пропасть, поэтому 0.5 стоит ровно посередине и с запасом.
+    TURN_JUDGE: bool = os.getenv("USE_TURN_JUDGE", "0") == "1"
+    TURN_THRESHOLD: float = float(os.getenv("TURN_THRESHOLD", "0.5"))
+
     # Greeting - cached at startup for instant response
     GREETING_TEXT: str = "Приветствую тебя путник! Я Квантареон, голосовой помощник этого сайта. Спрашивай, что тебя интересует."
     GREETING_TEXT_EN: str = "Greetings, traveler! I am Quantareon, the voice assistant of this site. Ask me anything you like."
@@ -2238,9 +2258,28 @@ CACHED_GREETING_AUDIO: bytes = b""
 CACHED_GREETING_AUDIO_EN: bytes = b""
 
 
+async def поднять_судью():
+    """Загрузить модель судьи один раз при старте сервера."""
+    if not config.TURN_JUDGE:
+        logger.info("🧠 Судья конца реплики выключен (USE_TURN_JUDGE=0)")
+        return
+    if _судья_модуль is None:
+        logger.warning("🧠 Судья: модуль turn_judge.py не найден — работаю по-старому")
+        return
+    if _судья_модуль.загрузить():
+        logger.info(f"🧠 Судья конца реплики поднят, порог {config.TURN_THRESHOLD}")
+    else:
+        logger.warning(f"🧠 Судья не поднялся ({_судья_модуль.почему_нет()}) — работаю по-старому")
+
+
 async def warm_greetings():
     """Озвучить приветствия заранее. Зовётся при старте приложения."""
     global CACHED_GREETING_AUDIO, CACHED_GREETING_AUDIO_EN
+    # 🧠 заодно поднимаем судью конца реплики — чтобы api/main.py не трогать
+    try:
+        await поднять_судью()
+    except Exception as e:
+        logger.warning(f"🧠 Судья не поднялся: {e}")
     # заодно прогреваем знания о сайте, чтобы первый вопрос не ждал диска
     if site_knowledge is not None:
         try:
@@ -2410,10 +2449,18 @@ async def voice_health():
         "stt": "Deepgram Nova-3",
         "tts_ru": f"{config.TTS_VOICE} @ {config.TTS_RATE}",
         "tts_en": f"{config.TTS_VOICE_EN} @ {config.TTS_RATE_EN}",
+        "судья": ("выкл" if not config.TURN_JUDGE else
+                  (f"работает, порог {config.TURN_THRESHOLD}"
+                   if (_судья_модуль is not None and _судья_модуль.доступен())
+                   else f"НЕ ПОДНЯЛСЯ: {_судья_модуль.почему_нет() if _судья_модуль else 'нет модуля'}")),
         "greeting_ru_bytes": len(CACHED_GREETING_AUDIO),
         "greeting_en_bytes": len(CACHED_GREETING_AUDIO_EN),
     }
 
+
+
+# 8 секунд звука 16 бит / 16 кГц — ровно столько слушает судья
+_РЕЧЬ_ПОТОЛОК = 8 * 16000 * 2
 
 
 class VoiceSessionTurbo:
@@ -2443,6 +2490,7 @@ class VoiceSessionTurbo:
         self._processing_since = 0     # когда началась обработка (для сторожа)
         self._flush_task = None        # 🛟 задача автообработки
         self._browser_speech_at = 0.0  # 🛡 когда браузер подтвердил живую речь
+        self._речь = bytearray()       # 🧠 сырой звук текущей реплики — для судьи
         self.is_speaking = False
         self.barge_in_requested = False
         self.first_message = True
@@ -2597,6 +2645,14 @@ class VoiceSessionTurbo:
     
     async def handle_audio(self, audio_data: bytes):
         """Forward audio to STT."""
+        # 🧠 Заодно копим сырой звук текущей реплики для судьи.
+        # Держим последние 8 секунд — столько он и слушает.
+        # Звук помощника сюда не попадает: браузер не шлёт его вовсе,
+        # пока помощник говорит (см. isBotSpeaking в quantareon-voice.js).
+        if config.TURN_JUDGE and audio_data:
+            self._речь.extend(audio_data)
+            if len(self._речь) > _РЕЧЬ_ПОТОЛОК:
+                del self._речь[:len(self._речь) - _РЕЧЬ_ПОТОЛОК]
         if self.stt and self.stt.is_connected:
             await self.stt.send_audio(audio_data)
     
@@ -2710,6 +2766,33 @@ class VoiceSessionTurbo:
         
         self.barge_in_requested = False
 
+        # 🧠 СПРАШИВАЕМ СУДЬЮ: договорил ли человек.
+        # Схема как в индустрии: короткий сигнал браузера будит судью, а решает
+        # судья. Сказал «ещё говорит» — молчим и копим дальше; человек
+        # продолжит, и следующий сигнал спросит судью заново уже на ВСЕЙ
+        # реплике, а не на новом кусочке (модели нужен весь контекст).
+        # 🛟 Предохранитель уже стоит и трогать его не надо: если человек
+        # замолчал совсем, через 2.8 секунды сработает автообработка
+        # (_schedule_autoflush) с from_browser=False — там судья не
+        # спрашивается, и ответ уходит в любом случае. Зависнуть нельзя.
+        # ⚠️ Считает судья 45 мс, но в потоке событий это всё равно пауза,
+        # поэтому уводим в отдельный поток.
+        if (from_browser and config.TURN_JUDGE and _судья_модуль is not None
+                and _судья_модуль.доступен() and self.transcript_buffer.strip()):
+            try:
+                вероятность = await asyncio.to_thread(
+                    _судья_модуль.договорил, bytes(self._речь))
+            except Exception as e:
+                logger.warning(f"[{self.session_id}] судья не ответил: {e}")
+                вероятность = 1.0
+            if вероятность < config.TURN_THRESHOLD:
+                logger.info(f"[{self.session_id}] 🧠 судья: ещё говорит ({вероятность:.2f}) — жду")
+                note(self.session_id, "СУДЬЯ: ещё говорит",
+                     f"{вероятность:.2f} · {self.transcript_buffer[-60:]}")
+                return
+            logger.info(f"[{self.session_id}] 🧠 судья: договорил ({вероятность:.2f})")
+            note(self.session_id, "СУДЬЯ: договорил", f"{вероятность:.2f}")
+
         # 🫱 КОРОТКАЯ ПЕРЕДЫШКА ПЕРЕД ОБРАБОТКОЙ.
         # Детектор в браузере объявляет «договорил» уже через полсекунды
         # тишины — это его число, оно даёт реалтайм. Но живая речь с паузой
@@ -2740,6 +2823,7 @@ class VoiceSessionTurbo:
 
         transcript = self.transcript_buffer.strip()
         self.transcript_buffer = ""
+        self._речь.clear()          # 🧠 реплика забрана — копим следующую с нуля
         
         if not transcript:
             note(self.session_id, "ПУСТО — нечего обрабатывать", "браузер сказал «договорил», а текста нет")
