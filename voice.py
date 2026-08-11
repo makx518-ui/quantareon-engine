@@ -149,6 +149,12 @@ class Config:
     # между ними пропасть, поэтому 0.5 стоит ровно посередине и с запасом.
     TURN_JUDGE: bool = os.getenv("USE_TURN_JUDGE", "0") == "1"
     TURN_THRESHOLD: float = float(os.getenv("TURN_THRESHOLD", "0.5"))
+    # Сколько всего можно продержать человека, пока судья говорит «ещё говорит».
+    # ⚠️ Без этого предела он мог бы ждать вечно: если человек замолчал на
+    # полуслове и больше не вернулся, судья так и будет отвечать «жди».
+    TURN_MAX_WAIT: float = float(os.getenv("TURN_MAX_WAIT", "3.0"))
+    # Как часто переспрашивать судью, пока ждём продолжения
+    TURN_RECHECK: float = float(os.getenv("TURN_RECHECK", "0.8"))
 
     # Greeting - cached at startup for instant response
     GREETING_TEXT: str = "Приветствую тебя путник! Я Квантареон, голосовой помощник этого сайта. Спрашивай, что тебя интересует."
@@ -2491,6 +2497,7 @@ class VoiceSessionTurbo:
         self._flush_task = None        # 🛟 задача автообработки
         self._browser_speech_at = 0.0  # 🛡 когда браузер подтвердил живую речь
         self._речь = bytearray()       # 🧠 сырой звук текущей реплики — для судьи
+        self._ждём_с = 0.0             # 🧠 когда судья впервые сказал «ещё говорит»
         self.is_speaking = False
         self.barge_in_requested = False
         self.first_message = True
@@ -2656,7 +2663,7 @@ class VoiceSessionTurbo:
         if self.stt and self.stt.is_connected:
             await self.stt.send_audio(audio_data)
     
-    def _schedule_autoflush(self):
+    def _schedule_autoflush(self, через: float = 2.8):
         """🛟 СТРАХОВКА: если браузер не пришлёт «я договорил» (детектор речи
         иногда не срабатывает на коротких фразах), сами обработаем накопленное
         через полторы секунды тишины. Иначе реплика пропадает молча."""
@@ -2668,7 +2675,7 @@ class VoiceSessionTurbo:
 
         async def _later():
             try:
-                await asyncio.sleep(2.8)   # ждём дольше: вдруг человек ещё говорит
+                await asyncio.sleep(через)
                 if self.transcript_buffer.strip() and not self.is_processing:
                     logger.info(f"[{self.session_id}] 🛟 Браузер молчит — обрабатываю сам")
                     await self.on_speech_end()
@@ -2767,17 +2774,21 @@ class VoiceSessionTurbo:
         self.barge_in_requested = False
 
         # 🧠 СПРАШИВАЕМ СУДЬЮ: договорил ли человек.
-        # Схема как в индустрии: короткий сигнал браузера будит судью, а решает
-        # судья. Сказал «ещё говорит» — молчим и копим дальше; человек
-        # продолжит, и следующий сигнал спросит судью заново уже на ВСЕЙ
-        # реплике, а не на новом кусочке (модели нужен весь контекст).
-        # 🛟 Предохранитель уже стоит и трогать его не надо: если человек
-        # замолчал совсем, через 2.8 секунды сработает автообработка
-        # (_schedule_autoflush) с from_browser=False — там судья не
-        # спрашивается, и ответ уходит в любом случае. Зависнуть нельзя.
-        # ⚠️ Считает судья 45 мс, но в потоке событий это всё равно пауза,
-        # поэтому уводим в отдельный поток.
-        if (from_browser and config.TURN_JUDGE and _судья_модуль is not None
+        # ⚠️ УРОК 11.08, СТОИВШИЙ ОТДЕЛЬНОГО ЗАХОДА. Сначала я спрашивал судью
+        # ТОЛЬКО по сигналу браузера, а страховку (_schedule_autoflush, 2.8 с)
+        # оставил в стороне — «пусть будет путь, который не может зависнуть».
+        # И резать стала именно она: человек ещё говорит, браузер молчит,
+        # потому что речь не кончилась, а страховка отсчитала своё и отдала
+        # половину фразы. В дневнике это видно как «обрабатываю» РОВНО через
+        # три секунды после «услышал» и БЕЗ строки судьи.
+        # Теперь судью спрашиваем на ОБОИХ путях, без исключений.
+        #
+        # Чтобы при этом нельзя было зависнуть навсегда (человек замолчал на
+        # полуслове и не вернулся — судья будет твердить «жди»), считаем время
+        # от первого «жди». Пока оно меньше TURN_MAX_WAIT — ждём и
+        # переспрашиваем каждые TURN_RECHECK секунд. Вышло за предел —
+        # отвечаем тем, что есть.
+        if (config.TURN_JUDGE and _судья_модуль is not None
                 and _судья_модуль.доступен() and self.transcript_buffer.strip()):
             try:
                 вероятность = await asyncio.to_thread(
@@ -2785,13 +2796,32 @@ class VoiceSessionTurbo:
             except Exception as e:
                 logger.warning(f"[{self.session_id}] судья не ответил: {e}")
                 вероятность = 1.0
+
             if вероятность < config.TURN_THRESHOLD:
-                logger.info(f"[{self.session_id}] 🧠 судья: ещё говорит ({вероятность:.2f}) — жду")
-                note(self.session_id, "СУДЬЯ: ещё говорит",
-                     f"{вероятность:.2f} · {self.transcript_buffer[-60:]}")
-                return
-            logger.info(f"[{self.session_id}] 🧠 судья: договорил ({вероятность:.2f})")
-            note(self.session_id, "СУДЬЯ: договорил", f"{вероятность:.2f}")
+                if not self._ждём_с:
+                    self._ждём_с = time.time()
+                ждём_уже = time.time() - self._ждём_с
+                if ждём_уже < config.TURN_MAX_WAIT:
+                    logger.info(f"[{self.session_id}] 🧠 судья: ещё говорит "
+                                f"({вероятность:.2f}), жду {ждём_уже:.1f}с")
+                    note(self.session_id, "СУДЬЯ: ещё говорит",
+                         f"{вероятность:.2f} · жду {ждём_уже:.1f}с · "
+                         f"{self.transcript_buffer[-50:]}")
+                    # переспросим сами — иначе, если человек молчит, никто
+                    # больше не постучится и реплика повиснет
+                    self._schedule_autoflush(config.TURN_RECHECK)
+                    return
+                logger.info(f"[{self.session_id}] 🧠 судья всё ещё «жди» "
+                            f"({вероятность:.2f}), но предел {config.TURN_MAX_WAIT}с — отвечаю")
+                note(self.session_id, "СУДЬЯ: предел ожидания",
+                     f"{вероятность:.2f} · ждал {ждём_уже:.1f}с")
+            else:
+                if self._ждём_с:
+                    logger.info(f"[{self.session_id}] 🧠 судья: договорил "
+                                f"({вероятность:.2f}) после ожидания "
+                                f"{time.time()-self._ждём_с:.1f}с")
+                note(self.session_id, "СУДЬЯ: договорил", f"{вероятность:.2f}")
+                self._ждём_с = 0.0
 
         # 🫱 КОРОТКАЯ ПЕРЕДЫШКА ПЕРЕД ОБРАБОТКОЙ.
         # Детектор в браузере объявляет «договорил» уже через полсекунды
@@ -2824,6 +2854,7 @@ class VoiceSessionTurbo:
         transcript = self.transcript_buffer.strip()
         self.transcript_buffer = ""
         self._речь.clear()          # 🧠 реплика забрана — копим следующую с нуля
+        self._ждём_с = 0.0
         
         if not transcript:
             note(self.session_id, "ПУСТО — нечего обрабатывать", "браузер сказал «договорил», а текста нет")
