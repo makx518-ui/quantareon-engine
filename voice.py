@@ -2185,7 +2185,11 @@ class EdgeTTSTurbo:
         if not text or not text.strip():
             return
         
-        # 🛡️ RETRY до 3 попыток
+        # 🛡️ RETRY до 3 попыток — ТОЛЬКО ДЛЯ СИНТЕЗА.
+        # Отправку готового звука повторами не лечат: если она упала, значит
+        # соединение с браузером закрылось или нас перебили — синтезировать
+        # заново бессмысленно, слать некому. (12.08 на живом сбое движок
+        # пересинтезировал кусок и трижды долбил закрытую дверь.)
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -2203,11 +2207,6 @@ class EdgeTTSTurbo:
                 async for chunk in communicate.stream():
                     if chunk["type"] == "audio":
                         audio_buffer.write(chunk["data"])
-                
-                # Отправляем целиком — без разрывов = без щелчков
-                if audio_buffer.tell() > 0:
-                    await send_callback(audio_buffer.getvalue())
-                    return  # ✅ Успех - выходим
                     
             except asyncio.TimeoutError:
                 if attempt < max_retries - 1:
@@ -2215,6 +2214,7 @@ class EdgeTTSTurbo:
                     await asyncio.sleep(0.5)  # Пауза перед повтором
                     continue
                 logger.error(f"❌ TTS failed after {max_retries} attempts (timeout)")
+                return
                 
             except Exception as e:
                 if attempt < max_retries - 1:
@@ -2222,6 +2222,17 @@ class EdgeTTSTurbo:
                     await asyncio.sleep(0.5)
                     continue
                 logger.error(f"❌ TTS failed after {max_retries} attempts: {e}")
+                return
+
+            # Синтез удался. Пустой звук — тоже беда Edge, идём на новую
+            # попытку (как и раньше). Непустой отправляем ОДИН раз и выходим:
+            # без разрывов = без щелчков, а сбой отправки не повторяем.
+            if audio_buffer.tell() > 0:
+                try:
+                    await send_callback(audio_buffer.getvalue())
+                except Exception as e:
+                    logger.warning(f"⚠️ TTS: звук готов, но отправить не вышло (соединение закрыто или перебили): {e}")
+                return  # ✅ синтез своё дело сделал — повторов не будет
 
 
 # ============================================================
@@ -3172,7 +3183,8 @@ class VoiceSessionTurbo:
 
             # страховка: ответ кончился, а значок мог не погаснуть
             asyncio.create_task(_снять_значок())
-            await self._send_json({"type": "audio_end"})
+            # (audio_end теперь шлётся в finally — уходит ВСЕГДА, даже если
+            #  конвейер упал; при мёртвом соединении _send_json сам промолчит)
             
             total = time.time() - start_time
             first_latency = (first_audio_time - start_time) if first_audio_time else total
@@ -3206,6 +3218,13 @@ class VoiceSessionTurbo:
                 pass
             await self._send_json({"type": "error", "message": str(e)})
         finally:
+            # 🛡 audio_end уходит ВСЕГДА — и при ошибке конвейера тоже. Иначе
+            # окно не узнаёт, что ответ кончился: держит isBotSpeaking и (в
+            # старых версиях сайта) вечно копит текст ответа.
+            try:
+                await self._send_json({"type": "audio_end"})
+            except Exception:
+                pass
             _сердце_стоп.set()
             if not _сердце.done():
                 _сердце.cancel()
