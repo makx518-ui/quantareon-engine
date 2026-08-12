@@ -2901,6 +2901,14 @@ class VoiceSessionTurbo:
         self._взяли_в_работу = time.time()
         self._номер_реплики = getattr(self, "_номер_реплики", 0) + 1
         мой_номер = self._номер_реплики
+
+        # 🔑 АКТУАЛЬНОСТЬ. Конвейеры теперь живут в фоновых задачах, и при
+        # склейке/обрыве старый может ещё дорабатывать, когда решение уже
+        # запустило новый. Старый узнаёт себя по номеру и замолкает НАВСЕГДА:
+        # не шлёт ни звук, ни текст, ни audio_end, не трогает флаги — всё это
+        # делает преемник. Иначе снятый флаг перебивания «воскрешал» бы его.
+        def _я_актуален():
+            return мой_номер == getattr(self, "_номер_реплики", мой_номер)
         self._передаём_ход = False   # 🧩 ход принят, щель закрылась
 
         note(self.session_id, "обрабатываю", transcript)
@@ -3037,7 +3045,7 @@ class VoiceSessionTurbo:
                 except asyncio.TimeoutError:
                     logger.warning(f"[{self.session_id}] присказка не готова — отвечаю сразу")
                 
-                if self.cached_filler_audio and not self.barge_in_requested:
+                if self.cached_filler_audio and not self.barge_in_requested and _я_актуален():
                     first_audio_time = time.time()
                     latency = first_audio_time - start_time
                     logger.info(f"[{self.session_id}] ⚡ INSTANT Filler: {latency:.3f}s ({len(self.cached_filler_audio)} bytes)")
@@ -3069,8 +3077,9 @@ class VoiceSessionTurbo:
                     transcript, self.memory_cache, web_ctx,
                     на_поиск=_зажечь_значок,
                     lang=getattr(self, "lang", "ru")):
-                if not self.is_active or self.barge_in_requested:
-                    self.barge_in_requested = False
+                if not self.is_active or self.barge_in_requested or not _я_актуален():
+                    if _я_актуален():
+                        self.barge_in_requested = False
                     оборвали = True
                     break
                 
@@ -3138,11 +3147,11 @@ class VoiceSessionTurbo:
                         latency = first_audio_time - start_time
                         logger.info(f"[{self.session_id}] ⚡ First audio: {latency:.2f}s")
                     
-                    if not self.barge_in_requested:
+                    if not self.barge_in_requested and _я_актуален():
                         await self.websocket.send_bytes(audio_bytes)
                 
                 # ⚡ СНАЧАЛА текст на экран (мгновенно, не ждёт озвучку)
-                if not self.barge_in_requested:
+                if not self.barge_in_requested and _я_актуален():
                     сказано.append(text_chunk)
                     await self._send_json({
                         "type": "response_text",
@@ -3158,7 +3167,7 @@ class VoiceSessionTurbo:
                 logger.warning(f"[{self.session_id}] 🚨 ЯЗЫК: весь ответ вычищен, отдаю запасную фразу")
 
                 async def send_audio_fallback(audio_bytes):
-                    if not self.barge_in_requested:
+                    if not self.barge_in_requested and _я_актуален():
                         await self.websocket.send_bytes(audio_bytes)
 
                 сказано.append(запасная)
@@ -3171,7 +3180,11 @@ class VoiceSessionTurbo:
             # 📌 ОБОРВАЛИ — сохраняем недоговорённое, чтобы можно было продолжить.
             # Обычный путь пишет ответ в память только после последнего куска,
             # а при обрыве до него дело не доходит — вот и провал.
-            if оборвали and сказано:
+            # 🧩 огрызок, который СКЛЕИЛИ с продолжением, в память не пишем:
+            # преемник запишет честную пару «целый вопрос → целый ответ».
+            # (Флаг _склейка_для заведён ещё первой склейкой, но проверка
+            # была недописана — при последовательной работе это не стреляло.)
+            if оборвали and сказано and мой_номер != getattr(self, "_склейка_для", -1):
                 кусок = " ".join(сказано).strip()
                 if кусок:
                     self.llm.history.append({"role": "user", "content": transcript})
@@ -3218,21 +3231,23 @@ class VoiceSessionTurbo:
                 pass
             await self._send_json({"type": "error", "message": str(e)})
         finally:
-            # 🛡 audio_end уходит ВСЕГДА — и при ошибке конвейера тоже. Иначе
-            # окно не узнаёт, что ответ кончился: держит isBotSpeaking и (в
-            # старых версиях сайта) вечно копит текст ответа.
-            try:
-                await self._send_json({"type": "audio_end"})
-            except Exception:
-                pass
             _сердце_стоп.set()
             if not _сердце.done():
                 _сердце.cancel()
             note(self.session_id, "ответ завершён", "")
-            self._ответ_кончился = time.time()   # 🧩 для склейки
-            self.is_processing = False
-            self.is_speaking = False
-            self._processing_since = 0
+            if _я_актуален():
+                # 🛡 audio_end уходит ВСЕГДА (у актуального ответа) — и при
+                # ошибке конвейера тоже: иначе окно не узнаёт, что ответ
+                # кончился. Устаревший конвейер молчит: сигнал конца и флаги —
+                # забота его преемника.
+                try:
+                    await self._send_json({"type": "audio_end"})
+                except Exception:
+                    pass
+                self._ответ_кончился = time.time()   # 🧩 для склейки
+                self.is_processing = False
+                self.is_speaking = False
+                self._processing_since = 0
     
     async def _refresh_memory_cache(self):
         """🧠 Обновление глубокой памяти отключено на голосе (только сессионная история)."""
@@ -3533,13 +3548,21 @@ async def websocket_voice(websocket: WebSocket):
                             elif cmd == "speech_end":
                                 # при Flux этот сигнал игнорируется внутри —
                                 # решение принимает сама модель
-                                await session.on_speech_end(from_browser=True)
+                                # 🔓 ФОНОВАЯ ЗАДАЧА, а не await: конвейер ответа
+                                # длится десятки секунд, и пока он шёл прямо здесь,
+                                # цикл приёма не читал сокет — понги браузера лежали
+                                # непрочитанными (разрыв 1011 на длинных ответах),
+                                # а голос человека застревал в буфере и доезжал до
+                                # Deepgram только ПОСЛЕ ответа (вторая, серверная
+                                # заслонка микрофона). Найдено замером 12.08:
+                                # «on_speech_end ВИС 31с» = «ДЫРА В ПРИЁМЕ 31.6с».
+                                asyncio.create_task(session.on_speech_end(from_browser=True))
                             
                             elif cmd == "transcript":
                                 text = data.get("text", "")
                                 if text:
                                     session.transcript_buffer = text
-                                    await session.on_speech_end()
+                                    asyncio.create_task(session.on_speech_end())
                             
                             elif cmd in ("barge_in", "stop"):
                                 # 🛡 СТОРОЖ: браузер подтвердил ЖИВУЮ речь.
