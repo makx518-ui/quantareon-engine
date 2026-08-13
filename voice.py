@@ -643,6 +643,20 @@ def _apply_udar(text: str) -> str:
     return t
 
 
+def _чистка_разметки(text: str) -> str:
+    """Разметка (** ## ` ---) в голосовом канале — мусор: окно её не рисует,
+    а голос спотыкается. Модель срывается на неё в длинных чтениях (его
+    транскрипт 13.08: «--- ### **Сознательная подготовка**»). Чистим ОДИН раз
+    в общей точке — до окна, до озвучки, до памяти."""
+    t = text or ""
+    t = re.sub(r"\*{1,3}", "", t)                       # **жирный*, *курсив*
+    t = re.sub(r"#{1,6}\s*", "", t)                     # ### заголовки
+    t = re.sub(r"`+", "", t)                             # `код`
+    t = re.sub(r"(?:^|\s)[-—]{3,}(?=\s|$)", " ", t)    # --- разделители
+    t = re.sub(r"\s{2,}", " ", t).strip()
+    return t
+
+
 def _tts_clean(text: str, language: str = "ru") -> str:
     """Готовим текст к озвучке: убираем то, что голос прочитал бы как мусор."""
     t = text or ""
@@ -1818,15 +1832,21 @@ class GroqLLM:
         if site_knowledge is not None:
             try:
                 deep = len(getattr(self, "history", [])) >= 4   # разговор пошёл вглубь
+                # 🔖 липкая ЧАСТЬ эссе: раз назвал — держим, пока разговор о книге
+                _наз_часть = site_knowledge.detect_essay_part(user_input)
+                _липкая_часть = _наз_часть or getattr(self, "_last_essay_part", None)
                 block, topic = site_knowledge.build_knowledge_block(
                     user_input,
                     sticky_topic=getattr(self, "_last_topic", None),
                     deep=deep,
                     lang=getattr(self, "lang", "ru"),   # знания на языке страницы
+                    sticky_part=_липкая_часть,
                 )
                 if block:
                     system += "\n\n════ ЧТО ТЫ ЗНАЕШЬ О САЙТЕ ════\n" + block
                 self._last_topic = topic
+                # часть живёт, пока тема — эссе; свернули разговор — забываем
+                self._last_essay_part = _липкая_часть if topic == "esse" else None
             except Exception as e:
                 logger.warning(f"VOICE: знания не подмешались: {e}")
         # 🌐 Английская версия сайта: характер описан по-русски, и память тянет
@@ -3203,6 +3223,10 @@ class VoiceSessionTurbo:
                     logger.info(f"[{self.session_id}] 🛡️ Filtered cross-chunk duplicate: '{text_chunk[:30]}'")
                     continue
                 
+                text_chunk = _чистка_разметки(text_chunk)
+                if not text_chunk:
+                    continue
+
                 chunk_count += 1
                 logger.info(f"[{self.session_id}] 💬 [{chunk_count}] '{text_chunk[:40]}...'")
                 
