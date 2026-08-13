@@ -325,8 +325,8 @@ gt.textContent=cd+'\u00b0'+String(cm).padStart(2,'0')+'\u2032';g.appendChild(gt)
 var БУКВЫ={0:'As',9:'Mc',6:'Ds',3:'Ic'};
 if(БУКВЫ[h]!==undefined){var bp=degToScreen(cusps[h],248);
 var bt=document.createElementNS(NS,'text');bt.setAttribute('x',bp[0].toFixed(1));bt.setAttribute('y',bp[1].toFixed(1));
-bt.setAttribute('fill',RED);bt.setAttribute('font-size','20');bt.setAttribute('font-weight','700');
-bt.setAttribute('stroke','#0a0c16');bt.setAttribute('stroke-width','4');bt.setAttribute('paint-order','stroke');
+bt.setAttribute('fill',RED);bt.setAttribute('font-size','18');bt.setAttribute('font-weight','600');
+bt.setAttribute('stroke','#0a0c16');bt.setAttribute('stroke-width','2.5');bt.setAttribute('paint-order','stroke');
 bt.setAttribute('text-anchor','middle');bt.setAttribute('dominant-baseline','middle');
 bt.textContent=БУКВЫ[h];g.appendChild(bt);}
 var mid=cusps[h]+(((cusps[(h+1)%12]-cusps[h])+360)%360)/2;var np=degToScreen(mid,178);
@@ -385,11 +385,11 @@ window.onload=function(){
 </script>
 <div id="qver" style="position:fixed;right:6px;bottom:6px;z-index:99999;
   font:10px/1 monospace;color:#50c050;background:rgba(0,0,0,.7);padding:3px 6px;
-  border-radius:3px;pointer-events:none">v5 · QAPI</div>
+  border-radius:3px;pointer-events:none">v6 · QAPI</div>
 <script>
 (function(){
   var d=document.getElementById('qver');
-  if(d) d.textContent='v5 · '+(typeof QAPI!=='undefined'?QAPI.replace(/^https?:\/\//,''):'QAPI НЕТ!');
+  if(d) d.textContent='v6 · '+(typeof QAPI!=='undefined'?QAPI.replace(/^https?:\/\//,''):'QAPI НЕТ!');
 })();
 </script>
 </body>
