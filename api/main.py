@@ -972,14 +972,22 @@ async def current_transit(
             "ASC": round(angles[0], 6),
             "MC": round(angles[1], 6),
         }
+        # 12 куспидов уже посчитаны Швейцарскими эфемеридами —
+        # раньше выбрасывались, теперь едут на карту (живые дома)
+        cusps_out = [round(c, 6) for c in cusps[:12]]
+        house_system = "P" if _hs == b"P" else "R"
     except Exception:
         asc_mc = {"ASC": 0, "MC": 0}
+        cusps_out = []
+        house_system = ""
 
     return {
         "timestamp": now.isoformat(),
         "jd": jd,
         "planets": planets,
         "angles": asc_mc,
+        "cusps": cusps_out,
+        "house_system": house_system,
         "coordinates": {
             "latitude": latitude,
             "longitude": longitude,
