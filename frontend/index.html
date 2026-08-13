@@ -375,6 +375,17 @@ var de=null,dx=0,dy=0;function sd(e,id){de=document.getElementById(id);dx=e.clie
 function colE(t){if(!t)return'—';return t.replace(/Свет:/g,'<span style="color:#f0c040;font-weight:600">Свет:</span>').replace(/Тень:/g,'<span style="color:#a04040;font-weight:600">Тень:</span>')}
 async function openCW(deg,nm){try{var r=await fetch(QAPI+'/cascade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({abs_degree:deg,levels:4,include_descriptions:true})});var d=await r.json(),h='';if(d.base){h+='<div style="color:#a0a8c0;margin-bottom:6px"><b>'+d.base.position.sign_symbol+' '+(d.base.position.degree_int+1)+'° '+d.base.position.sign_name+'</b></div>';if(d.base.description)h+='<div style="color:#8890b0;font-size:11px;margin-bottom:6px">'+d.base.description.image+'</div>'}if(d.levels){h+='<table><tr><th>Ур.</th><th></th><th>Знак</th><th>°</th><th>Образ</th></tr>';for(var l of d.levels){var c=l.calculation,dd=l.description,al=c.sign_index*30+c.degree_int;h+='<tr><td style="color:#5060a0">'+c.level+'</td><td>'+c.sign_symbol+'</td><td>'+c.sign_name+'</td><td style="color:#a0a8c0">'+(c.degree_int+1)+'°</td><td style="color:#6080a0;font-size:10px;cursor:pointer;text-decoration:underline dotted" onclick="openDW('+al+',\''+nm+' ур.'+c.level+'\')">'+(dd?dd.image.substring(0,45)+'...':'—')+'</td></tr>'}h+='</table>'}openFW(nm+' — Фрактал',h)}catch(e){openFW(nm,'<div class="err">'+e.message+'</div>')}}
 async function openDW(deg,nm){try{var r=await fetch(QAPI+'/degree/'+Math.floor(deg));var d=await r.json();var h='<div style="line-height:1.7"><div style="margin-bottom:8px"><span style="color:#e0e0e0;font-weight:600">ОБРАЗ:</span> <span style="color:#c0c0c8">'+(d.image||'—')+'</span></div><div style="margin-bottom:8px"><span style="color:#e05040;font-weight:600">ЭНЕРГЕТИКА:</span> <span style="color:#e07060">'+(d.energy||'—')+'</span></div><div style="margin-bottom:8px"><span style="color:#a080d0;font-weight:600">СУТЬ:</span> <span style="color:#9080b0">'+colE(d.essence)+'</span></div><div><span style="color:#50c050;font-weight:600">ШАГ ПУТИ:</span> <span style="color:#70a870">'+(d.path_step||'—')+'</span></div></div>';openFW(nm+' — Градус '+(d.sign_degree||'')+' '+(d.sign||''),h)}catch(e){openFW(nm,'<div class="err">'+e.message+'</div>')}}
+// ── маска ввода: цифры подряд → сами разбиваются точками/двоеточиями ──
+function цифроввод(id, группы, разд){var el=document.getElementById(id);if(!el)return;
+el.addEventListener('input',function(){
+var всего=группы.reduce(function(a,b){return a+b;},0);
+var ц=el.value.replace(/\D/g,'').slice(0,всего);
+var из=[],и=0;
+for(var g of группы){if(ц.length<=и)break;из.push(ц.slice(и,и+g));и+=g;}
+el.value=из.join(разд);});}
+['dt','pd'].forEach(function(id){цифроввод(id,[2,2,4],'.')});   // даты: 30011961 → 30.01.1961
+['tm','pt'].forEach(function(id){цифроввод(id,[2,2,2],':')});   // время: 205640 → 20:56:40
+
 window.onload=function(){
   try{var sv=localStorage.getItem('qa_now');if(sv){var o=JSON.parse(sv);if(o.city)document.getElementById('tcity').value=o.city;if(o.lat)document.getElementById('tlat').value=o.lat;if(o.lon)document.getElementById('tlon').value=o.lon;if(o.gmt)document.getElementById('tgmt').value=o.gmt}}catch(e){}
   doCalc();
@@ -385,11 +396,11 @@ window.onload=function(){
 </script>
 <div id="qver" style="position:fixed;right:6px;bottom:6px;z-index:99999;
   font:10px/1 monospace;color:#50c050;background:rgba(0,0,0,.7);padding:3px 6px;
-  border-radius:3px;pointer-events:none">v6 · QAPI</div>
+  border-radius:3px;pointer-events:none">v7 · QAPI</div>
 <script>
 (function(){
   var d=document.getElementById('qver');
-  if(d) d.textContent='v6 · '+(typeof QAPI!=='undefined'?QAPI.replace(/^https?:\/\//,''):'QAPI НЕТ!');
+  if(d) d.textContent='v7 · '+(typeof QAPI!=='undefined'?QAPI.replace(/^https?:\/\//,''):'QAPI НЕТ!');
 })();
 </script>
 </body>
