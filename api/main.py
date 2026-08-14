@@ -1078,6 +1078,286 @@ class KerykeionRequest(BaseModel):
     tr_tz: str | None = None
 
 
+class КосмограммаЗапрос(BaseModel):
+    """Космограмма для прогноза дня: время рождения НЕ спрашивается.
+
+    Если передан день и место «сейчас», Кериткеон строит ДВОЙНУЮ карту:
+    космограмма внутри + транзитное кольцо снаружи. Поворот остаётся по Солнцу,
+    потому что натал строится на солнечный час.
+    """
+    year: int
+    month: int
+    day: int
+    latitude: float
+    longitude: float
+    gmt: float = 0.0          # смещение места рождения от UTC на ту дату
+    theme: str = "dark-high-contrast"
+    # момент транзита (когда есть — карта двойная)
+    t_year: int | None = None
+    t_month: int | None = None
+    t_day: int | None = None
+    t_hour: int = 12
+    t_minute: int = 0
+    t_lat: float | None = None
+    t_lon: float | None = None
+    t_gmt: float = 0.0
+
+
+def _солнечный_час(год, месяц, день, широта, долгота, сдвиг):
+    """Момент дня, когда асцендент ровно равен Солнцу.
+
+    Его решение 14.08: Солнце — символический асцендент космограммы.
+    Восход не годится (солнце всходит краем диска, расхождение до 3°),
+    поэтому ищем точное совпадение: минутный проход + уточнение до секунды.
+    """
+    import swisseph as _swe
+    from datetime import datetime as _dt, timedelta as _td
+
+    def _jd(т):
+        return _swe.julday(т.year, т.month, т.day,
+                           т.hour + т.minute / 60.0 + т.second / 3600.0)
+
+    def _дуга(a, b):
+        d = abs((a - b) % 360)
+        return min(d, 360 - d)
+
+    def _разрыв(т):
+        j = _jd(т)
+        асц = _swe.houses(j, широта, долгота, b'P' if abs(широта) <= 66.5 else b'R')[1][0]
+        солнце = _swe.calc_ut(j, _swe.SUN)[0][0]
+        return _дуга(асц, солнце)
+
+    т = _dt(год, месяц, день) - _td(hours=сдвиг)     # местная полночь в UTC
+    лучший, мин = т, 999.0
+    for _ in range(1440):
+        d = _разрыв(т)
+        if d < мин:
+            мин, лучший = d, т
+        т += _td(minutes=1)
+    низ, верх = лучший - _td(minutes=1), лучший + _td(minutes=1)
+    while (верх - низ).total_seconds() > 1:
+        a = низ + (верх - низ) / 3
+        b = верх - (верх - низ) / 3
+        if _разрыв(a) < _разрыв(b):
+            верх = b
+        else:
+            низ = a
+    точно = (низ + (верх - низ) / 2).replace(microsecond=0)
+    return точно, _разрыв(точно)
+
+
+# ⚠️ За полярным кругом в полярную ночь солнечного часа НЕ СУЩЕСТВУЕТ:
+# Солнце не восходит, часть эклиптики горизонт не пересекает, асцендент
+# перепрыгивает через неё. Проверено: Мурманск 15.12.1975 — расхождение 18°.
+# В таком случае строим колесо на местный полдень и говорим об этом прямо.
+ПОРОГ_СОЛНЕЧНОГО_ЧАСА = 1.0 / 60.0        # одна угловая минута
+
+
+class СеткаЗапрос(BaseModel):
+    """Сетка суток для прогноза: круг от якоря, главы, узлы, куспиды по шагу."""
+    year: int; month: int; day: int              # день прогноза
+    b_year: int; b_month: int; b_day: int        # дата рождения
+    b_lat: float; b_lon: float; b_gmt: float = 0.0
+    latitude: float; longitude: float            # место «сейчас»
+    gmt: float = 0.0
+    anchor: float                                # градус якорного асцендента
+    step: int = 2                                # шаг сетки в минутах
+
+
+@app.post("/day-grid")
+async def day_grid(req: СеткаЗапрос):
+    """Весь круг суток одним ответом: страница потом крутит его без запросов.
+
+    Считает: начало круга (когда АС встал на якорный градус), 12 глав по знакам,
+    все узлы (АС и угловые куспиды через точки, орбисы 2°/1°), сетку куспидов
+    с заданным шагом, Колесо жизни и окно медитации.
+    """
+    import sys as _sys
+    _sys.path.insert(0, str(ROOT))
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    from engine.day_engine import (начало_круга, главы_круга, узлы_круга,
+                                   куспиды_в, точки_дня, дмс,
+                                   медленные, аспекты_медленных,
+                                   космограмма_текстом, фаза_луны)
+    from engine.tzh import градус_тж
+    from engine.muhurta import окно_медитации
+    from engine.natal import calculate_natal
+
+    try:
+        # космограмма без времени: солнечный час, как в /day-cosmogram
+        солн_час, разрыв = _солнечный_час(req.b_year, req.b_month, req.b_day,
+                                          req.b_lat, req.b_lon, req.b_gmt)
+        мест_рожд = солн_час + _td(hours=req.b_gmt)
+        натал = calculate_natal(year=мест_рожд.year, month=мест_рожд.month, day=мест_рожд.day,
+                                hour=мест_рожд.hour, minute=мест_рожд.minute,
+                                second=мест_рожд.second, timezone=req.b_gmt,
+                                latitude=req.b_lat, longitude=req.b_lon)
+
+        день_utc = _dt(req.year, req.month, req.day, 12, 0, tzinfo=_tz.utc) - _td(hours=req.gmt)
+        нач = начало_круга(день_utc, req.anchor, req.latitude, req.longitude)
+        главы = главы_круга(нач, req.latitude, req.longitude)
+        узлы = узлы_круга(нач, натал, req.latitude, req.longitude, шаг_минут=2)
+
+        # сетка куспидов + положения БЫСТРЫХ тел на каждый шаг
+        # (Луна за сутки уходит на 13° — если брать её застывшей, вспышки соврут)
+        import swisseph as _swe2
+        from engine.day_engine import jd as _jd
+        БЫСТР = [("транзитный Луна", _swe2.MOON), ("транзитный Солнце", _swe2.SUN),
+                 ("транзитный Меркурий", _swe2.MERCURY), ("транзитный Венера", _swe2.VENUS),
+                 ("транзитный Марс", _swe2.MARS)]
+        сетка = []
+        быстрые_по_шагам = []
+        т = нач
+        конец = нач + _td(hours=24)
+        шаг = _td(minutes=max(1, req.step))
+        while т <= конец:
+            к = куспиды_в(т, req.latitude, req.longitude)
+            сетка.append([int((т - нач).total_seconds() // 60)] + [round(x, 4) for x in к])
+            j = _jd(т)
+            быстрые_по_шагам.append([round(_swe2.calc_ut(j, pid)[0][0], 3) for _, pid in БЫСТР])
+            т += шаг
+
+        мест = lambda д: (д + _td(hours=req.gmt)).strftime("%H:%M:%S")
+        тж = градус_тж(_dt(req.b_year, req.b_month, req.b_day, 12, tzinfo=_tz.utc) - _td(hours=req.b_gmt),
+                       нач)
+        окно = окно_медитации(req.year, req.month, req.day, req.latitude, req.longitude, req.gmt)
+
+        return {
+            "начало": мест(нач),
+            "начало_utc": нач.isoformat(),
+            "якорь": round(req.anchor, 6),
+            "шаг_минут": max(1, req.step),
+            "главы": [{"знак": г["знак"], "начало": мест(г["начало"]), "конец": мест(г["конец"]),
+                       "минут": round((г["конец"] - г["начало"]).total_seconds() / 60),
+                       "неполная": г.get("неполная", "")} for г in главы],
+            "узлы": [{"время": мест(у["время"]), "минута": int((у["время"] - нач).total_seconds() // 60),
+                      "угол": у["угол"], "точка": у["точка"],
+                      "градус": round(у["градус_точки"], 4), "градус_текст": дмс(у["градус_точки"]),
+                      "орбис": у["орбис"], "окно_минут": у["окно_минут"]} for у in узлы],
+            "сетка": сетка,
+            "быстрые_имена": [и for и, _ in БЫСТР],
+            "быстрые": быстрые_по_шагам,
+            "точки": {и: round(г, 4) for и, г in точки_дня(нач + _td(hours=12), натал).items()},
+            "медленные": _медленный_слой(солн_час, нач, натал),
+            "космограмма": космограмма_текстом(натал),
+            "фаза_луны": фаза_луны(нач),
+            "колесо_жизни": {"градус": тж["градус"], "текст": дмс(тж["градус"]),
+                             "знак": тж["знак"], "эпоха": тж["эпоха_номер"],
+                             "годы": list(тж["годы_эпохи"])},
+            "окно_медитации": ({"начало": окно["окно"]["начало"].strftime("%H:%M"),
+                                "конец": окно["окно"]["конец"].strftime("%H:%M"),
+                                "восход": окно["восход"].strftime("%H:%M"),
+                                "закат": окно["закат"].strftime("%H:%M")}
+                               if окно.get("есть") else {"нет": окно.get("почему", "")}),
+            "солнечный_час": мест_рожд.strftime("%H:%M:%S"),
+            "солнце_на_асценденте": разрыв <= ПОРОГ_СОЛНЕЧНОГО_ЧАСА,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
+def _медленный_слой(рождение_utc, момент_utc, натал):
+    """Причинный слой для центра карты: дирекции, прогрессии и их связи."""
+    import sys as _s
+    _s.path.insert(0, str(ROOT))
+    from engine.day_engine import медленные, аспекты_медленных, точки_дня, дмс
+    м = медленные(рождение_utc, момент_utc, натал)
+    асп = аспекты_медленных(м, натал, точки_дня(момент_utc, натал))
+    return {
+        "дуга": м["дуга"], "лет": м["лет"],
+        "дирекции": [{"имя": и, "градус": г, "текст": дмс(г)} for и, г in м["дирекции"].items()],
+        "прогрессии": [{"имя": и, "градус": г, "текст": дмс(г)} for и, г in м["прогрессии"].items()],
+        "аспекты": асп[:40],
+    }
+
+
+@app.post("/day-cosmogram")
+async def day_cosmogram(req: КосмограммаЗапрос):
+    """Космограмма для прогноза дня: колесо, повёрнутое Солнцем на асцендент.
+
+    Домовые слои страница прячет сама — дома в прогнозе только динамические.
+    Отдаём заодно солнечный час и предупреждение про Луну (она за сутки
+    уходит на 13°, и без часа рождения её положение приблизительно).
+    """
+    from kerykeion import KerykeionChartSVG
+    import os, tempfile, swisseph as _swe
+    from datetime import timedelta as _td
+
+    try:
+        точно, разрыв = _солнечный_час(req.year, req.month, req.day,
+                                       req.latitude, req.longitude, req.gmt)
+        солнце_на_асценденте = разрыв <= ПОРОГ_СОЛНЕЧНОГО_ЧАСА
+        if not солнце_на_асценденте:
+            # запасной путь: местный полдень, честно предупреждаем
+            from datetime import datetime as _dt2
+            точно = _dt2(req.year, req.month, req.day, 12, 0) - _td(hours=req.gmt)
+        мест = точно + _td(hours=req.gmt)
+        зона = f"Etc/GMT{'-' if req.gmt >= 0 else '+'}{abs(int(req.gmt))}"
+
+        суб = KerykeionRequest(
+            year=мест.year, month=мест.month, day=мест.day,
+            hour=мест.hour, minute=мест.minute,
+            timezone_str=зона, latitude=req.latitude, longitude=req.longitude,
+        )
+        натал = _make_kerykeion_subject('natal', суб)
+        td = tempfile.gettempdir()
+        for _s in os.listdir(td):
+            if _s.endswith('.svg') and 'Wheel' in _s:
+                try: os.remove(os.path.join(td, _s))
+                except Exception: pass
+
+        двойная = req.t_year is not None and req.t_lat is not None
+        if двойная:
+            зона_т = f"Etc/GMT{'-' if req.t_gmt >= 0 else '+'}{abs(int(req.t_gmt))}"
+            суб_т = KerykeionRequest(
+                year=req.t_year, month=req.t_month, day=req.t_day,
+                hour=req.t_hour, minute=req.t_minute, timezone_str=зона_т,
+                latitude=req.t_lat, longitude=req.t_lon,
+            )
+            транзит = _make_kerykeion_subject('Transit', суб_т)
+            chart = KerykeionChartSVG(натал, chart_type='Transit', second_obj=транзит,
+                                      theme=req.theme, chart_language='RU',
+                                      new_output_directory=td)
+        else:
+            chart = KerykeionChartSVG(натал, chart_type='Natal', theme=req.theme,
+                                      chart_language='RU', new_output_directory=td)
+        chart.makeWheelOnlySVG()
+
+        svg = None
+        for f in os.listdir(td):
+            if f.endswith('.svg') and 'Wheel' in f:
+                if двойная and 'Transit' not in f: continue
+                if not двойная and 'Transit' in f: continue
+                with open(os.path.join(td, f), 'r', encoding='utf-8') as sf:
+                    svg = sf.read()
+                break
+        if not svg:
+            raise HTTPException(status_code=500, detail="колесо не построилось")
+
+        j = _swe.julday(точно.year, точно.month, точно.day,
+                        точно.hour + точно.minute / 60.0 + точно.second / 3600.0)
+        солнце = _swe.calc_ut(j, _swe.SUN)[0][0]
+        луна = _swe.calc_ut(j, _swe.MOON)[0][0]
+        return {
+            "svg": svg,
+            "солнечный_час": мест.strftime("%H:%M:%S"),
+            "солнце": round(солнце, 6),
+            "луна": round(луна, 6),
+            "расхождение_ас_солнце_сек": round(разрыв * 3600, 1),
+            "солнце_на_асценденте": солнце_на_асценденте,
+            "двойная": двойная,
+            "оговорка": ("Луна за сутки проходит 13° — без часа рождения её место приблизительно"
+                         if солнце_на_асценденте else
+                         "В этот день на этой широте Солнце не восходит — солнечного часа нет. "
+                         "Колесо построено на местный полдень, Солнце не на асценденте. "
+                         "Луна за сутки проходит 13° — её место приблизительно"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+
+
 # ============================================================
 # НОВЫЕ ЭНДПОИНТЫ
 # ============================================================
