@@ -32,7 +32,7 @@ input.w{width:120px}
 .b.gl:hover{border-color:#f0c040}
 .sep{width:1px;height:16px;background:#2a2d42;margin:0 4px}
 
-.blk{max-width:1180px;margin:10px auto 0;padding:0 12px}
+.blk{max-width:min(1720px, 97vw);margin:10px auto 0;padding:0 10px}
 .card{background:#141628;border:1px solid #2a2d42;border-radius:6px;padding:7px 10px;margin-bottom:6px}
 .card .hd{font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:#f0c040;margin-bottom:5px;
           display:flex;align-items:center;gap:8px}
@@ -49,6 +49,35 @@ input.w{width:120px}
 .hole{border:1px dashed #2a2d42;border-radius:6px;padding:18px 12px;text-align:center;color:#4a5070;
       font-size:11px;margin-bottom:8px}
 .st{color:#7fb0ff;font-size:10px;padding:2px 0;display:block}
+
+/* ── размер колеса: на десктопе почти во всю страницу, на телефоне по экрану ── */
+#колесо{width:100%;margin:0 auto;line-height:0}
+#колесо svg{width:100%;height:auto;display:block;
+  /* вписываем в высоту окна, иначе колесо уезжает за край и приходится крутить */
+  max-height:calc(100vh - 250px)}
+@media (min-width:1100px){
+  #колесо{max-width:min(96%, calc(100vh - 230px))}   /* круг — значит ширина по высоте окна */
+}
+@media (max-width:1099px){
+  #колесо{max-width:100%}
+  #колесо svg{max-height:none}
+  .row{gap:3px}
+  input,select{font-size:12px}
+}
+@media (max-width:700px){
+  body{font-size:12px;padding-bottom:24px}
+  .blk{padding:0 6px}
+  .card{padding:6px 7px}
+  .ttl{font-size:15px;letter-spacing:1px}
+  .sub{font-size:9px}
+  .back{position:static;display:inline-block;margin-bottom:4px}
+  .hdr{position:static}
+  input,select{padding:5px 7px}
+  .grp{flex-wrap:wrap}
+  #шкала{height:44px}          /* пальцем попадать легче */
+  #очередь{grid-template-columns:1fr !important}
+  #полочка{font-size:10px;max-height:60vh}
+}
 #qtip{position:fixed;display:none;pointer-events:none;z-index:9999;
 background:#0b0e1a;border:1px solid rgba(212,175,90,.45);border-radius:8px;padding:5px 10px;
 color:#e8e2d4;font:11px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:nowrap;
@@ -62,7 +91,7 @@ box-shadow:0 6px 22px rgba(0,0,0,.55)}
 <div class="hdr">
   <a class="back" href="/">← Карта</a>
   <div class="ttl">ПРОГНОЗ НА ДЕНЬ</div>
-  <div class="sub">космограмма · бегущий асцендент · двенадцать глав суток</div>
+  <div class="sub">космограмма · бегущий асцендент · двенадцать глав суток <span style="color:#4a5070">· сборка d1</span></div>
 </div>
 
 <div id="qtip"></div>
@@ -126,7 +155,7 @@ box-shadow:0 6px 22px rgba(0,0,0,.55)}
   <!-- ── места под следующие шаги ── -->
   <div class="card" id="место_карты" style="text-align:center">
     <div class="hd" style="justify-content:center">☉ КОСМОГРАММА <i id="подпись_карты">нажми «Рассчитать день»</i></div>
-    <div id="колесо" style="max-width:560px;margin:0 auto"></div>
+    <div id="колесо"></div>
     <div class="hint" id="оговорка" style="text-align:center"></div>
   </div>
   <!-- шкала суток -->
@@ -160,6 +189,7 @@ box-shadow:0 6px 22px rgba(0,0,0,.55)}
 
 <script>
 "use strict";
+const СБОРКА_СТРАНИЦЫ = "d1";   // должна совпасть со сборкой сервера
 const $ = id => document.getElementById(id);
 
 // ── дата: маска и стрелки (как на карте: цифры сами разбиваются точками) ──
@@ -394,7 +424,13 @@ async function построитьКосмограмму(){
         t_year:день[2], t_month:день[1], t_day:день[0], t_hour:12, t_minute:0,
         t_lat:parseFloat($("шир_с").value), t_lon:parseFloat($("долг_с").value),
         t_gmt:parseFloat(($("gmt_с").value||"0").replace(",", ".")) || 0})});
-    if (!r.ok){ $("статус").textContent = "космограмма не построилась: HTTP " + r.status; return; }
+    if (!r.ok){
+      let причина = "";
+      try { причина = (await r.json()).detail || ""; } catch(e){}
+      $("статус").innerHTML = `<span style="color:#e8202a">космограмма не построилась (HTTP ${r.status})`
+        + (причина? ` · ${причина}` : ` · проверь, что залит свежий api/main.py`) + `</span>`;
+      return;
+    }
     const о = await r.json();
     $("колесо").innerHTML = о.svg;
     спрятатьДома();
@@ -432,8 +468,19 @@ async function взятьСетку(){
   try{
     const r = await fetch("/day-grid", {method:"POST", headers:{"Content-Type":"application/json"},
                                         body: JSON.stringify(тело)});
-    if (!r.ok){ $("статус").textContent = "круг не посчитался: HTTP " + r.status; return; }
+    if (!r.ok){
+      let причина = "";
+      try { причина = (await r.json()).detail || ""; } catch(e){}
+      $("статус").innerHTML = `<span style="color:#e8202a">круг не посчитался (HTTP ${r.status})`
+        + (причина? ` · ${причина}` : ` · похоже, на сервере старый движок: залей api/main.py и папку engine целиком`)
+        + `</span>`;
+      return;
+    }
     window.сетка = await r.json();
+    if (window.сетка.сборка && window.сетка.сборка !== СБОРКА_СТРАНИЦЫ){
+      $("статус").innerHTML = `<span style="color:#e8202a">РАЗНЫЕ СБОРКИ: страница ${СБОРКА_СТРАНИЦЫ}, сервер ${window.сетка.сборка}`
+        + ` — залей все файлы движка (api/main.py и папку engine)</span>`;
+    }
     лучиЗнаков();
     дорисоватьТочки(window.сетка);
     собратьМестаТочек();
@@ -514,8 +561,11 @@ function рисоватьШкалу(){
 }
 function минутаОт(врем){
   const с = window.сетка; if (!с) return 0;
-  const м = т => { const [a,b] = т.split(":").map(Number); return a*60+b; };
-  return ((м(врем) - м(с.начало)) % 1440 + 1440) % 1440;
+  // ⚠️ считаем В СЕКУНДАХ: без них узел конца круга (15:22:47 при начале 15:22:51)
+  // получал минуту 0 и попадал в первую главу вместо последней
+  const сек = т => { const [a,b,c] = т.split(":").map(Number); return a*3600 + b*60 + (c||0); };
+  const d = ((сек(врем) - сек(с.начало)) % 86400 + 86400) % 86400;
+  return Math.floor(d / 60);
 }
 function двигатьПолзунок(){
   const п = document.getElementById("ползунок"); if (!п) return;
@@ -601,9 +651,10 @@ function собратьПолочку(){
     // иначе один узел выпадает (ловил на прогоне: 119 из 120)
     const от = минутаОт(г.начало), до = минутаОт(г.конец);
     const свои = с.узлы.filter(у=>{
-      const м = минутаОт(у.время);
+      const м = (у.минута !== undefined) ? у.минута : минутаОт(у.время);   // серверная минута точнее
       return от <= до ? (м >= от && м < до) : (м >= от || м < до);
     });
+    свои.sort((a,b)=>(a.минута||0)-(b.минута||0));
     л.push("", `  ГЛАВА ${и+1}. ${г.знак.toUpperCase()} · ${г.начало}–${г.конец} · ${г.минут} мин`
               + (г.неполная ? ` · ${г.неполная}` : "")
               + ` · режим ${режимГлавы(г, о)}`);
