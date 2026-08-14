@@ -19,6 +19,7 @@ body{background:#0d0f1a;color:#d0d0d8;font-family:'Segoe UI',sans-serif;font-siz
 .back:hover{border-color:#7fb0ff}
 
 .row{display:flex;gap:4px;justify-content:center;align-items:center;flex-wrap:wrap;margin:3px 0}
+.grp{display:flex;gap:4px;align-items:center;flex-wrap:nowrap}   /* координаты не рвутся по строкам */
 label{color:#7078a0;font-size:9px;text-transform:uppercase}
 input,select{background:#1a1d30;border:1px solid #2a2d42;color:#d0d0d8;padding:3px 6px;border-radius:3px;
              font-size:11px;width:74px;font-family:inherit}
@@ -32,22 +33,22 @@ input.w{width:120px}
 .sep{width:1px;height:16px;background:#2a2d42;margin:0 4px}
 
 .blk{max-width:1180px;margin:10px auto 0;padding:0 12px}
-.card{background:#141628;border:1px solid #2a2d42;border-radius:6px;padding:10px 12px;margin-bottom:8px}
-.card .hd{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#f0c040;margin-bottom:8px;
+.card{background:#141628;border:1px solid #2a2d42;border-radius:6px;padding:7px 10px;margin-bottom:6px}
+.card .hd{font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:#f0c040;margin-bottom:5px;
           display:flex;align-items:center;gap:8px}
 .card .hd i{font-style:normal;color:#5a6080;letter-spacing:0;text-transform:none;font-size:10px}
-.hint{color:#5a6080;font-size:10px;margin-top:6px}
+.hint{color:#5a6080;font-size:9px;margin-top:3px;line-height:1.4}
 
 /* строка якоря */
-.ank{background:#1a1425;border:1px solid #4a2d42;border-radius:6px;padding:8px 12px;margin-bottom:8px;
+.ank{background:#1a1425;border:1px solid #4a2d42;border-radius:6px;padding:6px 10px;margin-bottom:6px;
      display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:11px}
 .ank b{color:#e8202a;font-weight:600}
 .ank span{color:#7078a0}
 
 /* место под карту и полочку — заполним следующими шагами */
-.hole{border:1px dashed #2a2d42;border-radius:6px;padding:26px 12px;text-align:center;color:#4a5070;
+.hole{border:1px dashed #2a2d42;border-radius:6px;padding:18px 12px;text-align:center;color:#4a5070;
       font-size:11px;margin-bottom:8px}
-.st{color:#7fb0ff;font-size:11px;text-align:center;padding:4px}
+.st{color:#7fb0ff;font-size:10px;padding:2px 0;display:block}
 </style>
 </head>
 <body>
@@ -64,47 +65,48 @@ input.w{width:120px}
   <div class="card">
     <div class="hd">☉ ЧЕЛОВЕК <i>время рождения не нужно — космограмма строится по дате и месту</i></div>
     <div class="row">
-      <label>Имя</label><input id="имя" class="w" placeholder="Имя">
-      <label>Дата рождения</label><input id="дата_р" placeholder="ДД.ММ.ГГГГ" style="width:96px">
+      <input id="имя" placeholder="Имя" style="width:100px" title="Имя">
+      <input id="дата_р" placeholder="ДД.ММ.ГГГГ" style="width:88px" title="Дата рождения">
       <div class="sep"></div>
-      <label>Страна</label><select id="страна_р" style="width:130px"></select>
-      <label>Город</label><select id="город_р" style="width:150px"></select>
-      <label>Или поиск</label><input id="поиск_р" class="w" placeholder="начни печатать…" autocomplete="off">
+      <select id="страна_р" style="width:112px" title="Страна рождения"></select>
+      <select id="город_р" style="width:128px" title="Город рождения"></select>
+      <input id="поиск_р" placeholder="поиск города" style="width:96px" autocomplete="off" title="Найти город по названию">
       <div class="sep"></div>
-      <label>Шир</label><input id="шир_р" placeholder="54.42985">
-      <label>Долг</label><input id="долг_р" placeholder="70.34136">
-      <label>GMT</label><input id="gmt_р" placeholder="+6" style="width:38px">
+      <span class="grp"><label>Ш</label><input id="шир_р" placeholder="54.42985" style="width:68px" title="Широта">
+      <label>Д</label><input id="долг_р" placeholder="70.34136" style="width:68px" title="Долгота">
+      <label>GMT</label><input id="gmt_р" placeholder="+6" style="width:38px" title="Часовой пояс рождения"></span>
     </div>
-    <div id="подсказки_р" class="hint"></div>
+    <div id="подсказки_р" class="hint">нет посёлка в списке? возьми ближайший город или впиши широту и долготу руками —
+      для космограммы место рождения влияет только на часовой пояс</div>
   </div>
 
   <!-- ── окно 2: день и место ── -->
   <div class="card">
     <div class="hd">🗓 ДЕНЬ И МЕСТО <i>любой день прошлого или будущего · место, где человек находится сейчас</i></div>
     <div class="row">
-      <button class="b" onclick="сдвигДня(-1)">‹ вчера</button>
-      <label>День</label><input id="день" placeholder="ДД.ММ.ГГГГ" style="width:96px">
-      <button class="b" onclick="сдвигДня(1)">завтра ›</button>
-      <button class="b" onclick="кСегодня()">сегодня</button>
+      <button class="b" onclick="сдвигДня(-1)" title="Вчера">‹</button>
+      <input id="день" placeholder="ДД.ММ.ГГГГ" style="width:88px" title="День прогноза">
+      <button class="b" onclick="сдвигДня(1)" title="Завтра">›</button>
+      <button class="b" onclick="кСегодня()" title="Вернуться на сегодня">сегодня</button>
       <div class="sep"></div>
       <button class="b" id="режим_места" onclick="переключитьМесто()"
-              title="Где брать место: само по твоему часовому поясу или вручную">📍 где я сейчас</button>
+              title="Где брать место: само по часовому поясу или вручную">📍 сейчас</button>
+      <button class="b" onclick="поСпутнику()" title="Координаты с устройства — VPN на них не влияет">📡</button>
       <div class="sep"></div>
-      <label>Страна</label><select id="страна_с" style="width:130px"></select>
-      <label>Город</label><select id="город_с" style="width:150px"></select>
-      <label>Или поиск</label><input id="поиск_с" class="w" placeholder="начни печатать…" autocomplete="off">
+      <select id="страна_с" style="width:112px" title="Страна"></select>
+      <select id="город_с" style="width:128px" title="Город"></select>
+      <input id="поиск_с" placeholder="поиск города" style="width:96px" autocomplete="off" title="Найти город по названию">
       <div class="sep"></div>
-      <label>Шир</label><input id="шир_с" placeholder="56.85225">
-      <label>Долг</label><input id="долг_с" placeholder="53.19862">
+      <span class="grp"><label>Ш</label><input id="шир_с" placeholder="56.85225" style="width:68px" title="Широта">
+      <label>Д</label><input id="долг_с" placeholder="53.19862" style="width:68px" title="Долгота">
       <label>GMT</label><input id="gmt_с" placeholder="+4" style="width:38px"
-             title="Смещение считается НА ВЫБРАННЫЙ ДЕНЬ — с учётом переводов часов и старых зон">
+             title="Смещение считается НА ВЫБРАННЫЙ ДЕНЬ — с учётом переводов часов и старых зон"></span>
+      <div class="sep"></div>
+      <button class="b gl" onclick="рассчитать()">🔮 Рассчитать день</button>
     </div>
     <div id="подсказки_с" class="hint"></div>
-    <div class="row" style="margin-top:8px">
-      <button class="b gl" onclick="рассчитать()">🔮 Рассчитать день</button>
-      <span class="st" id="статус"></span>
-    </div>
     <div class="hint" id="подпись_места"></div>
+    <span class="st" id="статус"></span>
   </div>
 
   <!-- ── строка якоря ── -->
@@ -175,8 +177,8 @@ async function загрузитьГорода(){
   ["страна_р","страна_с"].forEach(id=>{
     коды.forEach(([к,имя])=>{ const o=document.createElement("option"); o.value=к; o.textContent=имя; $(id).appendChild(o); });
   });
-  // место рождения по умолчанию не ставим — его человек вводит сам
-  поставитьПоПоясу();
+  // сперва вспоминаем прошлый выбор, и только если его нет — ставим по поясу браузера
+  if (!вспомнить()) поставитьПоПоясу();
 }
 
 function городаСтраны(код){
@@ -192,6 +194,7 @@ function заполнить(комбо, код, выбрать){
 }
 function поставитьГород(набор, и){
   const [к,имя,ш,д,з] = БАЗА[и];
+  setTimeout(запомнить, 0);
   $("страна_"+набор).value = к; заполнить("город_"+набор, к, и);
   $("шир_"+набор).value = ш; $("долг_"+набор).value = д;
   $("gmt_"+набор).dataset.зона = з;                       // помним зону
@@ -243,7 +246,8 @@ function сдвигЗоны(зона, дата){
       const свои = заполнить("город_"+набор, стр.value); if (свои.length) поставитьГород(набор, свои[0][1]); };
     гор.onchange = ()=>{ if(набор==="с"&&!ручноеМесто) переключитьМесто(); поставитьГород(набор, +гор.value); };
     ["шир_","долг_","gmt_"].forEach(п=>{ const э=$(п+набор); if(э) э.oninput = ()=>{
-      if(набор==="с"&&!ручноеМесто) переключитьМесто(); }; });
+      if(набор==="с"&&!ручноеМесто) переключитьМесто(); запомнить(); }; });
+    ["имя","дата_р"].forEach(id=>{ const э=$(id); if(э) э.addEventListener("input", запомнить); });
     поиск.oninput = ()=>{
       const q = поиск.value.trim().toLowerCase(), п = $("подсказки_"+набор);
       if (q.length<2){ п.innerHTML=""; return; }
@@ -265,6 +269,53 @@ function поставитьПоПоясу(){
   const и = БАЗА.findIndex(г=>г[4]===зона);
   if (и>=0) поставитьГород("с", и);          // место «сейчас» — по поясу браузера
   else if (БАЗА.length) $("статус").textContent = "город по твоему поясу не нашёлся — выбери вручную";
+}
+
+// ── место по спутнику: VPN и часовой пояс на него не влияют ──
+function поСпутнику(){
+  if (!navigator.geolocation){ $("статус").textContent = "браузер не умеет брать координаты"; return; }
+  $("статус").textContent = "спрашиваю у устройства…";
+  navigator.geolocation.getCurrentPosition(п=>{
+    const ш = п.coords.latitude, д = п.coords.longitude;
+    if (!ручноеМесто) переключитьМесто();
+    let лучший = -1, мин = 1e9;
+    БАЗА.forEach((г,и)=>{ const р=(г[2]-ш)**2 + ((г[3]-д)*Math.cos(ш*Math.PI/180))**2;
+                          if (р<мин){ мин=р; лучший=и; } });
+    if (лучший>=0) поставитьГород("с", лучший);
+    $("шир_с").value = ш.toFixed(5); $("долг_с").value = д.toFixed(5);   // точные, не городские
+    $("статус").textContent = `место со спутника: ${ш.toFixed(4)}, ${д.toFixed(4)}`
+                            + (лучший>=0 ? ` · ближайший город ${БАЗА[лучший][1]}` : "");
+    запомнить();
+  }, о=>{ $("статус").textContent = "координаты не дались ("+о.message+") — выбери город вручную"; },
+     {timeout:8000, maximumAge:600000});
+}
+
+// ── помним последний выбор: чтобы каждый раз не искать свой город заново ──
+const КЛЮЧ = "квантареон-прогноз";
+function запомнить(){
+  try{
+    const с = {ручное: ручноеМесто};
+    ["имя","дата_р","шир_р","долг_р","gmt_р","страна_р","город_р",
+     "шир_с","долг_с","gmt_с","страна_с","город_с"].forEach(id=>{ const э=$(id); if(э) с[id]=э.value; });
+    с.зона_р = $("gmt_р").dataset.зона || ""; с.зона_с = $("gmt_с").dataset.зона || "";
+    localStorage.setItem(КЛЮЧ, JSON.stringify(с));
+  }catch(e){}
+}
+function вспомнить(){
+  try{
+    const с = JSON.parse(localStorage.getItem(КЛЮЧ)||"null");
+    if (!с) return false;
+    ручноеМесто = !!с.ручное;
+    ["страна_р","страна_с"].forEach(id=>{ if(с[id]) { $(id).value=с[id]; заполнить(id.replace("страна","город"), с[id]); } });
+    ["имя","дата_р","шир_р","долг_р","gmt_р","город_р","шир_с","долг_с","gmt_с","город_с"]
+      .forEach(id=>{ const э=$(id); if(э && с[id]!==undefined) э.value=с[id]; });
+    if (с.зона_р) $("gmt_р").dataset.зона = с.зона_р;
+    if (с.зона_с) $("gmt_с").dataset.зона = с.зона_с;
+    $("режим_места").textContent = ручноеМесто ? "✍️ где я был" : "📍 где я сейчас";
+    if (ручноеМесто) $("режим_места").style.color = "#f0c040";
+    обновитьСмещения();
+    return true;
+  }catch(e){ return false; }
 }
 
 function переключитьМесто(){
