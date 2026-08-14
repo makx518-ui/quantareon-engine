@@ -425,8 +425,7 @@ async function построитьКосмограмму(){
         t_lat:parseFloat($("шир_с").value), t_lon:parseFloat($("долг_с").value),
         t_gmt:parseFloat(($("gmt_с").value||"0").replace(",", ".")) || 0})});
     if (!r.ok){
-      let причина = "";
-      try { причина = (await r.json()).detail || ""; } catch(e){}
+      const причина = await разобратьОшибку(r);
       $("статус").innerHTML = `<span style="color:#e8202a">космограмма не построилась (HTTP ${r.status})`
         + (причина? ` · ${причина}` : ` · проверь, что залит свежий api/main.py`) + `</span>`;
       return;
@@ -440,6 +439,15 @@ async function построитьКосмограмму(){
     window.солнцеКосмограммы = о.солнце;
     window.лунаКосмограммы = о.луна;
     window.двойная = !!о.двойная;
+    // ⚠️ по этим двум признакам сразу видно, что на сервере лежит старый api/main.py
+    if (!о.сборка || о.сборка !== СБОРКА_СТРАНИЦЫ){
+      $("статус").innerHTML = `<span style="color:#e8202a">На сервере СТАРЫЙ api/main.py`
+        + (о.сборка? ` (сборка ${о.сборка}, у страницы ${СБОРКА_СТРАНИЦЫ})` : ` (сборки нет вовсе)`)
+        + ` — залей api/main.py и папку engine, потом нажми Shift+обновление</span>`;
+    } else if (!о.двойная){
+      $("статус").innerHTML = `<span style="color:#e8a04a">карта одинарная: транзитное кольцо не построилось`
+        + ` — проверь, что залит свежий api/main.py</span>`;
+    }
     $("подпись_карты").textContent = о.солнце_на_асценденте
       ? `Солнце на асценденте · солнечный час ${о.солнечный_час}`
       : `колесо на местный полдень — солнечного часа в этот день нет`;
@@ -448,6 +456,14 @@ async function построитьКосмограмму(){
     $("статус").textContent = "космограмма построена · считаю круг суток…";
     await взятьСетку();
   }catch(e){ $("статус").textContent = "космограмма: " + e.message; }
+}
+
+// причину берём из detail, а если сервер ответил не JSON — показываем сырой текст
+async function разобратьОшибку(r){
+  let т = "";
+  try { т = await r.text(); } catch(e){ return ""; }
+  try { const j = JSON.parse(т); return typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail); }
+  catch(e){ return т.replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim().slice(0, 160); }
 }
 
 // ── сетка суток: весь круг одним ответом, дальше крутим в браузере ──
@@ -469,11 +485,10 @@ async function взятьСетку(){
     const r = await fetch("/day-grid", {method:"POST", headers:{"Content-Type":"application/json"},
                                         body: JSON.stringify(тело)});
     if (!r.ok){
-      let причина = "";
-      try { причина = (await r.json()).detail || ""; } catch(e){}
+      let причина = await разобратьОшибку(r);
       $("статус").innerHTML = `<span style="color:#e8202a">круг не посчитался (HTTP ${r.status})`
-        + (причина? ` · ${причина}` : ` · похоже, на сервере старый движок: залей api/main.py и папку engine целиком`)
-        + `</span>`;
+        + (причина? ` · ${причина}` : ` · сервер не объяснил причину`)
+        + ` <br>если тут «cannot import name» — на сервере старый engine/day_engine.py</span>`;
       return;
     }
     window.сетка = await r.json();
@@ -488,8 +503,12 @@ async function взятьСетку(){
     показатьМинуту(0);
     рисоватьШкалу();
     показатьПолочку();
-    $("статус").textContent = `круг посчитан: ${window.сетка.главы.length} глав, ${window.сетка.узлы.length} узлов`
-                            + ` · начало ${window.сетка.начало}`;
+    const сбои = window.сетка.сбои || {};
+    const имена = Object.keys(сбои);
+    $("статус").innerHTML = `круг посчитан: ${window.сетка.главы.length} глав, ${window.сетка.узлы.length} узлов`
+                            + ` · начало ${window.сетка.начало}`
+                            + (имена.length ? `<br><span style="color:#e8a04a">не посчиталось: `
+                                + имена.map(и=>`<b>${и}</b> (${сбои[и]})`).join(" · ") + `</span>` : "");
   }catch(e){ $("статус").textContent = "круг: " + e.message; }
 }
 
