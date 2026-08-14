@@ -178,6 +178,29 @@ def root():
     })
 
 
+@app.get("/prognoz", response_class=HTMLResponse)
+def prognoz_page():
+    """Страница режима «Прогноз на день» — отдельная от карты."""
+    return FileResponse(FRONT / "prognoz.html", headers={
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    })
+
+
+@app.get("/cities.json")
+def cities_json():
+    """База городов (страна, название, широта, долгота, часовая зона) —
+    та же, что на странице мухурты сайта. Нужна окнам ввода прогноза."""
+    from fastapi.responses import Response
+    п = FRONT / "cities.json"
+    if п.exists():
+        return Response(content=п.read_text(encoding="utf-8"),
+                        media_type="application/json",
+                        headers={"Cache-Control": "public, max-age=86400"})
+    return Response(content="[]", media_type="application/json")
+
+
 # Отдача AstroChart.js
 @app.get("/astrochart.js")
 async def serve_astrochart():
