@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Квантареон — Прогноз на день</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text x='50' y='55' font-size='98' text-anchor='middle' dominant-baseline='central' fill='%23f0c040'>%E2%98%89</text></svg>">
+<style>
+/* Палитра взята с карты (frontend/index.html), чтобы страницы были одного рода */
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0d0f1a;color:#d0d0d8;font-family:'Segoe UI',sans-serif;font-size:13px;padding-bottom:40px}
+
+.hdr{background:#141628;border-bottom:1px solid #2a2d42;padding:6px 12px;position:sticky;top:0;z-index:100}
+.ttl{text-align:center;font-size:18px;font-weight:600;color:#f0c040;letter-spacing:2px;padding:4px 0;
+     text-shadow:0 0 20px rgba(240,192,64,0.3)}
+.sub{text-align:center;font-size:10px;color:#5a6080;letter-spacing:1px;padding-bottom:4px}
+.back{position:absolute;left:12px;top:10px;color:#7fb0ff;text-decoration:none;font-size:12px;
+      border:1px solid #2a2d42;background:#1a1d30;border-radius:3px;padding:3px 9px}
+.back:hover{border-color:#7fb0ff}
+
+.row{display:flex;gap:4px;justify-content:center;align-items:center;flex-wrap:wrap;margin:3px 0}
+label{color:#7078a0;font-size:9px;text-transform:uppercase}
+input,select{background:#1a1d30;border:1px solid #2a2d42;color:#d0d0d8;padding:3px 6px;border-radius:3px;
+             font-size:11px;width:74px;font-family:inherit}
+input:focus,select:focus{outline:none;border-color:#f0c040}
+input.w{width:120px}
+.b{background:#1a1d30;border:1px solid #2a2d42;color:#d0d0d8;padding:3px 9px;border-radius:3px;
+   cursor:pointer;font-size:11px;font-family:inherit}
+.b:hover{border-color:#7fb0ff}
+.b.gl{background:#2a1f10;border-color:#8a6a20;color:#f0c040;font-weight:600;padding:4px 16px}
+.b.gl:hover{border-color:#f0c040}
+.sep{width:1px;height:16px;background:#2a2d42;margin:0 4px}
+
+.blk{max-width:1180px;margin:10px auto 0;padding:0 12px}
+.card{background:#141628;border:1px solid #2a2d42;border-radius:6px;padding:10px 12px;margin-bottom:8px}
+.card .hd{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#f0c040;margin-bottom:8px;
+          display:flex;align-items:center;gap:8px}
+.card .hd i{font-style:normal;color:#5a6080;letter-spacing:0;text-transform:none;font-size:10px}
+.hint{color:#5a6080;font-size:10px;margin-top:6px}
+
+/* строка якоря */
+.ank{background:#1a1425;border:1px solid #4a2d42;border-radius:6px;padding:8px 12px;margin-bottom:8px;
+     display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:11px}
+.ank b{color:#e8202a;font-weight:600}
+.ank span{color:#7078a0}
+
+/* место под карту и полочку — заполним следующими шагами */
+.hole{border:1px dashed #2a2d42;border-radius:6px;padding:26px 12px;text-align:center;color:#4a5070;
+      font-size:11px;margin-bottom:8px}
+.st{color:#7fb0ff;font-size:11px;text-align:center;padding:4px}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <a class="back" href="/">← Карта</a>
+  <div class="ttl">ПРОГНОЗ НА ДЕНЬ</div>
+  <div class="sub">космограмма · бегущий асцендент · двенадцать глав суток</div>
+</div>
+
+<div class="blk">
+
+  <!-- ── окно 1: человек ── -->
+  <div class="card">
+    <div class="hd">☉ ЧЕЛОВЕК <i>время рождения не нужно — космограмма строится по дате и месту</i></div>
+    <div class="row">
+      <label>Имя</label><input id="имя" class="w" placeholder="Имя">
+      <label>Дата рождения</label><input id="дата_р" placeholder="ДД.ММ.ГГГГ" style="width:96px">
+      <div class="sep"></div>
+      <label>Страна</label><select id="страна_р" style="width:130px"></select>
+      <label>Город</label><select id="город_р" style="width:150px"></select>
+      <label>Или поиск</label><input id="поиск_р" class="w" placeholder="начни печатать…" autocomplete="off">
+      <div class="sep"></div>
+      <label>Шир</label><input id="шир_р" placeholder="54.42985">
+      <label>Долг</label><input id="долг_р" placeholder="70.34136">
+      <label>GMT</label><input id="gmt_р" placeholder="+6" style="width:38px">
+    </div>
+    <div id="подсказки_р" class="hint"></div>
+  </div>
+
+  <!-- ── окно 2: день и место ── -->
+  <div class="card">
+    <div class="hd">🗓 ДЕНЬ И МЕСТО <i>любой день прошлого или будущего · место, где человек находится сейчас</i></div>
+    <div class="row">
+      <button class="b" onclick="сдвигДня(-1)">‹ вчера</button>
+      <label>День</label><input id="день" placeholder="ДД.ММ.ГГГГ" style="width:96px">
+      <button class="b" onclick="сдвигДня(1)">завтра ›</button>
+      <button class="b" onclick="кСегодня()">сегодня</button>
+      <div class="sep"></div>
+      <button class="b" id="режим_места" onclick="переключитьМесто()"
+              title="Где брать место: само по твоему часовому поясу или вручную">📍 где я сейчас</button>
+      <div class="sep"></div>
+      <label>Страна</label><select id="страна_с" style="width:130px"></select>
+      <label>Город</label><select id="город_с" style="width:150px"></select>
+      <label>Или поиск</label><input id="поиск_с" class="w" placeholder="начни печатать…" autocomplete="off">
+      <div class="sep"></div>
+      <label>Шир</label><input id="шир_с" placeholder="56.85225">
+      <label>Долг</label><input id="долг_с" placeholder="53.19862">
+      <label>GMT</label><input id="gmt_с" placeholder="+4" style="width:38px"
+             title="Смещение считается НА ВЫБРАННЫЙ ДЕНЬ — с учётом переводов часов и старых зон">
+    </div>
+    <div id="подсказки_с" class="hint"></div>
+    <div class="row" style="margin-top:8px">
+      <button class="b gl" onclick="рассчитать()">🔮 Рассчитать день</button>
+      <span class="st" id="статус"></span>
+    </div>
+    <div class="hint" id="подпись_места"></div>
+  </div>
+
+  <!-- ── строка якоря ── -->
+  <div class="ank" id="якорь">
+    <span>якорь круга:</span> <b id="якорь_гр">— не взят —</b>
+    <span id="якорь_врем"></span>
+    <span style="color:#4a5070">круг считается от градуса асцендента на секунду вопроса</span>
+  </div>
+
+  <!-- ── места под следующие шаги ── -->
+  <div class="hole" id="место_карты">здесь будет живая карта дня — следующий шаг</div>
+  <div class="hole" id="место_полочки">здесь будет полочка: шапка Колеса жизни, космограмма, медленный слой, двенадцать глав</div>
+
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+
+// ── дата: маска и стрелки (как на карте: цифры сами разбиваются точками) ──
+function маскаДаты(el){
+  el.addEventListener('input', ()=>{
+    const ц = el.value.replace(/\D/g,'').slice(0,8);
+    const части = [];
+    if (ц.length) части.push(ц.slice(0,2));
+    if (ц.length>2) части.push(ц.slice(2,4));
+    if (ц.length>4) части.push(ц.slice(4,8));
+    el.value = части.join('.');
+  });
+}
+['дата_р','день'].forEach(id => маскаДаты($(id)));
+$('день').addEventListener('change', ()=>обновитьСмещения());
+$('дата_р').addEventListener('input', ()=>обновитьСмещения());
+
+function годна(ч){
+  // проверяем по-настоящему: 31.02 или 99.99.9999 не должны проходить молча
+  if (ч.length!==3 || ч.some(isNaN)) return null;
+  const [д,м,г] = ч;
+  if (г<1800 || г>2200 || м<1 || м>12 || д<1 || д>31) return null;
+  const дата = new Date(г, м-1, д);
+  if (дата.getFullYear()!==г || дата.getMonth()!==м-1 || дата.getDate()!==д) return null;
+  return дата;
+}
+function читатьДень(){
+  const д = годна(($("день").value||'').split('.').map(Number));
+  подсветить($("день"), !!д || !$("день").value);
+  return д || new Date();
+}
+function писатьДень(д){
+  $("день").value = String(д.getDate()).padStart(2,'0')+'.'+String(д.getMonth()+1).padStart(2,'0')+'.'+д.getFullYear();
+}
+function сдвигДня(н){ const д = читатьДень(); д.setDate(д.getDate()+н); писатьДень(д); обновитьСмещения(); }
+function кСегодня(){ писатьДень(new Date()); if (typeof обновитьСмещения==='function') обновитьСмещения(); }
+
+// ── города: та же база, что в мухурте; подгружается с сервера ──
+let БАЗА = [];
+const имяСтраны = (()=>{ try{ const d=new Intl.DisplayNames(["ru"],{type:"region"});
+  return к => { try{ return d.of(к)||к; }catch(e){ return к; } }; }catch(e){ return к=>к; } })();
+
+async function загрузитьГорода(){
+  try{
+    const r = await fetch('/cities.json');
+    if (!r.ok) throw new Error('нет файла городов');
+    БАЗА = await r.json();
+  }catch(e){ $("статус").textContent = 'города не загрузились ('+e.message+') — впиши координаты руками'; return; }
+  const коды = [...new Set(БАЗА.map(г=>г[0]))].map(к=>[к,имяСтраны(к)])
+                .sort((a,b)=>a[1].localeCompare(b[1],"ru"));
+  ["страна_р","страна_с"].forEach(id=>{
+    коды.forEach(([к,имя])=>{ const o=document.createElement("option"); o.value=к; o.textContent=имя; $(id).appendChild(o); });
+  });
+  // место рождения по умолчанию не ставим — его человек вводит сам
+  поставитьПоПоясу();
+}
+
+function городаСтраны(код){
+  return БАЗА.map((г,и)=>[г,и]).filter(([г])=>г[0]===код)
+             .sort((a,b)=>a[0][1].localeCompare(b[0][1],"ru"));
+}
+function заполнить(комбо, код, выбрать){
+  const свои = городаСтраны(код);
+  $(комбо).innerHTML = "";
+  свои.forEach(([г,и])=>{ const o=document.createElement("option"); o.value=и; o.textContent=г[1]; $(комбо).appendChild(o); });
+  if (выбрать!==undefined) $(комбо).value = выбрать;
+  return свои;
+}
+function поставитьГород(набор, и){
+  const [к,имя,ш,д,з] = БАЗА[и];
+  $("страна_"+набор).value = к; заполнить("город_"+набор, к, и);
+  $("шир_"+набор).value = ш; $("долг_"+набор).value = д;
+  $("gmt_"+набор).dataset.зона = з;                       // помним зону
+  // без даты рождения смещение считать не от чего — ставим прочерк, а не чужой день
+  if (набор === "р" && !датаРождения()){
+    $("gmt_р").value = ""; $("gmt_р").placeholder = "нужна дата";
+  } else {
+    $("gmt_"+набор).value = сдвигЗоны(з, набор==="с" ? читатьДень() : датаРождения());
+  }
+  if (набор === "с") подписьМеста();
+}
+function датаРождения(){
+  const д = годна(($("дата_р").value||'').split('.').map(Number));
+  подсветить($("дата_р"), !!д || !$("дата_р").value);
+  return д;
+}
+function подсветить(поле, хорошо){
+  поле.style.borderColor = хорошо ? "" : "#e8202a";
+  поле.title = хорошо ? "" : "такой даты нет";
+}
+// при смене дня пересчитываем смещение — вдруг в тот год часы переводили иначе
+function обновитьСмещения(){
+  ["р","с"].forEach(н=>{
+    const поле = $("gmt_"+н), зона = поле.dataset.зона;
+    if (!зона) return;
+    поле.value = сдвигЗоны(зона, н==="с" ? читатьДень() : датаРождения());
+  });
+  подписьМеста();
+}
+function подписьМеста(){
+  const зона = $("gmt_с").dataset.зона;
+  $("подпись_места").textContent = ручноеМесто
+    ? (зона ? `место задано вручную · ${зона} · смещение на ${$("день").value}: GMT${$("gmt_с").value}` : "место задано вручную")
+    : (зона ? `место по твоему поясу · ${зона}` : "");
+}
+function сдвигЗоны(зона, дата){
+  try{
+    // ⚠️ смещение считаем НА ВЫБРАННЫЙ ДЕНЬ: переводы часов и старые зоны
+    // менялись, и для прошлых лет сегодняшнее смещение соврало бы на час-два
+    const т = дата || читатьДень() || new Date();
+    const ч = (new Date(т.toLocaleString("en-US",{timeZone:зона})) - new Date(т.toLocaleString("en-US",{timeZone:"UTC"})))/3600000;
+    return (ч>=0?"+":"")+ (Math.round(ч*10)/10);
+  }catch(e){ return ""; }
+}
+["р","с"].forEach(набор=>{
+  setTimeout(()=>{
+    const стр = $("страна_"+набор), гор = $("город_"+набор), поиск = $("поиск_"+набор);
+    стр.onchange = ()=>{ if(набор==="с"&&!ручноеМесто) переключитьМесто();
+      const свои = заполнить("город_"+набор, стр.value); if (свои.length) поставитьГород(набор, свои[0][1]); };
+    гор.onchange = ()=>{ if(набор==="с"&&!ручноеМесто) переключитьМесто(); поставитьГород(набор, +гор.value); };
+    ["шир_","долг_","gmt_"].forEach(п=>{ const э=$(п+набор); if(э) э.oninput = ()=>{
+      if(набор==="с"&&!ручноеМесто) переключитьМесто(); }; });
+    поиск.oninput = ()=>{
+      const q = поиск.value.trim().toLowerCase(), п = $("подсказки_"+набор);
+      if (q.length<2){ п.innerHTML=""; return; }
+      const найдено = [];
+      for (let и=0; и<БАЗА.length && найдено.length<8; и++)
+        if (БАЗА[и][1].toLowerCase().startsWith(q)) найдено.push(и);
+      п.innerHTML = найдено.map(и=>
+        `<span class="b" style="margin:2px" onclick="выбратьИзПоиска('${набор}',${и})">${БАЗА[и][1]} · ${имяСтраны(БАЗА[и][0])}</span>`).join(" ");
+    };
+  }, 0);
+});
+function выбратьИзПоиска(набор,и){ $("поиск_"+набор).value=""; $("подсказки_"+набор).innerHTML=""; поставитьГород(набор,и); }
+
+let ручноеМесто = false;
+
+function поставитьПоПоясу(){
+  if (ручноеМесто) return;                   // человек задал сам — не трогаем
+  const зона = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const и = БАЗА.findIndex(г=>г[4]===зона);
+  if (и>=0) поставитьГород("с", и);          // место «сейчас» — по поясу браузера
+  else if (БАЗА.length) $("статус").textContent = "город по твоему поясу не нашёлся — выбери вручную";
+}
+
+function переключитьМесто(){
+  ручноеМесто = !ручноеМесто;
+  $("режим_места").textContent = ручноеМесто ? "✍️ где я был" : "📍 где я сейчас";
+  $("режим_места").style.color = ручноеМесто ? "#f0c040" : "";
+  if (!ручноеМесто) поставитьПоПоясу();
+  подписьМеста();
+}
+
+// ── расчёт: пока только берём якорь, счёт добавим следующим шагом ──
+async function рассчитать(){
+  $("статус").textContent = "беру якорь…";
+  const ш = parseFloat($("шир_с").value), д = parseFloat($("долг_с").value);
+  if (isNaN(ш) || isNaN(д)){ $("статус").textContent = "нет координат места «сейчас»"; return; }
+  try{
+    const r = await fetch(`/transit?latitude=${ш}&longitude=${д}`);
+    const t = await r.json();
+    if (t.error || !t.angles){ $("статус").textContent = "сервер не отдал транзит"; return; }
+    const асц = t.angles.ASC;
+    $("якорь_гр").textContent = дмс(асц);
+    $("якорь_врем").textContent = "· взят " + new Date().toLocaleString("ru-RU");
+    $("статус").textContent = "якорь взят — следующий шаг: расчёт круга и глав";
+  }catch(e){ $("статус").textContent = "не вышло: " + e.message; }
+}
+
+const ЗНАКИ_Р = ['Овна','Тельца','Близнецов','Рака','Льва','Девы','Весов','Скорпиона','Стрельца','Козерога','Водолея','Рыб'];
+function дмс(г){
+  // ⚠️ раньше при s===60 секунды обнулялись, но минута не прибавлялась:
+  // 59.99999° показывалось как 29°59'00" Тельца вместо 30°00'00"
+  let x = ((г%360)+360)%360;
+  let d = Math.floor(x%30), м = Math.floor(((x%30)-d)*60), с = Math.round(((((x%30)-d)*60)-м)*60);
+  if (с===60){ с=0; м++; }
+  if (м===60){ м=0; d++; }
+  if (d===30){ d=0; x = (x+0.0001)%360; }        // перешли в следующий знак
+  return `${d}°${String(м).padStart(2,'0')}'${String(с).padStart(2,'0')}" ${ЗНАКИ_Р[Math.floor(x/30)]}`;
+}
+
+кСегодня();
+загрузитьГорода();
+</script>
+</body>
+</html>

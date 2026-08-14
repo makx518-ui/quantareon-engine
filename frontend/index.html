@@ -129,7 +129,7 @@ white-space:nowrap;box-shadow:0 6px 22px rgba(0,0,0,.55)}
   <label>Долг</label><input id="px" placeholder="долгота" style="width:72px">
   <label>ASC</label><input id="pasc" placeholder="опц." style="width:58px">
   <button class="b" onclick="clearPartner()" title="Очистить партнёра + вернуть натал+транзит">✕</button>
-  <button class="b bm" onclick="togglePartnerRing()" title="Показать кольцо партнёра от 0° Овна — ляжет ровно на родное синастрическое">🔵 Кольцо</button><button class="b bm" onclick="toggleUranSync()" title="Сдвинуть кольцо: Уран партнёра на мой Уран. Второй тык — обратно на 0° Овна">🔗 Уран-синхрон</button><button class="b bg" style="border-left:3px solid #d08080" onclick="showSynastry()">💞 Рассчитать синастрию</button>
+  <button class="b bm" onclick="togglePartnerRing()" title="Показать кольцо партнёра от 0° Овна — ляжет ровно на родное синастрическое">🔵 Кольцо</button><button class="b bm" onclick="toggleUranSync()" title="Сдвинуть кольцо: Уран партнёра на мой Уран. Второй тык — обратно на 0° Овна">🔗 Уран-синхрон</button><button class="b bg" style="border-left:3px solid #d08080" onclick="showSynastry()">💞 Рассчитать синастрию</button><a class="b" href="/prognoz" style="border-left:3px solid #f0c040;color:#f0c040;text-decoration:none;padding:3px 12px" title="Космограмма и двенадцать глав суток от бегущего асцендента">🔮 Прогноз на день</a>
 </div>
 <div id="geoP" style="display:none;padding:5px 12px;border-top:1px solid #4a2a3a;background:#160f1a"></div>
 </div>
@@ -571,11 +571,11 @@ window.onload=function(){
 </script>
 <div id="qver" style="position:fixed;right:6px;bottom:6px;z-index:99999;
   font:10px/1 monospace;color:#50c050;background:rgba(0,0,0,.7);padding:3px 6px;
-  border-radius:3px;pointer-events:none">v20 · QAPI</div>
+  border-radius:3px;pointer-events:none">v21 · QAPI</div>
 <script>
 (function(){
   var d=document.getElementById('qver');
-  if(d) d.textContent='v20 · '+(typeof QAPI!=='undefined'?QAPI.replace(/^https?:\/\//,''):'QAPI НЕТ!');
+  if(d) d.textContent='v21 · '+(typeof QAPI!=='undefined'?QAPI.replace(/^https?:\/\//,''):'QAPI НЕТ!');
 })();
 </script>
 </body>
