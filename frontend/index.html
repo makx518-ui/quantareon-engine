@@ -342,14 +342,14 @@ return true;}
 function fmtDMS(deg){var s=['♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓'];var si=Math.floor(deg/30)%12;var d=deg%30;var de=Math.floor(d);var mi=Math.floor((d-de)*60);var se=Math.floor(((d-de)*60-mi)*60);return s[si]+' '+de+'°'+(mi<10?'0':'')+mi+'\u2032'+(se<10?'0':'')+se+'\u2033'}
 var lastASCdeg=null;
 function buildASCsvg(asc){var RED='#e8202a';var _тА='<b>Асцендент бежит</b> \u00b7 '+тДМС(asc)+' \u00b7 <i>сейчас</i>';
-var Rin=0,Rout=242,Rtip=252;
+var Rin=0,Rout=210,Rtip=222;
 var pin=degToScreen(asc,Rin),pout=degToScreen(asc,Rout),pt=degToScreen(asc,Rtip);
 var dx=pt[0]-pout[0],dy=pt[1]-pout[1];var len=Math.hypot(dx,dy)||1;dx/=len;dy/=len;var nx=-dy,ny=dx;var aw=6,al=11;
 var bx=pt[0]-dx*al,by=pt[1]-dy*al;
 var svg='<g id="liveASC">';
 svg+='<line x1="'+pin[0].toFixed(1)+'" y1="'+pin[1].toFixed(1)+'" x2="'+pout[0].toFixed(1)+'" y2="'+pout[1].toFixed(1)+'" stroke="'+RED+'" stroke-width="2"/>';
 svg+='<polygon points="'+pt[0].toFixed(1)+','+pt[1].toFixed(1)+' '+(bx+nx*aw).toFixed(1)+','+(by+ny*aw).toFixed(1)+' '+(bx-nx*aw).toFixed(1)+','+(by-ny*aw).toFixed(1)+'" fill="'+RED+'"/>';
-var ps=degToScreen(asc,257);var tp=[ps[0],ps[1]-11];
+var ps=degToScreen(asc,232);var tp=[ps[0],ps[1]-11];
 svg+='<rect x="'+(tp[0]-52).toFixed(1)+'" y="'+(tp[1]-9).toFixed(1)+'" width="104" height="17" rx="3" fill="#000" opacity="0.7"/>';
 svg+='<text x="'+tp[0].toFixed(1)+'" y="'+tp[1].toFixed(1)+'" fill="'+RED+'" font-size="12" font-weight="bold" text-anchor="middle" dominant-baseline="middle">ASC '+fmtDMS(asc)+'</text>';
 svg+='</g>';return svg}
@@ -387,11 +387,11 @@ return((asc*180/Math.PI)%360+360)%360;
 }
 async function getASC(){return calcASClocal()}
 function updateASConly(asc){var wrap=document.getElementById('wh');if(!wrap)return;var svg=wrap.querySelector('svg');if(!svg)return;var tg=svg.querySelector('[transform*="translate(100"]')||svg;
-var RED='#e8202a';var Rin=0,Rout=242,Rtip=252;
+var RED='#e8202a';var Rin=0,Rout=210,Rtip=222;
 var pin=degToScreen(asc,Rin),pout=degToScreen(asc,Rout),pt=degToScreen(asc,Rtip);
 var dx=pt[0]-pout[0],dy=pt[1]-pout[1];var L=Math.hypot(dx,dy)||1;dx/=L;dy/=L;var nx=-dy,ny=dx;var aw=6,al=11;
 var bx=pt[0]-dx*al,by=pt[1]-dy*al;
-var ps=degToScreen(asc,257);var tp=[ps[0],ps[1]-11];
+var ps=degToScreen(asc,232);var tp=[ps[0],ps[1]-11];
 var NS='http://www.w3.org/2000/svg';
 var grp=svg.querySelector('#liveASC');
 if(!grp){
@@ -571,11 +571,11 @@ window.onload=function(){
 </script>
 <div id="qver" style="position:fixed;right:6px;bottom:6px;z-index:99999;
   font:10px/1 monospace;color:#50c050;background:rgba(0,0,0,.7);padding:3px 6px;
-  border-radius:3px;pointer-events:none">v18 · QAPI</div>
+  border-radius:3px;pointer-events:none">v20 · QAPI</div>
 <script>
 (function(){
   var d=document.getElementById('qver');
-  if(d) d.textContent='v18 · '+(typeof QAPI!=='undefined'?QAPI.replace(/^https?:\/\//,''):'QAPI НЕТ!');
+  if(d) d.textContent='v20 · '+(typeof QAPI!=='undefined'?QAPI.replace(/^https?:\/\//,''):'QAPI НЕТ!');
 })();
 </script>
 </body>
