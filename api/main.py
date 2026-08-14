@@ -1164,6 +1164,19 @@ class СеткаЗапрос(BaseModel):
     step: int = 2                                # шаг сетки в минутах
 
 
+def _проверить_вход(широта, долгота, gmt, год, имя):
+    """Границы, за которыми числа становятся бессмыслицей.
+    ⚠️ Без этой проверки движок принимал широту 200° и считал мусор (найдено ревизией)."""
+    if not (-90.0 <= широта <= 90.0):
+        raise HTTPException(status_code=400, detail=f"{имя}: широта {широта} вне -90..90")
+    if not (-180.0 <= долгота <= 180.0):
+        raise HTTPException(status_code=400, detail=f"{имя}: долгота {долгота} вне -180..180")
+    if not (-14.0 <= gmt <= 14.0):
+        raise HTTPException(status_code=400, detail=f"{имя}: смещение GMT {gmt} вне -14..14")
+    if not (1800 <= год <= 2200):
+        raise HTTPException(status_code=400, detail=f"{имя}: год {год} вне 1800..2200 (эфемериды)")
+
+
 @app.post("/day-grid")
 async def day_grid(req: СеткаЗапрос):
     """Весь круг суток одним ответом: страница потом крутит его без запросов.
@@ -1184,6 +1197,10 @@ async def day_grid(req: СеткаЗапрос):
     from engine.natal import calculate_natal
 
     try:
+        _проверить_вход(req.b_lat, req.b_lon, req.b_gmt, req.b_year, "рождение")
+        _проверить_вход(req.latitude, req.longitude, req.gmt, req.year, "день и место")
+        if not (0.0 <= req.anchor < 360.0):
+            raise HTTPException(status_code=400, detail=f"якорь {req.anchor} вне 0..360")
         # космограмма без времени: солнечный час, как в /day-cosmogram
         солн_час, разрыв = _солнечный_час(req.b_year, req.b_month, req.b_day,
                                           req.b_lat, req.b_lon, req.b_gmt)
@@ -1251,7 +1268,10 @@ async def day_grid(req: СеткаЗапрос):
                                if окно.get("есть") else {"нет": окно.get("почему", "")}),
             "солнечный_час": мест_рожд.strftime("%H:%M:%S"),
             "солнце_на_асценденте": разрыв <= ПОРОГ_СОЛНЕЧНОГО_ЧАСА,
+            "сборка": "d1",
         }
+    except HTTPException:
+        raise                      # понятные ошибки входа отдаём как есть (400)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
 
@@ -1284,6 +1304,9 @@ async def day_cosmogram(req: КосмограммаЗапрос):
     from datetime import timedelta as _td
 
     try:
+        _проверить_вход(req.latitude, req.longitude, req.gmt, req.year, "рождение")
+        if req.t_year is not None and req.t_lat is not None:
+            _проверить_вход(req.t_lat, req.t_lon, req.t_gmt, req.t_year, "день и место")
         точно, разрыв = _солнечный_час(req.year, req.month, req.day,
                                        req.latitude, req.longitude, req.gmt)
         солнце_на_асценденте = разрыв <= ПОРОГ_СОЛНЕЧНОГО_ЧАСА
@@ -1346,6 +1369,7 @@ async def day_cosmogram(req: КосмограммаЗапрос):
             "расхождение_ас_солнце_сек": round(разрыв * 3600, 1),
             "солнце_на_асценденте": солнце_на_асценденте,
             "двойная": двойная,
+            "сборка": "d1",
             "оговорка": ("Луна за сутки проходит 13° — без часа рождения её место приблизительно"
                          if солнце_на_асценденте else
                          "В этот день на этой широте Солнце не восходит — солнечного часа нет. "
