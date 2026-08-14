@@ -357,6 +357,14 @@ try{
   if(pm!==null)точки.push(['Mc',pm],['Ic',(pm+180)%360]);
   var NS='http://www.w3.org/2000/svg';var tg=svg.querySelector('[transform*="translate(100"]')||svg;
   var g=document.createElementNS(NS,'g');g.setAttribute('id','partnerAngles');tg.appendChild(g);
+  // Старые мелкие жёлтые угловые партнёра больше не нужны — их заменили белые.
+  // Партнёр в синастрии рисуется как внешнее кольцо (transit-planet-name),
+  // поэтому берём только угловые символы ВНУТРИ этих групп; планеты не трогаем.
+  var УГЛСИМ=['#Ascendant','#Descendant','#Medium_Coeli','#Imum_Coeli'];
+  svg.querySelectorAll('.transit-planet-name use').forEach(function(u){
+    var h=u.getAttribute('xlink:href')||u.getAttribute('href')||'';
+    if(УГЛСИМ.indexOf(h)>=0){var к=u.closest('.transit-planet-name');if(к)к.style.display='none';}});
+
   var БЕЛ='#ffffff';
   // сначала крест: сплошные белые линии из центра до края круга.
   // Толще и ярче границ знаков (те 0.7 при 0.35), чтобы крест читался отдельно.
@@ -437,11 +445,11 @@ window.onload=function(){
 </script>
 <div id="qver" style="position:fixed;right:6px;bottom:6px;z-index:99999;
   font:10px/1 monospace;color:#50c050;background:rgba(0,0,0,.7);padding:3px 6px;
-  border-radius:3px;pointer-events:none">v11 · QAPI</div>
+  border-radius:3px;pointer-events:none">v12 · QAPI</div>
 <script>
 (function(){
   var d=document.getElementById('qver');
-  if(d) d.textContent='v11 · '+(typeof QAPI!=='undefined'?QAPI.replace(/^https?:\/\//,''):'QAPI НЕТ!');
+  if(d) d.textContent='v12 · '+(typeof QAPI!=='undefined'?QAPI.replace(/^https?:\/\//,''):'QAPI НЕТ!');
 })();
 </script>
 </body>
