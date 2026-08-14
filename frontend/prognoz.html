@@ -77,7 +77,7 @@ white-space:nowrap;box-shadow:0 6px 22px rgba(0,0,0,.55)}
 #qtip i{color:#ff5a5a;font-style:normal}
 [data-tip]{cursor:help}
 
-/* ── старое нижнее хозяйство карты в прогнозе не нужно: его место занимает наше ── */
+/* прежние таблицы карты в прогнозе не нужны — их место занимает наше */
 #kt, #tl, #nd, #cd, #fc { display:none !important; }
 .data > .st { display:none !important; }
 </style>
@@ -140,7 +140,7 @@ white-space:nowrap;box-shadow:0 6px 22px rgba(0,0,0,.55)}
 
 <div class="irow" id="окноЧеловек">
   <span class="rlbl" style="color:#4da6d9">☉ ЧЕЛОВЕК</span>
-  <span style="color:#5a6080;font-size:10px">время рождения не нужно</span>
+  <span style="color:#5a6080;font-size:10px">космограмма · время рождения не нужно</span>
   <input id="имя" placeholder="Имя" style="width:92px">
   <input id="дата_р" placeholder="ДД.ММ.ГГГГ" style="width:86px" title="Дата рождения">
   <select id="страна_р" style="width:108px"></select>
@@ -171,25 +171,29 @@ white-space:nowrap;box-shadow:0 6px 22px rgba(0,0,0,.55)}
   <button class="b bg" style="border-left:3px solid #f0c040" onclick="рассчитатьДень()">🔮 Рассчитать день</button>
   <span id="подсказки_с" style="color:#5a6080;font-size:10px"></span>
 </div>
-<div class="irow" id="окноЯкорь" style="background:#1a1425">
+<div class="irow" id="окноКруг" style="background:#1a1425">
   <span style="color:#7078a0;font-size:11px">якорь круга:</span>
   <b id="якорь_гр" style="color:#e8202a">— не взят —</b>
   <span id="якорь_врем" style="color:#7078a0;font-size:11px"></span>
-  <span id="подпись_места" style="color:#5a6080;font-size:10px"></span>
   <span id="подпись_карты" style="color:#8a93b5;font-size:10px"></span>
+  <span id="подпись_места" style="color:#5a6080;font-size:10px"></span>
   <span id="оговорка" style="color:#5a6080;font-size:10px"></span>
   <span id="статус" style="color:#7fb0ff;font-size:11px;margin-left:auto"></span>
 </div>
 <div id="chartWrap" style="position:relative"><button id="fsBtn" onclick="toggleFS()" title="На весь экран (Esc — закрыть)">⛶</button><div id="qtip"></div><div class="chart" id="wh"><div style="color:#3a3d50;padding:60px;text-align:center">Загрузка...</div></div></div>
-<div class="tblk" id="kt" style="display:none"></div>
-
+<div class="tblk" id="kt"></div>
+<div class="data">
+  <div id="st" class="st">Нажми 🔮 Рассчитать</div>
+  <div id="tl"></div>
+  <div id="nd"></div>
+  <div id="cd"></div>
+</div>
+<div id="fc"></div>
 <div class="data" style="max-width:1500px">
   <div class="irow" id="карта_шкала" style="display:none;flex-wrap:wrap">
     <span class="rlbl" style="color:#f0c040">🕘 СУТКИ</span>
     <span id="шкала_подпись" style="color:#7078a0;font-size:10px"></span>
-    <span id="живой_ас" style="color:#e8202a;font-size:10px"></span>
     <span style="margin-left:auto;display:flex;gap:6px">
-      <button class="b" id="кнЖивьём" onclick="переключитьЖивьём()">⏱ живьём</button>
       <button class="b" onclick="крутить()">▶ крутить</button>
       <button class="b" onclick="кСейчас()">сейчас</button>
       <button class="b" onclick="паутина()">паутина</button></span>
@@ -208,13 +212,7 @@ white-space:nowrap;box-shadow:0 6px 22px rgba(0,0,0,.55)}
          color:#c8d0ec;max-height:520px;overflow:auto;margin:6px 0 0;width:100%"></pre>
   </div>
 </div>
-<div class="data">
-  <div id="st" class="st" style="display:none"></div>
-  <div id="tl" style="display:none"></div>
-  <div id="nd" style="display:none"></div>
-  <div id="cd" style="display:none"></div>
-</div>
-<div id="fc" style="display:none"></div>
+
 <script>
 var QAPI=(location.protocol==='file:'?'http://localhost:8000':location.origin),TH='dark-high-contrast',timerOn=true,ti=null,li=null,natal=null,mode='natal';
 function pInt(v){var n=parseInt(v,10);return isNaN(n)?null:n}
@@ -643,11 +641,11 @@ window.onload=function(){
 </script>
 <div id="qver" style="position:fixed;right:6px;bottom:6px;z-index:99999;
   font:10px/1 monospace;color:#50c050;background:rgba(0,0,0,.7);padding:3px 6px;
-  border-radius:3px;pointer-events:none">прогноз d2 · QAPI</div>
+  border-radius:3px;pointer-events:none">прогноз d3 · QAPI</div>
 <script>
 (function(){
   var d=document.getElementById('qver');
-  if(d) d.textContent='прогноз d2 · '+(typeof QAPI!=='undefined'?QAPI.replace(/^https?:\/\//,''):'QAPI НЕТ!');
+  if(d) d.textContent='прогноз d3 · '+(typeof QAPI!=='undefined'?QAPI.replace(/^https?:\/\//,''):'QAPI НЕТ!');
 })();
 </script>
 <script>
@@ -968,18 +966,14 @@ async function взятьСетку(){
       $("статус").innerHTML = `<span style="color:#e8202a">РАЗНЫЕ СБОРКИ: страница ${СБОРКА_СТРАНИЦЫ}, сервер ${window.сетка.сборка}`
         + ` — залей все файлы движка (api/main.py и папку engine)</span>`;
     }
-    лучиЗнаков();
+    спрятатьДома();
+    пятноВЦентре();
     дорисоватьТочки(window.сетка);
     собратьМестаТочек();
     медленныеВЦентре(window.сетка);
     показатьМинуту(0);
     рисоватьШкалу();
     показатьПолочку();
-    // день сегодняшний — пускаем живого сразу, как на карте
-    const сег = new Date();
-    const [дд,мм,гг] = ($("день").value||"").split(".").map(Number);
-    if (дд===сег.getDate() && мм===сег.getMonth()+1 && гг===сег.getFullYear() && !window.живьём)
-      переключитьЖивьём();
     const сбои = window.сетка.сбои || {};
     const имена = Object.keys(сбои);
     $("статус").innerHTML = `круг посчитан: ${window.сетка.главы.length} глав, ${window.сетка.узлы.length} узлов`
@@ -996,9 +990,9 @@ function показатьМинуту(мин){
   const шаг = с.шаг_минут || 2;
   const и = Math.max(0, Math.min(с.сетка.length-1, Math.round(мин/шаг)));
   window.минута = и*шаг;
-  веер(с.сетка[и].slice(1));
+  // ⚠️ ВЕЕР, СТРЕЛУ, ЛУЧИ ЗНАКОВ И ГРАДУСЫ РИСУЕТ САМА КАРТА — свои не рисуем,
+  // иначе выходит два веера и две буквы As с разными поворотами (так и было)
   вспышки(с.сетка[и].slice(1));
-  градусыТочек();
   двигатьПолзунок();
   рисоватьОчередь();
   const врем = времяМинуты(window.минута);
@@ -1100,7 +1094,10 @@ function собратьПолочку(){
   л.push(`круг: от градуса асцендента ${дмс(с.якорь)}, начало ${с.начало}, 24 часа`);
   л.push(`космограмма построена на солнечный час ${с.солнечный_час}`
         + (с.солнце_на_асценденте ? " (Солнце на асценденте)" : " (солнечного часа нет — местный полдень)"));
-  л.push("⚠️ Луна без часа рождения приблизительна: за сутки она проходит 13°");
+  // космограмма построена НА СОЛНЕЧНЫЙ ЧАС — значит и Луна стоит там, где стояла
+  // в этот момент. Это её законное место в этой карте, а не приближение
+  const лн = (с.точки && с.точки["натальный Луна"] !== undefined) ? с.точки["натальный Луна"] : null;
+  if (лн !== null) л.push(`Луна космограммы: ${дмс(лн)} — на солнечный час ${с.солнечный_час}`);
 
   const кж = с.колесо_жизни;
   л.push("", "╔══ КОЛЕСО ЖИЗНИ — стержень ══");
@@ -1197,25 +1194,8 @@ function сохранитьПолочку(){
 }
 
 // ── живой режим: асцендент бежит сам, веер и вспышки идут за реальной минутой ──
-window.живьём = false; window.живаяМинута = null;
-function переключитьЖивьём(){
-  window.живьём = !window.живьём;
-  const к = $("кнЖивьём");
-  к.textContent = window.живьём ? "⏱ живьём идёт" : "⏱ живьём";
-  к.style.color = window.живьём ? "#e8202a" : "";
-  if (window.живьём){
-    if (window.бег){ clearInterval(window.бег); window.бег = null; }
-    кСейчас();
-    пуститьЖивого();
-    // раз в минуту подтягиваем веер и вспышки к настоящему времени
-    window.живаяМинута = setInterval(()=>{ if (window.живьём) кСейчас(); }, 60000);
-    $("статус").textContent = "живой режим: асцендент бежит сам, веер обновляется каждую минуту";
-  } else {
-    остановитьЖивого();
-    if (window.живаяМинута){ clearInterval(window.живаяМинута); window.живаяМинута = null; }
-    $("статус").textContent = "живой режим выключен";
-  }
-}
+window.живаяМинута = null;
+
 
 function кСейчас(){
   const с = window.сетка; if (!с) return;
@@ -1229,7 +1209,6 @@ function кСейчас(){
 
 // ── кручение суток красной точкой в центре ──
 function крутить(){
-  if (window.живьём) переключитьЖивьём();       // перемотка и живой режим не спорят
   if (window.бег){ clearInterval(window.бег); window.бег=null;
     $("статус").textContent = "остановлено на " + времяМинуты(window.минута); return; }
   if (!window.сетка){ $("статус").textContent = "сперва рассчитай день"; return; }
@@ -1245,9 +1224,12 @@ const ЦЕНТР = 240, R_ПЯТНО = 80, R_КОСМО = 168, R_ДОМА = 222,
 const NS = "http://www.w3.org/2000/svg";
 const ЗН_Р = ['Овна','Тельца','Близнецов','Рака','Льва','Девы','Весов','Скорпиона','Стрельца','Козерога','Водолея','Рыб'];
 
+// ⚠️ ЕДИНЫЙ ОТСЧЁТ КАРТЫ: все наши слои считаются ЕЁ функцией degToScreen.
+// Своей геометрии тут быть не должно — из-за неё и появлялся второй асцендент.
 function наЭкран(градус, R){
-  const у = (180 + (градус - (window.поворотКолеса||0))) % 360, р = у * Math.PI/180;
-  return [ЦЕНТР + R*Math.cos(р), ЦЕНТР - R*Math.sin(р)];
+  if (typeof degToScreen === "function") return degToScreen(градус, R);
+  const у = (180 + градус) % 360, р = у * Math.PI/180;
+  return [240 + R*Math.cos(р), 240 - R*Math.sin(р)];
 }
 function слой(имя){
   const свг = document.getElementById("wh").querySelector("svg"); if (!свг) return null;
@@ -1362,34 +1344,10 @@ function дорисоватьТочки(данные){
 }
 
 // ── белые лучи знаков: статика белая, живое красное (правило с карты) ──
-function лучиЗнаков(){
-  const г = слой("лучиЗнаков"); if (!г) return;
-  for (let з=0; з<12; з++){
-    const о = наЭкран(з*30, R_ПЯТНО), к = наЭкран(з*30, R_КРАЙ-2);
-    г.appendChild(эл("line",{x1:о[0].toFixed(1), y1:о[1].toFixed(1),
-      x2:к[0].toFixed(1), y2:к[1].toFixed(1),
-      stroke:"#ffffff", "stroke-width":"0.7", opacity:"0.3"}));
-  }
-}
+
 
 // ── градусные подписи точек (приём с карты: дд°мм′ у значка) ──
-function градусыТочек(){
-  const г = слой("градусы"); if (!г) return;
-  const с = window.сетка; if (!с || !с.точки) return;
-  const кор = гр => { const в=((гр%360)+360)%360%30; const d=Math.floor(в), m=Math.round((в-d)*60);
-                      return `${m===60?d+1:d}°${String(m===60?0:m).padStart(2,'0')}′`; };
-  for (const ключ in с.точки){
-    const транз = ключ.startsWith("транзитный");
-    const гр = живойГрадус(ключ);
-    const место = транз ? наЭкран(гр, 215) : (window.местаТочек[ключ] || наЭкран(гр, 150));
-    const п = транз ? место : [место[0], место[1]+11];
-    г.appendChild(эл("text",{x:п[0].toFixed(1), y:п[1].toFixed(1),
-      fill: транз? "#e8a0a4" : "#c8b070", "font-size":"6.5",
-      stroke:"#0a0c16", "stroke-width":"1.8", "paint-order":"stroke",
-      "text-anchor":"middle", "dominant-baseline":"middle",
-      "data-tip":`<b>${ключ}</b> · ${дмс(гр)} · ${домТочки(гр)} дом сейчас`}, кор(гр)));
-  }
-}
+
 
 // живой градус точки: быстрые едут, остальные стоят
 function живойГрадус(ключ){
@@ -1512,112 +1470,24 @@ function дугаКольца(градус, Rвнутр, Rвнешн, ширин
 function дугаМеж(а,б){ const d=Math.abs((а-б)%360); return Math.min(d,360-d); }
 
 // ── живой веер домов от бегущего асцендента ──
-function веер(куспиды){
-  const г = слой("веер"); if (!г || !куспиды) return;
-  const КР = "#e8202a";
-  const БУКВЫ = {0:"As", 3:"Ic", 6:"Ds", 9:"Mc"};
-  for (let h=0; h<12; h++){
-    const угловой = (h%3===0);
-    const к = наЭкран(куспиды[h], R_ДОМА);
-    const от = наЭкран(куспиды[h], R_КОСМО);
-    г.appendChild(эл("line",{x1:от[0].toFixed(1), y1:от[1].toFixed(1), x2:к[0].toFixed(1), y2:к[1].toFixed(1),
-      stroke:КР, "stroke-width": угловой? "1.5":"1", opacity: угловой? "0.95":"0.75",
-      "data-tip":`<b>${угловой? (БУКВЫ[h]==="As"?"Асцендент":BУКВЫ_ИМЯ(h)) : "Куспид "+(h+1)+" дома"}</b> · ${дмс(куспиды[h])}`}));
-    // номер дома в свободной полосе
-    const сер = серединаДома(куспиды, h);
-    const н = наЭкран(сер, 178);
-    г.appendChild(эл("text",{x:н[0].toFixed(1), y:н[1].toFixed(1), fill:КР, "font-size":"12",
-      "font-weight":"700", stroke:"#0a0c16", "stroke-width":"3", "paint-order":"stroke",
-      "text-anchor":"middle", "dominant-baseline":"middle",
-      "data-tip":`<b>${h+1} дом сейчас</b>`}, String(h+1)));
-    if (БУКВЫ[h]){
-      const б = наЭкран(куспиды[h], 232);
-      г.appendChild(эл("text",{x:б[0].toFixed(1), y:б[1].toFixed(1), fill:КР, "font-size":"15",
-        "font-weight":"700", stroke:"#0a0c16", "stroke-width":"3", "paint-order":"stroke",
-        "text-anchor":"middle", "dominant-baseline":"middle",
-        "data-tip":`<b>${BУКВЫ_ИМЯ(h)}</b> · ${дмс(куспиды[h])}`}, БУКВЫ[h]));
-    }
-  }
-  стрелаАС(г, куспиды[0]);
-}
+
 // ═══ ЖИВОЙ АСЦЕНДЕНТ — покадрово, как на карте Астро-Фрактала ═══
 // Считается прямо в браузере (без сервера), потому идёт плавно, а не рывками.
-function асцСейчас(){
-  const la = parseFloat($("шир_с").value), lo = parseFloat($("долг_с").value);
-  if (isNaN(la) || isNaN(lo)) return null;
-  const д = new Date();
-  let Y = д.getUTCFullYear(), M = д.getUTCMonth()+1;
-  const D = д.getUTCDate();
-  const hh = д.getUTCHours() + д.getUTCMinutes()/60 + д.getUTCSeconds()/3600 + д.getUTCMilliseconds()/3600000;
-  if (M <= 2){ Y -= 1; M += 12; }
-  const A = Math.floor(Y/100), B = 2 - A + Math.floor(A/4);
-  const JD = Math.floor(365.25*(Y+4716)) + Math.floor(30.6001*(M+1)) + D + hh/24 + B - 1524.5;
-  const T = (JD - 2451545.0)/36525.0;
-  const eps0 = 23.43929111 - (46.8150*T + 0.00059*T*T - 0.001813*T*T*T)/3600;
-  const Om = 125.04452 - 1934.136261*T, Ls = 280.4665 + 36000.7698*T, Lm = 218.3165 + 481267.8813*T;
-  const OmR = Om*Math.PI/180, LsR = Ls*Math.PI/180, LmR = Lm*Math.PI/180;
-  const dPsi = (-17.20*Math.sin(OmR) - 1.32*Math.sin(2*LsR) - 0.23*Math.sin(2*LmR) + 0.21*Math.sin(2*OmR))/3600;
-  const dEps = (9.20*Math.cos(OmR) + 0.57*Math.cos(2*LsR) + 0.10*Math.cos(2*LmR) - 0.09*Math.cos(2*OmR))/3600;
-  const eps = (eps0 + dEps)*Math.PI/180;
-  let GMST = 280.46061837 + 360.98564736629*(JD - 2451545.0) + 0.000387933*T*T - T*T*T/38710000.0;
-  let GAST = GMST + dPsi*Math.cos(eps);
-  GAST = ((GAST % 360) + 360) % 360;
-  const LST = ((GAST + lo) % 360 + 360) % 360, ramc = LST*Math.PI/180, lat = la*Math.PI/180;
-  const asc = Math.atan2(Math.cos(ramc), -(Math.sin(ramc)*Math.cos(eps) + Math.tan(lat)*Math.sin(eps)));
-  return ((asc*180/Math.PI) % 360 + 360) % 360;
-}
+
 
 // перерисовываем ТОЛЬКО стрелу — веер и вспышки живут по своей минуте
-function обновитьСтрелу(градус){
-  const свг = document.getElementById("wh").querySelector("svg"); if (!свг) return;
-  let г = свг.querySelector("#живойАС");
-  if (г) г.remove();
-  const цель = свг.querySelector('[transform*="translate(100"]') || свг;
-  г = document.createElementNS(NS,"g"); г.setAttribute("id","живойАС"); цель.appendChild(г);
-  стрелаАС(г, градус);
-  const п = $("живой_ас");
-  if (п) п.textContent = "асцендент сейчас: " + дмс(градус);
-}
+
 
 window.живойБег = null;
-function пуститьЖивого(){
-  if (window.живойБег) cancelAnimationFrame(window.живойБег);
-  (function шаг(){
-    const а = асцСейчас();
-    if (а != null && window.живьём) обновитьСтрелу(а);
-    window.живойБег = requestAnimationFrame(шаг);
-  })();
-}
-function остановитьЖивого(){
-  if (window.живойБег){ cancelAnimationFrame(window.живойБег); window.живойБег = null; }
-  const г = document.getElementById("wh").querySelector("#живойАС"); if (г) г.remove();
-}
+
+
 
 // ── стрела бегущего асцендента: как на карте, только от края пятна
 //    (в центре живут медленные и кнопка кручения — стрела бы их перечеркнула) ──
-function стрелаАС(г, градус){
-  const КР = "#e8202a", Rот = R_ПЯТНО + 4, Rдо = 208, Rострие = 220;
-  const о = наЭкран(градус, Rот), к = наЭкран(градус, Rдо), т = наЭкран(градус, Rострие);
-  г.appendChild(эл("line",{x1:о[0].toFixed(1), y1:о[1].toFixed(1),
-                           x2:к[0].toFixed(1), y2:к[1].toFixed(1),
-                           stroke:КР, "stroke-width":"2.2",
-                           "data-tip":`<b>Асцендент бежит</b> · ${дмс(градус)}`}));
-  // наконечник
-  let dx = т[0]-к[0], dy = т[1]-к[1];
-  const L = Math.hypot(dx,dy) || 1; dx/=L; dy/=L;
-  const nx = -dy, ny = dx, ш = 5.5, дл = 11;
-  const bx = т[0]-dx*дл, by = т[1]-dy*дл;
-  г.appendChild(эл("polygon",{points:
-    `${т[0].toFixed(1)},${т[1].toFixed(1)} ${(bx+nx*ш).toFixed(1)},${(by+ny*ш).toFixed(1)} `+
-    `${(bx-nx*ш).toFixed(1)},${(by-ny*ш).toFixed(1)}`, fill:КР,
-    "data-tip":`<b>Асцендент бежит</b> · ${дмс(градус)}`}));
-}
 
-function BУКВЫ_ИМЯ(h){ return {0:"Асцендент",3:"IC — Глубина неба",6:"Десцендент",9:"MC — Середина неба"}[h]||""; }
-function серединаДома(к, h){
-  const a=к[h], b=к[(h+1)%12]; const ширина=((b-a)%360+360)%360;
-  return (a + ширина/2) % 360;
-}
+
+
+
 
 // ── прячем домовое: дома рождения нам не нужны, они тут солнечные ──
 function спрятатьДома(){
@@ -1660,35 +1530,47 @@ function дмс(г){
 async function рассчитатьДень(){
   const ч = ($("дата_р").value||"").split(".").map(Number);
   if (!годна(ч)){ $("статус").textContent = "впиши дату рождения"; return; }
+  const шр = parseFloat($("шир_р").value), др = parseFloat($("долг_р").value);
+  if (isNaN(шр)||isNaN(др)){ $("статус").textContent = "нет координат рождения"; return; }
+  const gmtР = parseFloat(($("gmt_р").value||"0").replace(",", ".")) || 0;
+
+  // 1. якорь — градус асцендента на секунду вопроса
   $("статус").textContent = "беру якорь…";
   try{
     const ш = parseFloat($("шир_с").value), д = parseFloat($("долг_с").value);
-    const r = await fetch(`/transit?latitude=${ш}&longitude=${д}`);
-    const t = await r.json();
+    const t = await (await fetch(`/transit?latitude=${ш}&longitude=${д}`)).json();
     if (t && t.angles){ window.якорьГрадус = t.angles.ASC;
       $("якорь_гр").textContent = дмс(t.angles.ASC);
       $("якорь_врем").textContent = "· взят " + new Date().toLocaleString("ru-RU"); }
   }catch(e){}
-  подставитьМестоВКарту();
-  await построитьКосмограмму();     // космограмма по солнечному часу + двойное кольцо
-  await взятьСетку();               // круг, главы, узлы, медленные, полочка
-  подставитьЧеловекаВКарту(window.сетка ? window.сетка.солнечный_час : null);
-}
 
-// ═══ ПРИ ОТКРЫТИИ — СРАЗУ ЖИВОЕ КОЛЕСО, как хорар ═══
-// Карта это умеет сама: showHorar() строит круг на текущий момент от места
-// «Я сейчас» и ведёт его живьём. Мы лишь подставляем наше место и зовём её.
-window.addEventListener("load", ()=>{
-  setTimeout(async ()=>{
-    подставитьМестоВКарту();
-    try{
-      if (typeof showHorar === "function"){
-        await showHorar();
-        $("статус").textContent = "живое колесо от текущего момента · вбей данные и нажми «Рассчитать день»";
-      }
-    }catch(e){ $("статус").textContent = "колесо: " + e.message; }
-  }, 800);
-});
+  // 2. солнечный час — момент, когда асцендент равен Солнцу
+  $("статус").textContent = "ищу солнечный час…";
+  let сч = null;
+  try{
+    const r = await fetch(`/solar-hour?year=${ч[2]}&month=${ч[1]}&day=${ч[0]}&lat=${шр}&lon=${др}&gmt=${gmtР}`);
+    if (!r.ok){ $("статус").innerHTML = `<span style="color:#e8202a">солнечный час: ${await разобратьОшибку(r)}</span>`; return; }
+    сч = await r.json();
+    window.поворотКолеса = сч.солнце;
+    $("подпись_карты").textContent = сч.солнце_на_асценденте
+      ? `Солнце на асценденте · солнечный час ${сч.час}` : `солнечного часа нет — местный полдень`;
+    $("оговорка").textContent = сч.оговорка;
+  }catch(e){ $("статус").textContent = "солнечный час: " + e.message; return; }
+
+  // 3. КОЛЕСО СТРОИТ САМА КАРТА — её же расчётом, по нашим данным.
+  //    Тогда веер, буквы углов, градусы и живой асцендент у неё правильные.
+  подставитьМестоВКарту();
+  подставитьЧеловекаВКарту(сч.час);
+  $("статус").textContent = "строю колесо…";
+  try{
+    if (typeof showNatal === "function") await showNatal(true);
+  }catch(e){ $("статус").textContent = "колесо: " + e.message; return; }
+
+  // 4. наши слои поверх её колеса + круг суток
+  спрятатьДома();
+  пятноВЦентре();
+  await взятьСетку();
+}
 
 // наши поля → скрытые поля карты, по которым она считает
 function подставитьМестоВКарту(){
@@ -1706,6 +1588,107 @@ function подставитьЧеловекаВКарту(солнечныйЧа
                 ["tz", ($("gmt_р").value||"").replace("+","")], ["nm", $("имя").value]];
   пары.forEach(([id, з])=>{ const э = document.getElementById(id); if (э && з) э.value = з; });
 }
+
+
+
+// ═══════════ СВЯЗКА С КАРТОЙ ═══════════
+// Карта строит колесо сама и обновляет его своим циклом. Мы НИЧЕГО не подменяем:
+// подставляем ей наши данные, а после каждой её перерисовки кладём свои слои.
+
+// 1. Наши поля → её скрытые поля
+function подставитьМестоВКарту(){
+  [["шир_с","tlat"],["долг_с","tlon"],["gmt_с","tgmt"]].forEach(([наше,её])=>{
+    const и = document.getElementById(её), м = document.getElementById(наше);
+    if (и && м && м.value) и.value = м.value;
+  });
+  const г = document.getElementById("город_с"), гк = document.getElementById("tcity");
+  if (г && гк && г.selectedOptions && г.selectedOptions.length) гк.value = г.selectedOptions[0].textContent;
+}
+function подставитьЧеловекаВКарту(солнечныйЧас){
+  [["dt", $("дата_р").value], ["tm", солнечныйЧас || "12:00:00"],
+   ["la", $("шир_р").value], ["lo", $("долг_р").value],
+   ["tz", ($("gmt_р").value||"").replace("+","")], ["nm", $("имя").value]]
+  .forEach(([id,з])=>{ const э = document.getElementById(id); if (э && з) э.value = з; });
+}
+
+// 2. Наши слои поверх её колеса — вызываются ПОСЛЕ каждой её перерисовки
+function нашиСлои(){
+  if (!window.сетка) return;
+  const свг = document.getElementById("wh") && document.getElementById("wh").querySelector("svg");
+  if (!свг) return;
+  спрятатьДома();          // солнечные дома космограммы не показываем
+  пятноВЦентре();          // чистая середина
+  медленныеВЦентре(window.сетка);   // дирекции, прогрессии и их струны
+  дорисоватьТочки(window.сетка);    // Колесо жизни (Селену карта рисует сама)
+  собратьМестаТочек();
+  вспышки(текущиеКуспиды());
+}
+function текущиеКуспиды(){
+  const с = window.сетка; if (!с) return [];
+  const и = Math.max(0, Math.min(с.сетка.length-1, Math.round((window.минута||0)/(с.шаг_минут||2))));
+  return с.сетка[и].slice(1);
+}
+
+// 3. Оборачиваем ЕЁ setWheel: она нарисовала — мы следом. Ничего не спорит,
+//    и при её минутном обновлении слои возвращаются сами.
+(function цепляемся(){
+  if (typeof setWheel !== "function"){ setTimeout(цепляемся, 300); return; }
+  const её = setWheel;
+  window.setWheel = function(svgT, live){
+    const итог = её.apply(this, arguments);
+    setTimeout(нашиСлои, 0);
+    return итог;
+  };
+})();
+
+// 4. Кнопка: якорь → солнечный час → её расчёт колеса → круг суток
+async function рассчитатьДень(){
+  const ч = ($("дата_р").value||"").split(".").map(Number);
+  if (!годна(ч)){ $("статус").textContent = "впиши дату рождения"; return; }
+  const шр = parseFloat($("шир_р").value), др = parseFloat($("долг_р").value);
+  if (isNaN(шр)||isNaN(др)){ $("статус").textContent = "нет координат рождения"; return; }
+  const gmtР = parseFloat(($("gmt_р").value||"0").replace(",",".")) || 0;
+
+  $("статус").textContent = "беру якорь…";
+  try{
+    const ш = parseFloat($("шир_с").value), д = parseFloat($("долг_с").value);
+    const t = await (await fetch(`/transit?latitude=${ш}&longitude=${д}`)).json();
+    if (t && t.angles){ window.якорьГрадус = t.angles.ASC;
+      $("якорь_гр").textContent = дмс(t.angles.ASC);
+      $("якорь_врем").textContent = "· взят " + new Date().toLocaleString("ru-RU"); }
+  }catch(e){}
+
+  $("статус").textContent = "ищу солнечный час…";
+  let сч = null;
+  try{
+    const r = await fetch(`/solar-hour?year=${ч[2]}&month=${ч[1]}&day=${ч[0]}&lat=${шр}&lon=${др}&gmt=${gmtР}`);
+    if (!r.ok){ $("статус").innerHTML = `<span style="color:#e8202a">солнечный час: ${await разобратьОшибку(r)}</span>`; return; }
+    сч = await r.json();
+    $("подпись_карты").textContent = сч.солнце_на_асценденте
+      ? `космограмма · Солнце на асценденте · солнечный час ${сч.час}`
+      : `космограмма · солнечного часа нет — местный полдень`;
+    if (сч.оговорка) $("оговорка").textContent = сч.оговорка;
+  }catch(e){ $("статус").textContent = "солнечный час: " + e.message; return; }
+
+  // КОЛЕСО СТРОИТ САМА КАРТА по нашим данным: космограмма + транзитное кольцо
+  подставитьМестоВКарту();
+  подставитьЧеловекаВКарту(сч.час);
+  $("статус").textContent = "строю колесо…";
+  try{ if (typeof showNatal === "function") await showNatal(true); }
+  catch(e){ $("статус").textContent = "колесо: " + e.message; return; }
+
+  await взятьСетку();     // круг суток: главы, узлы, медленные, полочка
+  нашиСлои();
+}
+
+// 5. При открытии — живой хорар, как на карте
+window.addEventListener("load", ()=>{
+  setTimeout(()=>{
+    подставитьМестоВКарту();
+    try{ if (typeof showHorar === "function") showHorar(); }catch(e){}
+    $("статус").textContent = "живое колесо · вбей данные и нажми «Рассчитать день»";
+  }, 900);
+});
 
 </script>
 </body>
