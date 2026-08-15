@@ -2465,7 +2465,7 @@ async def voice_health():
         "ok": True,
         # 🏷 МЕТКА СБОРКИ. 16.08: спорили вслепую, какой файл стоит на сервере.
         # Теперь видно одним запросом. Меняя voice.py — меняй и метку.
-        "сборка": "2026-08-16 погода-целыми",
+        "сборка": "2026-08-16 запятая-в-числах",
         "llm": current_model(),
         "stt": "Deepgram Nova-3",
         "tts_ru": f"{config.TTS_VOICE} @ {config.TTS_RATE}",
@@ -3238,7 +3238,12 @@ class VoiceSessionTurbo:
                 text_chunk_tts = text_chunk_tts.strip()
                 # 🔊 Убираем паузы только в первом чанке (быстрый старт речи)
                 if chunk_count == 0:
-                    text_chunk_tts = re.sub(r'[,;:\-—–]', '', text_chunk_tts)
+                    # ⚠️ 16.08 НЕ ТРОГАЕМ ЗАПЯТУЮ МЕЖДУ ЦИФРАМИ.
+                    # Раньше стиралось всё подряд, и «12,4 °C» превращалось
+                    # в «124 °C» ЕЩЁ ДО правила про градусы — голос читал
+                    # «сто двадцать четыре градуса». Погода всегда короткая,
+                    # то есть всегда первый кусок, поэтому ломалось каждый раз.
+                    text_chunk_tts = re.sub(r'(?<!\d)[,;:\-—–]|[,;:\-—–](?!\d)', '', text_chunk_tts)
                     text_chunk_tts = text_chunk_tts.strip()
                 if not text_chunk_tts:
                     continue
