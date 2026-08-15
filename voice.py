@@ -112,7 +112,12 @@ class Config:
     # пересборки на Render выбор слетал на неё: память о переключении
     # живёт в файле, а файл при новой сборке создаётся заново.
     # Теперь по умолчанию умная, а кнопкой можно временно взять быструю.
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "openai/gpt-oss-120b")
+    # 💰 ПО УМОЛЧАНИЮ — БЫСТРАЯ И ДЕШЁВАЯ. Его решение 15.08: «надо чтобы
+    # наоборот, быстрая модель возвращалась, потому что дорого».
+    # Кнопка «умная» в окне переключает поверх и переживает перезапуск
+    # (файл /tmp/quantareon_voice_model.txt), но при пересборке файл
+    # стирается — и раньше возвращалась дорогая 120b.
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "openai/gpt-oss-20b")
     LLM_TEMPERATURE: float = 0.7
     # ПОТОЛОК, а не длина: модель останавливается сама, когда сказала своё.
     # 512 не хватало — рассуждения съедали его целиком, и ответ был пустым.
@@ -2479,6 +2484,12 @@ class VoiceSessionTurbo:
         self.is_speaking = False
         self.barge_in_requested = False
         self.first_message = True
+        # 🔊 счёт реального звучания ответа (см. audio_done / _ответ_кончился)
+        self._звук_пошёл = None
+        self._звук_секунд = 0.0
+        self._ответ_кончился = 0.0
+        self._голос_оборван = False
+        self._опознан_точно = False
         
         self.lang: str = "ru"          # 🌐 язык страницы, с которой пришли
         self._last_topic = None        # 📚 раздел сайта, о котором сейчас речь
@@ -2713,6 +2724,16 @@ class VoiceSessionTurbo:
     # вопрос, и склеивать его со старым нельзя.
     ХВОСТ_ПОСЛЕ_ОТВЕТА = 3.5
 
+    # 🧩 ТОТ ЖЕ ХВОСТ, НО КОГДА ГОЛОС ОБОРВАЛИ, А НЕ ДОСЛУШАЛИ.
+    # Обрыв означает, что человек заговорил ПОВЕРХ речи помощника — то есть
+    # он ДОГОВАРИВАЕТ мысль, а не задаёт новое. Здесь можно быть щедрее.
+    # Замер 15.08 на стенде (паузы 2.5 с): от метки «доиграл» до следующей
+    # части приходило 2.90 и 3.36 с — при 3.5 второй случай проходил впритык,
+    # с запасом в 0.14 с. При 5.0 запас становится 1.6 с.
+    # ⚠️ Когда голос ДОИГРАЛ сам, остаётся прежние 3.5: человек его выслушал,
+    # и следующая фраза — скорее новый вопрос, склеивать её нельзя.
+    ХВОСТ_ПОСЛЕ_ОБРЫВА = 5.0
+
     # 🤫 ПРИДЕРЖКА ОТВЕТА (шаг 2 склейки, его слова 12.08: «чтобы выслушала
     # длинную мысль до конца, склеила и полностью отдала — потом ответ»).
     # Фраза БЕЗ знака конца (Deepgram сам ставит . ! ? на законченных и
@@ -2721,8 +2742,8 @@ class VoiceSessionTurbo:
     # время (или пока в буфере копится продолжение — до ПОТОЛКА) человек
     # договорил — придержанный ответ выбрасывается В ТИШИНЕ, и звучит один
     # ответ на мысль целиком. На законченных фразах цена — ноль.
-    ПРИДЕРЖКА_ОТВЕТА = 1.5
-    ПРИДЕРЖКА_ЗАКОНЧЕННОЙ = 1.2  # 13.08: его манера — ЗАКОНЧЕННЫЕ предложения с
+    ПРИДЕРЖКА_ОТВЕТА = 0.7
+    ПРИДЕРЖКА_ЗАКОНЧЕННОЙ = 0.4  # 13.08: его манера — ЗАКОНЧЕННЫЕ предложения с
                                  # паузами («…держишь текст. [пауза] Потом проверим…»);
                                  # точка Deepgram ≠ конец мысли. Держим и после точки,
                                  # но короче. 0 = вернуть мгновенный ответ как раньше
@@ -2903,12 +2924,19 @@ class VoiceSessionTurbo:
         # ⤷ ответ смолк давно         → человек его ВЫСЛУШАЛ, это новый вопрос
         _прошло_с_реплики = time.time() - getattr(self, "_взяли_в_работу", 0)
         _после_ответа = time.time() - getattr(self, "_ответ_кончился", 0)
+        # 🧩 ОКНО СКЛЕЙКИ. Раньше стояло жёсткое ОКНО_СКЛЕЙКИ от начала
+        # реплики — на длинном ответе оно истекало прямо посреди речи
+        # (замер 15.08: ответ на 135 с звука, окно 7 с). Теперь окно живёт
+        # столько, сколько длится сам ответ, плюс тот же запас.
+        _окно = self.ОКНО_СКЛЕЙКИ + max(0.0, getattr(self, "_звук_секунд", 0.0))
         _можно_склеить = (
             bool(getattr(self, "_последняя_реплика", ""))
-            and _прошло_с_реплики <= self.ОКНО_СКЛЕЙКИ
+            and _прошло_с_реплики <= _окно
             and (self.is_processing
                  or getattr(self, "_передаём_ход", False)
-                 or _после_ответа <= self.ХВОСТ_ПОСЛЕ_ОТВЕТА)
+                 or _после_ответа <= (self.ХВОСТ_ПОСЛЕ_ОБРЫВА
+                                      if getattr(self, "_голос_оборван", False)
+                                      else self.ХВОСТ_ПОСЛЕ_ОТВЕТА))
         )
 
         if self.is_processing and not _можно_склеить:
@@ -3120,7 +3148,12 @@ class VoiceSessionTurbo:
                 except Exception:
                     pass
             
-            await self._send_json({"type": "audio_start"})
+            # 🔊 новый ответ — счётчики звучания с нуля, номер наружу,
+            # чтобы метка «доиграл» от ПРОШЛОГО ответа не сбила этот
+            self._звук_пошёл = None
+            self._звук_секунд = 0.0
+            self._ответ_кончился = 0.0
+            await self._send_json({"type": "audio_start", "номер": мой_номер})
             self.is_speaking = True
             
             start_time = time.time()
@@ -3150,6 +3183,9 @@ class VoiceSessionTurbo:
                     logger.info(f"[{self.session_id}] ⚡ INSTANT Filler: {latency:.3f}s ({len(self.cached_filler_audio)} bytes)")
                     
                     await self.websocket.send_bytes(self.cached_filler_audio)
+                    if self._звук_пошёл is None:
+                        self._звук_пошёл = time.time()
+                    self._звук_секунд += len(self.cached_filler_audio) * 8 / 48000
 
                     # ⚠️ ЗНАЧОК ЗДЕСЬ НЕ ГАСИМ. Филлер — присказка про дату,
                     # она звучит СРАЗУ, ещё до поиска. Если погасить на ней,
@@ -3252,7 +3288,14 @@ class VoiceSessionTurbo:
                     
                     if not self.barge_in_requested and _я_актуален():
                         await self.websocket.send_bytes(audio_bytes)
-                
+                        # 🔊 СЧЁТ РЕАЛЬНОГО ЗВУЧАНИЯ. Сервер отдаёт звук в разы
+                        # быстрее, чем он играет (замер 15.08: 11.8 с звука за
+                        # 1.76 с). Копим длительность, чтобы знать, когда голос
+                        # СМОЛКНЕТ, а не когда мы дослали последний байт.
+                        if self._звук_пошёл is None:
+                            self._звук_пошёл = time.time()
+                        self._звук_секунд += len(audio_bytes) * 8 / 48000
+
                 # ⚡ СНАЧАЛА текст на экран (мгновенно, не ждёт озвучку)
                 if not self.barge_in_requested and _я_актуален():
                     сказано.append(text_chunk)
@@ -3272,6 +3315,9 @@ class VoiceSessionTurbo:
                 async def send_audio_fallback(audio_bytes):
                     if not self.barge_in_requested and _я_актуален():
                         await self.websocket.send_bytes(audio_bytes)
+                        if self._звук_пошёл is None:
+                            self._звук_пошёл = time.time()
+                        self._звук_секунд += len(audio_bytes) * 8 / 48000
 
                 сказано.append(запасная)
                 await self._send_json({"type": "response_text", "content": запасная})
@@ -3344,10 +3390,20 @@ class VoiceSessionTurbo:
                 # кончился. Устаревший конвейер молчит: сигнал конца и флаги —
                 # забота его преемника.
                 try:
-                    await self._send_json({"type": "audio_end"})
+                    await self._send_json({"type": "audio_end", "номер": мой_номер})
                 except Exception:
                     pass
-                self._ответ_кончился = time.time()   # 🧩 для склейки
+                # 🧩 КОНЕЦ ОТВЕТА ДЛЯ СКЛЕЙКИ — КОГДА ГОЛОС СМОЛКНЕТ.
+                # Раньше стояло time.time() — миг отправки последнего байта.
+                # Замер 15.08 в настоящем браузере: audio_end на 20.77 с,
+                # а голос играл до 29.89 — окно склейки закрывалось на девять
+                # секунд раньше времени, и реплика человека терялась.
+                # Считаем расчётом; точную отметку пришлёт браузер (audio_done).
+                if self._звук_пошёл is not None:
+                    self._ответ_кончился = self._звук_пошёл + self._звук_секунд
+                else:
+                    self._ответ_кончился = time.time()
+                self._голос_оборван = False
                 self.is_processing = False
                 self.is_speaking = False
                 self._processing_since = 0
@@ -3598,22 +3654,55 @@ async def websocket_voice(websocket: WebSocket):
     key_query = websocket.query_params.get("key", "")
     if _admin_secret_ws and key_query == _admin_secret_ws:
         session.user_id = 803501001
+        session._опознан_точно = True
         logger.info(f"[{session_id}] 🧠 User ID: {session.user_id} (owner by key)")
     elif _admin_secret_ws and _admin_cookie_ws == _admin_secret_ws:
         session.user_id = 803501001
+        session._опознан_точно = True
         logger.info(f"[{session_id}] 🧠 User ID: {session.user_id} (admin)")
     elif uid_query:
         session.user_id = int(_hashlib.md5(uid_query.encode()).hexdigest()[:8], 16)
+        session._опознан_точно = True
         logger.info(f"[{session_id}] 🧠 User ID: {session.user_id} (query param)")
     elif uid_cookie:
         session.user_id = int(_hashlib.md5(uid_cookie.encode()).hexdigest()[:8], 16)
+        session._опознан_точно = True
         logger.info(f"[{session_id}] 🧠 User ID: {session.user_id} (cookie)")
     else:
+        # ⚠️ по адресу связи — НЕНАДЁЖНО: за одним адресом сидит
+        # целый оператор или офис. Такие сессии чужими не считаем
+        # и прошлую по ним НЕ закрываем.
         session.user_id = int(_hashlib.md5(client_ip.encode()).hexdigest()[:8], 16)
+        session._опознан_точно = False
         logger.info(f"[{session_id}] 🧠 User ID: {session.user_id} (IP fallback)")
     session.llm.user_id = session.user_id
     session.llm.lang = session.lang
     
+    # 🧹 СТАРАЯ СЕССИЯ ТОГО ЖЕ ЧЕЛОВЕКА — ЗАКРЫТЬ.
+    # Дневник 15.08: он выключил голос и включил снова, не перезагружая
+    # страницу, и ДВЕ сессии (744835 и 825060) жили одновременно целую
+    # минуту — обе принимали звук. Его реплики разошлись по двум памятям:
+    # «Слушай, дружище…» попало в одну, «и на этом закончим» в другую.
+    # Отсюда «то помнит, то не помнит». Раньше старая сессия просто
+    # оставалась в словаре и никто её не закрывал.
+    for _стар_id, _стар in list(active_sessions.items()):
+        if not getattr(session, "_опознан_точно", False):
+            break                      # опознан только по адресу — не трогаем никого
+        if _стар_id == session_id or _стар is session:
+            continue
+        if getattr(_стар, "user_id", None) != session.user_id:
+            continue
+        if not getattr(_стар, "_опознан_точно", False):
+            continue
+        logger.info(f"[{session_id}] 🧹 Закрываю прошлую сессию {_стар_id} того же человека")
+        note(session_id, "закрыл прошлую сессию", f"{_стар_id} — тот же человек")
+        try:
+            _стар.is_active = False
+            asyncio.create_task(_стар.stop())
+        except Exception as e:
+            logger.warning(f"[{session_id}] не удалось закрыть {_стар_id}: {e}")
+        active_sessions.pop(_стар_id, None)
+
     active_sessions[session_id] = session
     
     try:
@@ -3672,6 +3761,13 @@ async def websocket_voice(websocket: WebSocket):
                                 # Он слушает уже очищенный от эха поток, поэтому
                                 # его подтверждение — надёжный признак человека.
                                 session._browser_speech_at = time.time()
+                                # 🔊 голос оборван — расчётная отметка «смолкнет
+                                # через N секунд» больше не верна, гасим в «сейчас»,
+                                # иначе окно склейки останется открытым надолго
+                                session._звук_пошёл = None
+                                session._звук_секунд = 0.0
+                                session._ответ_кончился = time.time()
+                                session._голос_оборван = True
                                 session.barge_in_requested = True
                                 note(session.session_id, "ПЕРЕБИЛИ", "браузер: barge_in")
                                 session.is_speaking = False
@@ -3689,6 +3785,26 @@ async def websocket_voice(websocket: WebSocket):
                                     "message": "Контекст сброшен"
                                 })
                             
+                            elif cmd == "audio_done":
+                                # 🔊 БРАУЗЕР СООБЩИЛ, ЧТО ГОЛОС СМОЛК.
+                                # Это точная отметка от того, кто играет звук
+                                # (путь LiveKit). Расчёт по байтам остаётся
+                                # запасным — он уже проставлен в finally.
+                                # ⚠️ Берём ТОЛЬКО метку текущего ответа: метка
+                                # от прошлого пришла бы посреди нового и
+                                # закрыла бы окно склейки раньше времени.
+                                чей = data.get("номер")
+                                мой = getattr(session, "_номер_реплики", 0)
+                                if чей is None or чей == мой:
+                                    session._ответ_кончился = time.time()
+                                    session._голос_оборван = bool(data.get("interrupted"))
+                                    session.is_speaking = False
+                                    note(session.session_id, "голос смолк",
+                                         f"метка браузера, реплика {чей}")
+                                else:
+                                    note(session.session_id, "метка чужая",
+                                         f"пришла {чей}, сейчас {мой} — пропускаю")
+
                             elif cmd == "skip_filler":
                                 session.first_message = False  # 🛡️ Пропускаем серверный филлер (reconnect)
                                 logger.info(f"[{session_id}] ⏭️ Filler skipped (reconnect)")
