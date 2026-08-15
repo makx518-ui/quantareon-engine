@@ -1400,61 +1400,32 @@ function домТочки(градус){
 // ── Селена и Колесо жизни: их Кериткеон не рисует вовсе ──
 function дорисоватьТочки(данные){
   const г = слой("своиТочки"); if (!г || !данные) return;
-  const сел = данные.точки && данные.точки["натальный Селена"];
-  if (сел !== undefined){
-    const п = наЭкран(сел, 150);
-    г.appendChild(эл("text",{x:п[0].toFixed(1), y:п[1].toFixed(1), fill:"#ffe9a8", "font-size":"14",
-      "font-weight":"600", stroke:"#0a0c16", "stroke-width":"2.5", "paint-order":"stroke",
-      "text-anchor":"middle", "dominant-baseline":"middle",
-      "data-tip":`<b>Селена — Белая Луна</b> · ${дмс(сел)}`}, "⚜"));
-  }
+  // ⚠️ СЕЛЕНУ НЕ РИСУЕМ: карта ставит её сама — и натальную, и транзитную.
+  // Своя давала второй значок ⚜ рядом (он это увидел в Тельце).
+  // Из точек нам остаётся только Колесо жизни — его у карты нет вовсе.
   const кж = данные.колесо_жизни;
   if (кж){
     const п = наЭкран(кж.градус, 150);
+    const аспекты = (кж.аспекты||[]).map(а=>
+      `→ ${а.аспект} <b>${а.к.replace("космограмма ","косм. ").replace("транзит ","транз. ")}</b> · орб ${а.орбис}°`).join("<br>");
     const узел = document.createElementNS(NS,"g");
-    узел.setAttribute("data-tip", `<b>Колесо жизни</b> · ${кж.текст} · ${кж.эпоха}-я эпоха (годы ${кж.годы[0]}–${кж.годы[1]})`);
-    узел.appendChild(эл("circle",{cx:п[0].toFixed(1), cy:п[1].toFixed(1), r:"7",
-      fill:"none", stroke:"#f0c040", "stroke-width":"1.6"}));
-    for (let i=0;i<6;i++){                       // спицы колеса
-      const а = i*60*Math.PI/180;
-      узел.appendChild(эл("line",{x1:(п[0]+Math.cos(а)*7).toFixed(1), y1:(п[1]+Math.sin(а)*7).toFixed(1),
-        x2:(п[0]-Math.cos(а)*7).toFixed(1), y2:(п[1]-Math.sin(а)*7).toFixed(1),
+    узел.setAttribute("data-tip",
+      `<b><span style="color:#f0c040">Колесо жизни</span></b> · ${кж.текст}`
+      + ` · ${кж.эпоха}-я эпоха (годы ${кж.годы[0]}–${кж.годы[1]})`
+      + (аспекты ? "<br>" + аспекты : "<br>аспектов в орбисе 1° нет"));
+    узел.appendChild(эл("circle",{cx:п[0].toFixed(1), cy:п[1].toFixed(1), r:"8",
+      fill:"#0b0e1a", opacity:"0.8"}));
+    узел.appendChild(эл("circle",{cx:п[0].toFixed(1), cy:п[1].toFixed(1), r:"7.5",
+      fill:"none", stroke:"#f0c040", "stroke-width":"1.7"}));
+    for (let i=0;i<6;i++){
+      const а = i*30*Math.PI/180;
+      узел.appendChild(эл("line",{x1:(п[0]+Math.cos(а)*7.5).toFixed(1), y1:(п[1]+Math.sin(а)*7.5).toFixed(1),
+        x2:(п[0]-Math.cos(а)*7.5).toFixed(1), y2:(п[1]-Math.sin(а)*7.5).toFixed(1),
         stroke:"#f0c040", "stroke-width":"0.9"}));
     }
-    узел.appendChild(эл("circle",{cx:п[0].toFixed(1), cy:п[1].toFixed(1), r:"2", fill:"#f0c040"}));
+    узел.appendChild(эл("circle",{cx:п[0].toFixed(1), cy:п[1].toFixed(1), r:"2.4", fill:"#f0c040"}));
     г.appendChild(узел);
   }
-}
-
-// ── белые лучи знаков: статика белая, живое красное (правило с карты) ──
-
-
-// ── градусные подписи точек (приём с карты: дд°мм′ у значка) ──
-
-
-// живой градус точки: быстрые едут, остальные стоят
-function живойГрадус(ключ){
-  const с = window.сетка; if (!с) return 0;
-  if (с.быстрые && с.быстрые_имена){
-    const к = с.быстрые_имена.indexOf(ключ);
-    if (к >= 0){
-      const и = Math.max(0, Math.min(с.сетка.length-1, Math.round(window.минута/(с.шаг_минут||2))));
-      return с.быстрые[и][к];
-    }
-  }
-  return с.точки[ключ];
-}
-
-// ── паутина натальных аспектов: закрыта пятном, но можно глянуть целиком ──
-window.паутинаВидна = false;
-function паутина(){
-  const свг = document.getElementById("wh").querySelector("svg"); if (!свг) return;
-  window.паутинаВидна = !window.паутинаВидна;
-  const п = свг.querySelector("#пятно");
-  if (п) п.style.display = window.паутинаВидна ? "none" : "";
-  $("статус").textContent = window.паутинаВидна
-    ? "паутина натальных аспектов открыта — нажми ещё раз, чтобы вернуть центр"
-    : "центр вернулся";
 }
 
 // ═══ ВСПЫШКИ: кольцо вокруг точки разгорается по мере схождения орбиса ═══
