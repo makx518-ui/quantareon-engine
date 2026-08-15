@@ -2479,7 +2479,6 @@ class VoiceSessionTurbo:
         self._flush_task = None        # 🛟 задача автообработки
         self._browser_speech_at = 0.0  # 🛡 когда браузер подтвердил живую речь
         self.is_speaking = False
-        self._голос_до = 0.0     # 🔊 до какого мига голос ещё будет звучать
         self.barge_in_requested = False
         self.first_message = True
         
@@ -2586,11 +2585,6 @@ class VoiceSessionTurbo:
             })
             return False
         
-        # 📱 приветствие сайта звучит из динамика — его слова тоже наши
-        self._запомнить_сказанное(
-            "Приветствую тебя путник Я Квантареон голосовой помощник этого сайта "
-            "Спрашивай что тебя интересует")
-
         # Кешируем филлер в фоне (уже было)
         asyncio.create_task(self._cache_filler())
         
@@ -2742,63 +2736,6 @@ class VoiceSessionTurbo:
     ПРИДЕРЖКА_ПОРОГ = 500     # громкость кадра, с которой считаем «человек говорит»
 
     @staticmethod
-    @staticmethod
-    def _слова(т: str) -> list:
-        """Слова строки в нижнем регистре, без знаков — для сверки с эхом."""
-        return [с for с in re.sub(r"[^\w\s]", " ", (т or "").lower()).split() if с]
-
-    def _это_эхо(self, текст: str) -> bool:
-        """Помощник услышал сам себя из динамика?
-
-        📱 15.08, его телефон: сессия 466231 — он сказал «привет» ОДИН раз,
-        а сервер услышал «Привет. Привет.»; следом «Пет, Пет, Пет.». Это
-        приветствие («Приветствую тебя путник…») вернулось из динамика в
-        микрофон. На десктопе подавление эха браузера справляется, на
-        телефоне — нет: динамик и микрофон рядом.
-        Признак эха: ВСЕ слова реплики уже звучали в речи помощника, и она
-        пришла, пока он говорил. Настоящая речь так не совпадает.
-        """
-        слова = self._слова(текст)
-        if not слова or len(слова) > 6:
-            return False                      # длинную фразу эхом не считаем
-        _голос_идёт = self.is_speaking or time.time() < getattr(self, "_голос_до", 0)
-        if not _голос_идёт:
-            return False                      # помощник молчал — значит это человек
-
-        # 🔁 ЗАИКАНИЕ ЭХА. Динамик возвращается в микрофон обрывками, и
-        # распознаватель слышит одно короткое слово подряд: «Пет, Пет, Пет.»
-        # (его дневник 15.08). Буквами это с «Приветствую» не сходится —
-        # ловим по самому повтору. Человек так не говорит.
-        if len(слова) >= 2 and len(set(слова)) == 1 and len(слова[0]) <= 6:
-            return True
-
-        # ⚠️ КОРОТКОЕ НЕ ТРОГАЕМ. «Привет» или «Квантареон, привет» человек
-        # вполне может сказать поверх приветствия — и все эти слова там есть.
-        # Отбрасывать по словарю можно только фразу от трёх слов: случайно
-        # совпасть тремя словами подряд живая речь почти не может.
-        # Повторы («Привет. Привет.») ловит признак заикания выше.
-        if len(слова) < 3:
-            return False
-
-        сказанное = getattr(self, "_сказанное_недавно", None)
-        if not сказанное:
-            return False
-        for с in слова:
-            основа = с[:5] if len(с) > 5 else с
-            if not any(основа in ш for ш in сказанное):
-                return False                  # хоть одно чужое слово — не эхо
-        return True
-
-    def _запомнить_сказанное(self, текст: str) -> None:
-        """Копим слова своей речи, чтобы узнать своё эхо. Держим последние 60."""
-        было = getattr(self, "_сказанное_недавно", None)
-        if было is None:
-            было = self._сказанное_недавно = []
-        для_сверки = self._слова(текст)
-        было.extend(для_сверки)
-        if len(было) > 60:
-            del было[:len(было) - 60]
-
     def _приклеить(старое: str, новое: str) -> str:
         """Приклеить кусок текста, не допустив дубля.
 
@@ -2948,15 +2885,7 @@ class VoiceSessionTurbo:
 
         transcript = self.transcript_buffer.strip()
         self.transcript_buffer = ""
-
-        # 📱 ЭХО ИЗ ДИНАМИКА. На телефоне помощник слышит сам себя, и его
-        # слова уходят в работу как реплика человека («Привет. Привет.»,
-        # «Пет, Пет, Пет.» — дневник 15.08). Отсеиваем до всякой обработки.
-        if transcript and self._это_эхо(transcript):
-            note(self.session_id, "ЭХО отброшено", transcript[:60])
-            logger.info(f"[{self.session_id}] 🔇 Эхо из динамика: «{transcript[:60]}»")
-            return
-
+        
         if not transcript:
             note(self.session_id, "ПУСТО — нечего обрабатывать", "браузер сказал «договорил», а текста нет")
             logger.info(f"[{self.session_id}] Empty transcript, skipping")
@@ -3230,10 +3159,6 @@ class VoiceSessionTurbo:
                     logger.info(f"[{self.session_id}] ⚡ INSTANT Filler: {latency:.3f}s ({len(self.cached_filler_audio)} bytes)")
                     
                     await self.websocket.send_bytes(self.cached_filler_audio)
-                    _т = time.time()
-                    if getattr(self, "_голос_до", 0) < _т:
-                        self._голос_до = _т
-                    self._голос_до += len(self.cached_filler_audio) * 8 / 48000
 
                     # ⚠️ ЗНАЧОК ЗДЕСЬ НЕ ГАСИМ. Филлер — присказка про дату,
                     # она звучит СРАЗУ, ещё до поиска. Если погасить на ней,
@@ -3245,7 +3170,6 @@ class VoiceSessionTurbo:
                         "type": "response_text",
                         "content": self.cached_filler_text
                     })
-                    self._запомнить_сказанное(self.cached_filler_text)
                     
                     chunk_count += 1
                 else:
@@ -3337,19 +3261,10 @@ class VoiceSessionTurbo:
                     
                     if not self.barge_in_requested and _я_актуален():
                         await self.websocket.send_bytes(audio_bytes)
-                        # 🔊 СКОЛЬКО ЗВУКА ЕЩЁ БУДЕТ ЗВУЧАТЬ. Сервер отдаёт его
-                        # в разы быстрее, чем он играет (замер 15.08: 11.8 с
-                        # звука за 1.76 с), а is_speaking гаснет на отправке.
-                        # Без этого фильтр эха слеп почти весь ответ.
-                        _т = time.time()
-                        if getattr(self, "_голос_до", 0) < _т:
-                            self._голос_до = _т
-                        self._голос_до += len(audio_bytes) * 8 / 48000
                 
                 # ⚡ СНАЧАЛА текст на экран (мгновенно, не ждёт озвучку)
                 if not self.barge_in_requested and _я_актуален():
                     сказано.append(text_chunk)
-                    self._запомнить_сказанное(text_chunk)   # 📱 чтобы узнать своё эхо
                     await self._send_json({
                         "type": "response_text",
                         "content": text_chunk
@@ -3767,7 +3682,6 @@ async def websocket_voice(websocket: WebSocket):
                                 # его подтверждение — надёжный признак человека.
                                 session._browser_speech_at = time.time()
                                 session.barge_in_requested = True
-                                session._голос_до = 0        # 🔇 голос оборван — эхо-окно закрыть
                                 note(session.session_id, "ПЕРЕБИЛИ", "браузер: barge_in")
                                 session.is_speaking = False
                                 session.is_processing = False  # 🔧 FIX: Останавливаем обработку
