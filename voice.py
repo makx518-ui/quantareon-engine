@@ -2042,6 +2042,18 @@ class GroqLLM:
                                     # набралось достаточно — иначе речь рвётся на обрывки.
                                     if len(chunk_buffer) >= min_size and sentence_end.search(chunk_buffer):
                                         matches = list(sentence_end.finditer(chunk_buffer))
+                                        # ⚠️ 16.08 ЧИСЛО МОГЛО НЕ ДОПИСАТЬСЯ.
+                                        # Модель шлёт текст кусочками. Если кусочек
+                                        # оборвался ровно на «12.», точка оказывается
+                                        # последней в буфере — и правило режет, считая
+                                        # это концом предложения. Следом приходит «0 km/h»,
+                                        # и голос читает «двенадцать точка. Ноль километров».
+                                        # Внутри строки «12.0» защита есть, на краю не было.
+                                        # Ждём следующий кусочек: число, может, ещё не дописано.
+                                        if (matches
+                                                and matches[-1].end() == len(chunk_buffer)
+                                                and re.search(r"\d[.,]$", chunk_buffer)):
+                                            matches = matches[:-1]
                                         if matches:
                                             last_match = matches[-1]
                                             end_pos = last_match.end()
@@ -2465,7 +2477,7 @@ async def voice_health():
         "ok": True,
         # 🏷 МЕТКА СБОРКИ. 16.08: спорили вслепую, какой файл стоит на сервере.
         # Теперь видно одним запросом. Меняя voice.py — меняй и метку.
-        "сборка": "2026-08-16 запятая-в-числах",
+        "сборка": "2026-08-16 числа-в-речи",
         "llm": current_model(),
         "stt": "Deepgram Nova-3",
         "tts_ru": f"{config.TTS_VOICE} @ {config.TTS_RATE}",
