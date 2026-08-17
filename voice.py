@@ -2478,11 +2478,58 @@ async def warm_greetings():
             site_knowledge.warm_knowledge()
         except Exception as e:
             logger.warning(f"VOICE: знания не прогрелись: {e}")
+    # 🔊 17.08 СНАЧАЛА БЕРЁМ ГОТОВУЮ ЗАПИСЬ ИЗ ХРАНИЛИЩА.
+    # Было: сервер синтезировал приветствие сам, и получалась ВТОРАЯ запись,
+    # длиннее той, что лежит в хранилище (57888 против 51357 байт — у неё
+    # хвост тишины 0.43 с не обрезан). Сайт сперва просит из хранилища, а
+    # если не вышло — с сервера; на телефоне первая попытка срывается чаще,
+    # и доставалась длинная. Отсюда его «то быстро отвечает, то долго»:
+    # пока играет хвост, микрофон закрыт заслонкой и первое слово пропадает.
+    # Теперь запись ОДНА на обе стороны. Не скачалась — синтезируем, как
+    # раньше: запасной путь остаётся.
+    async def _из_хранилища(язык: str) -> bytes:
+        адрес = f"https://media.quantareon.com/greeting-{язык}.mp3"
+        try:
+            import aiohttp
+            таймаут = aiohttp.ClientTimeout(total=8)
+            async with aiohttp.ClientSession(timeout=таймаут) as с:
+                async with с.get(адрес) as ответ:
+                    if ответ.status == 200:
+                        данные = await ответ.read()
+                        # ⚠️ ПРОВЕРЯЕМ, ЧТО ЭТО ПРАВДА MP3. Хранилище может
+                        # отдать страницу ошибки с кодом 200 — по размеру она
+                        # похожа на запись, и в память легли бы 54 КБ мусора
+                        # вместо голоса. У mp3 начало всегда «ID3» либо
+                        # первый кадр 0xFF 0xFB/0xF3/0xF2.
+                        похоже_на_mp3 = (
+                            данные[:3] == b"ID3"
+                            or (len(данные) > 2 and данные[0] == 0xFF
+                                and данные[1] in (0xFB, 0xF3, 0xF2, 0xFA))
+                        )
+                        if len(данные) > 1000 and похоже_на_mp3:
+                            return данные
+                        logger.warning(
+                            f"VOICE: приветствие {язык} — пришло не mp3 "
+                            f"({len(данные)} байт), беру синтез")
+                        return b""
+                    logger.warning(f"VOICE: приветствие {язык} из хранилища — код {ответ.status}")
+        except Exception as e:
+            logger.warning(f"VOICE: приветствие {язык} из хранилища не взялось: {e}")
+        return b""
+
     try:
-        CACHED_GREETING_AUDIO = await EdgeTTSTurbo("ru").synthesize(config.GREETING_TEXT)
-        CACHED_GREETING_AUDIO_EN = await EdgeTTSTurbo("en").synthesize(config.GREETING_TEXT_EN)
-        logger.info(f"VOICE: приветствия готовы — RU {len(CACHED_GREETING_AUDIO)} / "
-                    f"EN {len(CACHED_GREETING_AUDIO_EN)} байт")
+        CACHED_GREETING_AUDIO = await _из_хранилища("ru")
+        откуда_ru = "хранилище"
+        if not CACHED_GREETING_AUDIO:
+            CACHED_GREETING_AUDIO = await EdgeTTSTurbo("ru").synthesize(config.GREETING_TEXT)
+            откуда_ru = "синтез"
+        CACHED_GREETING_AUDIO_EN = await _из_хранилища("en")
+        откуда_en = "хранилище"
+        if not CACHED_GREETING_AUDIO_EN:
+            CACHED_GREETING_AUDIO_EN = await EdgeTTSTurbo("en").synthesize(config.GREETING_TEXT_EN)
+            откуда_en = "синтез"
+        logger.info(f"VOICE: приветствия готовы — RU {len(CACHED_GREETING_AUDIO)} ({откуда_ru}) / "
+                    f"EN {len(CACHED_GREETING_AUDIO_EN)} ({откуда_en}) байт")
         logger.info(f"VOICE: голоса — RU {config.TTS_VOICE} @ {config.TTS_RATE} | "
                     f"EN {config.TTS_VOICE_EN} @ {config.TTS_RATE_EN}")
     except Exception as e:
@@ -2639,7 +2686,7 @@ async def voice_health():
         "ok": True,
         # 🏷 МЕТКА СБОРКИ. 16.08: спорили вслепую, какой файл стоит на сервере.
         # Теперь видно одним запросом. Меняя voice.py — меняй и метку.
-        "сборка": "2026-08-17 одна-сессия",
+        "сборка": "2026-08-17 одно-приветствие",
         "llm": current_model(),
         "stt": "Deepgram Nova-3",
         "tts_ru": f"{config.TTS_VOICE} @ {config.TTS_RATE}",
