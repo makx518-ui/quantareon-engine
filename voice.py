@@ -2639,7 +2639,7 @@ async def voice_health():
         "ok": True,
         # 🏷 МЕТКА СБОРКИ. 16.08: спорили вслепую, какой файл стоит на сервере.
         # Теперь видно одним запросом. Меняя voice.py — меняй и метку.
-        "сборка": "2026-08-16 города-на-двух-языках",
+        "сборка": "2026-08-17 одна-сессия",
         "llm": current_model(),
         "stt": "Deepgram Nova-3",
         "tts_ru": f"{config.TTS_VOICE} @ {config.TTS_RATE}",
@@ -2678,6 +2678,7 @@ class VoiceSessionTurbo:
         self._flush_task = None        # 🛟 задача автообработки
         self._browser_speech_at = 0.0  # 🛡 когда браузер подтвердил живую речь
         self.is_speaking = False
+        self._опознан_точно = False   # 🧹 надёжно ли опознан человек (см. закрытие прошлой сессии)
         self.barge_in_requested = False
         self.first_message = True
         
@@ -3811,22 +3812,63 @@ async def websocket_voice(websocket: WebSocket):
     key_query = websocket.query_params.get("key", "")
     if _admin_secret_ws and key_query == _admin_secret_ws:
         session.user_id = 803501001
+        session._опознан_точно = True
         logger.info(f"[{session_id}] 🧠 User ID: {session.user_id} (owner by key)")
     elif _admin_secret_ws and _admin_cookie_ws == _admin_secret_ws:
         session.user_id = 803501001
+        session._опознан_точно = True
         logger.info(f"[{session_id}] 🧠 User ID: {session.user_id} (admin)")
     elif uid_query:
         session.user_id = int(_hashlib.md5(uid_query.encode()).hexdigest()[:8], 16)
+        session._опознан_точно = True
         logger.info(f"[{session_id}] 🧠 User ID: {session.user_id} (query param)")
     elif uid_cookie:
         session.user_id = int(_hashlib.md5(uid_cookie.encode()).hexdigest()[:8], 16)
+        session._опознан_точно = True
         logger.info(f"[{session_id}] 🧠 User ID: {session.user_id} (cookie)")
     else:
+        # ⚠️ по адресу связи — НЕНАДЁЖНО: за одним адресом сидит целый
+        # оператор или офис. Такие сессии чужими не считаем и прошлую
+        # по ним НЕ закрываем.
         session.user_id = int(_hashlib.md5(client_ip.encode()).hexdigest()[:8], 16)
+        session._опознан_точно = False
         logger.info(f"[{session_id}] 🧠 User ID: {session.user_id} (IP fallback)")
     session.llm.user_id = session.user_id
     session.llm.lang = session.lang
     
+    # 🧹 СТАРАЯ СЕССИЯ ТОГО ЖЕ ЧЕЛОВЕКА — ЗАКРЫТЬ.
+    # Его дневник 17.08: в 02:52 живут ОДНОВРЕМЕННО 093602 и 107788,
+    # следом 149731 — он выключил и включил голос, не перезагружая
+    # страницу. Прежняя сессия оставалась в словаре и продолжала
+    # принимать звук: реплики расходились по двум памятям («то помнит,
+    # то нет»), а лента в окне не очищалась — отсюда и дубли сообщений.
+    # Правка писалась 15.08, но ушла при откате на его исходник.
+    for _стар_id, _стар in list(active_sessions.items()):
+        if not getattr(session, "_опознан_точно", False):
+            break                      # опознан только по адресу — не трогаем никого
+        if _стар_id == session_id or _стар is session:
+            continue
+        if getattr(_стар, "user_id", None) != session.user_id:
+            continue
+        if not getattr(_стар, "_опознан_точно", False):
+            continue
+        logger.info(f"[{session_id}] 🧹 Закрываю прошлую сессию {_стар_id} того же человека")
+        note(session_id, "закрыл прошлую сессию", f"{_стар_id} — тот же человек")
+        # ⚠️ закрываем ФОНОМ, чтобы не задерживать новую сессию, но с
+        # собственной обёрткой: обычный try поймал бы только СОЗДАНИЕ
+        # задачи, а падение внутри неё ушло бы в пустоту и засорило логи.
+        async def _закрыть(с=_стар, ид=_стар_id):
+            try:
+                await с.stop()
+            except Exception as e:
+                logger.warning(f"[{session_id}] прошлая сессия {ид} закрылась с ошибкой: {e}")
+        try:
+            _стар.is_active = False
+            asyncio.create_task(_закрыть())
+        except Exception as e:
+            logger.warning(f"[{session_id}] не удалось закрыть {_стар_id}: {e}")
+        active_sessions.pop(_стар_id, None)
+
     active_sessions[session_id] = session
     
     try:
