@@ -1,9 +1,13 @@
 """
 ОТПРАВКА ПИСЬМА С КЛЮЧОМ — живёт на Render, рядом с движком голоса.
 
-Зачем отдельно: Cloudflare не умеет обычную почтовую связь, а Render умеет.
-Оракул шлёт письма ровно так же — через Gmail, паролем приложения.
-Платить не надо: почта твоя, Render уже оплачен.
+⚠️ ПОЧЕМУ BREVO, А НЕ GMAIL (20.08.2026):
+Сперва слали через Gmail — письма доходили на Gmail и Яндекс,
+но Mail.ru клал их в СПАМ. Причина: у писем не было ПОДПИСИ (DKIM).
+Обычный Gmail подписывать чужой домен не умеет — это платный Workspace.
+Плюс Google объявил, что в январе 2027 закроет отправку от чужих адресов.
+⇒ ушли на Brevo: он подписывает письма, бесплатен до 300 писем в день
+   и не закроется. Домен quantareon.com у них подтверждён.
 
 Как зовётся:
     POST /api/send-key
@@ -29,22 +33,57 @@ from fastapi.responses import JSONResponse
 роутер = APIRouter()
 
 # ── настройки: всё из переменных окружения, в коде ничего ──
+BREVO_KEY = os.getenv("BREVO_KEY", "")
+ОТ_ИМЯ    = os.getenv("MAIL_FROM_NAME", "Luck Forecast")
+ОТ_АДРЕС  = os.getenv("MAIL_FROM", "vlad@quantareon.com")
+ПРОПУСК   = os.getenv("MAIL_SECRET", "")
+
+# запасной путь через Gmail — если Brevo вдруг откажет
 ЯЩИК   = os.getenv("SMTP_USER", "makx518@gmail.com")
 ПАРОЛЬ = os.getenv("SMTP_PASS", "")
 СЕРВЕР = os.getenv("SMTP_HOST", "smtp.gmail.com")
 ПОРТ   = int(os.getenv("SMTP_PORT", "587"))
-ОТ     = os.getenv("MAIL_FROM", "Luck Forecast <vlad@quantareon.com>")
-ПРОПУСК = os.getenv("MAIL_SECRET", "")
 
 ВИД_КЛЮЧА = re.compile(r"^LF-[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$")
 ВИД_ПОЧТЫ = re.compile(r"^[^\s@]{1,64}@[^\s@]{1,190}\.[a-zA-Z]{2,24}$")
 
 
+async def _через_brevo(куда: str, ключ: str) -> bool:
+    """
+    Основной путь. Brevo подписывает письмо за наш домен — оттого оно
+    и не попадает в спам. Возвращает True, если приняли.
+    """
+    if not BREVO_KEY:
+        return False
+
+    тело = {
+        "sender": {"name": ОТ_ИМЯ, "email": ОТ_АДРЕС},
+        "to": [{"email": куда}],
+        "subject": "Your Luck Forecast key",
+        "htmlContent": НАРЯДНЫМ.replace("{{KEY}}", ключ),
+        "textContent": ПРОСТЫМ.replace("{{KEY}}", ключ),
+    }
+
+    import httpx
+    async with httpx.AsyncClient(timeout=30) as связь:
+        ответ = await связь.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers={"api-key": BREVO_KEY,
+                     "content-type": "application/json",
+                     "accept": "application/json"},
+            json=тело,
+        )
+    if ответ.status_code in (200, 201, 202):
+        return True
+    логи.error("POCHTA: Brevo отказал %s %s", ответ.status_code, ответ.text[:200])
+    return False
+
+
 def _отправить(куда: str, ключ: str) -> None:
-    """Шлём письмо. Работает в отдельной нити — smtplib не умеет иначе."""
+    """Запасной путь через Gmail. Работает в отдельной нити."""
     письмо = MIMEMultipart("alternative")
     письмо["Subject"] = "Your Luck Forecast key"
-    письмо["From"] = ОТ
+    письмо["From"] = f"{ОТ_ИМЯ} <{ОТ_АДРЕС}>"
     письмо["To"] = куда
     письмо.attach(MIMEText(ПРОСТЫМ.replace("{{KEY}}", ключ), "plain", "utf-8"))
     письмо.attach(MIMEText(НАРЯДНЫМ.replace("{{KEY}}", ключ), "html", "utf-8"))
@@ -83,15 +122,25 @@ async def отправить_ключ(запрос: Request):
         return JSONResponse({"ok": False, "reason": "bad_email"}, status_code=400)
     if not ВИД_КЛЮЧА.match(ключ):
         return JSONResponse({"ok": False, "reason": "bad_key"}, status_code=400)
-    if not ПАРОЛЬ:
-        логи.error("POCHTA: нет SMTP_PASS — письмо не отправлено")
+    if not BREVO_KEY and not ПАРОЛЬ:
+        логи.error("POCHTA: не задан ни BREVO_KEY, ни SMTP_PASS")
         return JSONResponse({"ok": False, "reason": "not_configured"}, status_code=500)
 
+    # ── 1. основной путь: Brevo (подписывает письмо) ──
     try:
-        # отправка идёт в отдельной нити, чтобы не держать весь сервер
+        if await _через_brevo(почта, ключ):
+            логи.info("POCHTA: письмо ушло через Brevo на %s", почта)
+            return JSONResponse({"ok": True, "путь": "brevo"})
+    except Exception as e:
+        логи.error("POCHTA: Brevo сорвался %s %s", type(e).__name__, str(e)[:160])
+
+    # ── 2. запасной путь: Gmail (без подписи, может уйти в спам) ──
+    if not ПАРОЛЬ:
+        return JSONResponse({"ok": False, "reason": "send_failed"}, status_code=502)
+    try:
         await asyncio.wait_for(asyncio.to_thread(_отправить, почта, ключ), timeout=40)
-        логи.info("POCHTA: письмо ушло на %s", почта)
-        return JSONResponse({"ok": True})
+        логи.info("POCHTA: письмо ушло ЗАПАСНЫМ путём (Gmail) на %s", почта)
+        return JSONResponse({"ok": True, "путь": "gmail"})
     except asyncio.TimeoutError:
         логи.error("POCHTA: не дождались отправки на %s", почта)
         return JSONResponse({"ok": False, "reason": "timeout"}, status_code=504)
@@ -105,12 +154,11 @@ async def здоровье():
     """Проверка: настроено ли всё. Пароли наружу не отдаём."""
     return JSONResponse({
         "ok": True,
-        "сервер": СЕРВЕР,
-        "порт": ПОРТ,
-        "ящик_задан": bool(ЯЩИК),
-        "пароль_задан": bool(ПАРОЛЬ),
+        "основной_путь": "brevo" if BREVO_KEY else "нет",
+        "brevo_задан": bool(BREVO_KEY),
+        "запасной_gmail": bool(ПАРОЛЬ),
         "пропуск_задан": bool(ПРОПУСК),
-        "от_кого": ОТ,
+        "от_кого": f"{ОТ_ИМЯ} <{ОТ_АДРЕС}>",
     })
 
 
@@ -134,6 +182,8 @@ and the golden days of the year appear.
 Activation needs the internet once. After that the app works offline.
 Your key works on two devices.
 Keep this email - the key is your proof of purchase.
+If this letter landed in your spam folder, mark it as "not spam"
+so you can find it later.
 
 Questions: vlad@quantareon.com
 quantareon.com/luck"""
@@ -198,7 +248,8 @@ quantareon.com/luck"""
   <tr><td style="padding:26px 40px 0 40px; font-family:Georgia,'Times New Roman',serif; font-size:13px; color:rgba(232,228,220,0.5); line-height:1.7;">
     Activation needs the internet once. After that the app works offline.<br>
     Your key works on two devices.<br>
-    Keep this email &mdash; the key is your proof of purchase.
+    Keep this email &mdash; the key is your proof of purchase.<br>
+    If this letter landed in spam, mark it as &laquo;not spam&raquo; so you can find it later.
   </td></tr>
 
   <tr><td style="padding:34px 40px 40px 40px;">
