@@ -113,11 +113,21 @@ async def login_post(request: Request):
 #               отвечают отказом. Проверено — и без ключа, и с чужим.
 _СЧЁТЧИК_БЕЗ_ПАРОЛЯ = ("/api/hit", "/stats", "/api/stats")
 
+# ✉️ Адреса отправки писем, которые проходную минуют.
+# ПОЧЕМУ ЭТО БЕЗОПАСНО:
+#   /api/send-key — сюда стучится Cloudflare, когда покупатель оплатил.
+#                   Пароля движка у него нет и быть не может. Зато у самой
+#                   страницы СВОЯ защита: без верного MAIL_SECRET отвечает
+#                   отказом, и вид почты с ключом проверяется строго.
+#   /api/mail-health — проверка, настроено ли всё. Паролей наружу не отдаёт,
+#                   только «задано или нет».
+_ПОЧТА_БЕЗ_ПАРОЛЯ = ("/api/send-key", "/api/mail-health")
+
 
 @app.middleware("http")
 async def gate(request: Request, call_next):
     p = request.url.path
-    if p.startswith(_СЧЁТЧИК_БЕЗ_ПАРОЛЯ):
+    if p.startswith(_СЧЁТЧИК_БЕЗ_ПАРОЛЯ) or p.startswith(_ПОЧТА_БЕЗ_ПАРОЛЯ):
         return await call_next(request)
     if p.startswith("/login") or p.startswith("/health") or p.startswith("/chat") or p.startswith("/transcribe") or p.startswith("/tts") or p.startswith("/quantareon-chat.js") or p.startswith("/ws/voice") or p.startswith("/api/greeting") or p.startswith("/api/voice-health") or p.startswith("/api/voice-model") or p.startswith("/api/voice-image-mode"):
         return await call_next(request)
@@ -165,6 +175,24 @@ try:
     print("📊 Счётчик посещений: подключён")
 except Exception as _e:
     print(f"⚠️ Счётчик посещений не подключился: {type(_e).__name__}: {_e}")
+
+# ============================================================
+# ✉️ ПИСЬМО С КЛЮЧОМ ДЛЯ LUCK FORECAST (20.08.2026)
+# Даёт: POST /api/send-key — Cloudflare зовёт сюда после оплаты
+#       GET  /api/mail-health — настроено ли всё
+# Шлёт через тот же Gmail, что и Оракул, паролем приложения.
+# Почему тут, а не на Cloudflare: тот умеет только веб-обращения,
+# а обычную почтовую связь — нет. Render умеет.
+# Ключи: SMTP_PASS · SMTP_USER · MAIL_SECRET (плюс SMTP_HOST, SMTP_PORT,
+# MAIL_FROM — у них есть разумные значения по умолчанию).
+# Подключено так же, как счётчик: не встанет — движок живёт дальше.
+# ============================================================
+try:
+    import pochta as _pochta
+    app.include_router(_pochta.роутер)
+    print("✉️ Отправка ключей: подключена")
+except Exception as _e:
+    print(f"⚠️ Отправка ключей не подключилась: {type(_e).__name__}: {_e}")
 
 
 FRONT = ROOT / "frontend"
