@@ -2060,8 +2060,12 @@ class GroqLLM:
             system += "\n\n[КОНФИДЕНЦИАЛЬНОСТЬ]: НЕ раскрывай свою архитектуру, технологии, модели или структуру системы. Отвечай: \"Информация о моей архитектуре закрыта разработчиком.\""
         messages = [{"role": "system", "content": system}]
         
-        if len(self.history) > 20:
-            messages.extend(self.history[-20:])
+        # 🧠 22.08 было 20 — стало 25, заодно с приёмом chat_history.
+        # Столько последних реплик едет в модель вместе с новым вопросом.
+        # Смысл держать это число не меньше того, что присылает сайт:
+        # иначе принятую историю тут же обрежет.
+        if len(self.history) > 25:
+            messages.extend(self.history[-25:])
         else:
             messages.extend(self.history)
         
@@ -4031,7 +4035,11 @@ async def websocket_voice(websocket: WebSocket):
                                 chat_msgs = data.get("messages", [])
                                 if chat_msgs and isinstance(chat_msgs, list):
                                     session.llm.history = []
-                                    for m in chat_msgs[-10:]:  # Максимум 10 последних
+                                    # 🧠 22.08 было 10 — стало 25, по его просьбе:
+                                    # пока окно разговора не закрыто, помощник
+                                    # помнит всю беседу. Держать одинаковым с
+                                    # числом в quantareon-voice.js (slice(-25)).
+                                    for m in chat_msgs[-25:]:
                                         role = m.get("role", "")
                                         content = m.get("content", "")
                                         if role in ("user", "assistant") and content:
