@@ -134,6 +134,13 @@ class Config:
     TTS_PITCH: str = "-8Hz"
     TTS_VOLUME: str = "+15%"
 
+    # 🛡️ Сторож синтеза. Edge вечерами зависает и молчит десятками секунд —
+    # ловушка на TimeoutError в EdgeTTSTurbo была, а само время не задавалось,
+    # поэтому попытка ждала Microsoft бесконечно. Теперь попытка не длится
+    # дольше этого числа; попыток три → худший случай ~22 с вместо 75.
+    # Здоровый Дмитрий отвечает за 2.5–6.4 с, так что 7 — с запасом.
+    TTS_TIMEOUT: float = 7.0
+
     TTS_VOICE_EN: str = "en-US-AndrewMultilingualNeural"
     TTS_RATE_EN: str = "+0%"
     TTS_PITCH_EN: str = "-15Hz"
@@ -2374,7 +2381,17 @@ class EdgeTTSTurbo:
         self.pitch = config.TTS_PITCH_EN if en else config.TTS_PITCH
         self.volume = config.TTS_VOLUME_EN if en else config.TTS_VOLUME
         self.lang = "en" if en else "ru"
-    
+
+    @staticmethod
+    async def _collect(communicate) -> bytes:
+        """Собрать весь звук от Edge. Вынесено отдельно, чтобы обернуть
+        сторожем: asyncio.wait_for не умеет обрывать `async for` на месте."""
+        buf = io.BytesIO()
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                buf.write(chunk["data"])
+        return buf.getvalue()
+
     async def synthesize(self, text: str) -> bytes:
         """Озвучить текст целиком."""
         text = _tts_clean(text, self.lang)   # словарь произношения + чистка
@@ -2390,13 +2407,14 @@ class EdgeTTSTurbo:
                 volume=self.volume
             )
             
-            audio = io.BytesIO()
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    audio.write(chunk["data"])
-            
-            return audio.getvalue()
-            
+            # 🛡️ сторож: попытка не длится дольше config.TTS_TIMEOUT
+            return await asyncio.wait_for(
+                self._collect(communicate), timeout=config.TTS_TIMEOUT
+            )
+
+        except asyncio.TimeoutError:
+            logger.error(f"❌ TTS: Edge молчал дольше {config.TTS_TIMEOUT} с — обрываю")
+            return b""
         except Exception as e:
             logger.error(f"TTS error: {e}")
             return b""
@@ -2427,13 +2445,12 @@ class EdgeTTSTurbo:
                     volume=self.volume
                 )
                 
-                # Собираем ВСЁ аудио для этого текстового чанка
-                audio_buffer = io.BytesIO()
-                
-                async for chunk in communicate.stream():
-                    if chunk["type"] == "audio":
-                        audio_buffer.write(chunk["data"])
-                    
+                # Собираем ВСЁ аудио для этого текстового чанка.
+                # 🛡️ сторож: попытка не длится дольше config.TTS_TIMEOUT
+                звук = await asyncio.wait_for(
+                    self._collect(communicate), timeout=config.TTS_TIMEOUT
+                )
+
             except asyncio.TimeoutError:
                 if attempt < max_retries - 1:
                     logger.warning(f"⚠️ TTS timeout, retry {attempt + 1}/{max_retries}")
@@ -2453,9 +2470,9 @@ class EdgeTTSTurbo:
             # Синтез удался. Пустой звук — тоже беда Edge, идём на новую
             # попытку (как и раньше). Непустой отправляем ОДИН раз и выходим:
             # без разрывов = без щелчков, а сбой отправки не повторяем.
-            if audio_buffer.tell() > 0:
+            if звук:
                 try:
-                    await send_callback(audio_buffer.getvalue())
+                    await send_callback(звук)
                 except Exception as e:
                     logger.warning(f"⚠️ TTS: звук готов, но отправить не вышло (соединение закрыто или перебили): {e}")
                 return  # ✅ синтез своё дело сделал — повторов не будет
