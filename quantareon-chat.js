@@ -26,14 +26,27 @@
     { id: "part-two-reading-the-process-from-the-static-to-the-living-world", num: "2", label: "Part II" },
     { id: "part-three-the-folded-seed", num: "3", label: "Part III" },
   ];
+  // Якоря второго эссе «Молодой код» (пока только русская версия)
+  var PARTS_YC = [
+    { id: "s1-часть-первая-устройство", num: "1", label: "Часть I" },
+    { id: "s2-часть-вторая-развертка", num: "2", label: "Часть II" },
+    { id: "s3-часть-третья-выход", num: "3", label: "Часть III" },
+  ];
 
-  // Определяем язык по наличию якорей на странице
-  var isRU = !!document.getElementById(PARTS_RU[0].id);
-  var isEN = !isRU && !!document.getElementById(PARTS_EN[0].id);
-  if (!isRU && !isEN) return; // не страница эссе — виджет не нужен
-  var PARTS = isRU ? PARTS_RU : PARTS_EN;
+  // Определяем страницу по наличию якорей
+  var isYC = !!document.getElementById(PARTS_YC[0].id);
+  var isRU = !isYC && !!document.getElementById(PARTS_RU[0].id);
+  var isEN = !isYC && !isRU && !!document.getElementById(PARTS_EN[0].id);
+  if (!isRU && !isEN && !isYC) return; // не страница эссе — виджет не нужен
+  var PARTS = isYC ? PARTS_YC : (isRU ? PARTS_RU : PARTS_EN);
+  // Какое эссе обсуждаем: сервер по этому полю берёт нужные знания
+  var ESSAY = isYC ? "young-code" : "light-and-code";
+  // Язык страницы. ВАЖНО: «Молодой код» русский, но isRU у него ложно —
+  // поэтому везде, где нужен ЯЗЫК (озвучка, распознавание, голосовая связь),
+  // берём эту переменную, а не isRU.
+  var LANG = (isRU || isYC) ? "ru" : "en";
 
-  var T = isRU ? {
+  var T = (LANG === "ru") ? {
     fabFull: "Обсудить с Квантареоном",
     fabShort: "Обсудить",
     title: "КВАНТАРЕОН",
@@ -290,7 +303,7 @@
     fetch(API.replace(/\/chat$/, "/tts"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: text, language: isRU ? "ru" : "en" }),
+      body: JSON.stringify({ text: text, language: LANG }),
     }).then(function (r) { return r.ok ? r.blob() : null; })
       .then(function (b) { if (b && b.size && !ttsCache[text]) ttsCache[text] = b; })
       .catch(function () {});
@@ -349,7 +362,7 @@
       var res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: text, language: isRU ? "ru" : "en" }),
+        body: JSON.stringify({ text: text, language: LANG }),
         signal: curAbort ? curAbort.signal : undefined,
       });
       if (!res.ok || !res.body) throw new Error("tts_failed");
@@ -452,6 +465,7 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         question: q,
+        essay: ESSAY,
         part: part.num,
         chapter: currentChapter(),
         history: history.slice(0, -1),
@@ -591,7 +605,7 @@
     try {
       var fd = new FormData();
       fd.append("file", blob, extFor(mime));
-      fd.append("language", isRU ? "ru" : "en");
+      fd.append("language", LANG);
       var res = await fetch(API.replace(/\/chat$/, "/transcribe"), { method: "POST", body: fd });
       var data = await res.json();
       if (data && data.text) {
@@ -659,7 +673,7 @@
     return new Promise(function (resolve) {
       var ws;
       try {
-        ws = new WebSocket(WS_URL + "?lang=" + (isRU ? "ru" : "en"));
+        ws = new WebSocket(WS_URL + "?lang=" + LANG);
         ws.binaryType = "arraybuffer";
       } catch (e) { resolve(null); return; }
       var done = false;

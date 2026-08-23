@@ -46,31 +46,63 @@ def _read(name: str) -> str:
     return p.read_text(encoding="utf-8") if p.exists() else ""
 
 
-_CORE = _read("core.txt")
-_SUMMARIES = _read("summaries.txt")
+# ── Два эссе. Имена файлов различаются приставкой. ──
+# "light-and-code" — первое эссе: core.txt, summaries.txt, part1..3.txt
+# "young-code"     — второе эссе: yc-core.txt, yc-summaries.txt, yc-part1..3.txt
+_ESSAYS = {
+    "light-and-code": {"core": "core.txt", "sum": "summaries.txt", "part": "part{n}.txt"},
+    "young-code": {"core": "yc-core.txt", "sum": "yc-summaries.txt", "part": "yc-part{n}.txt"},
+}
+_DEFAULT_ESSAY = "light-and-code"
 
-# Разбираем summaries.txt на части по заголовкам «### ЧАСТЬ …»
-_PART_SUMMARIES: dict[str, str] = {}
-if _SUMMARIES:
+
+def _split_summaries(text: str) -> dict[str, str]:
+    """Режет конспект на части по заголовкам «### ЧАСТЬ …»."""
+    out: dict[str, str] = {}
+    if not text:
+        return out
     import re
-    blocks = re.split(r"\n(?=### ЧАСТЬ)", _SUMMARIES.strip())
-    for b in blocks:
+    for b in re.split(r"\n(?=### ЧАСТЬ)", text.strip()):
         low = b.lower()
         if "часть i." in low or "часть i " in low or "часть 1" in low:
-            _PART_SUMMARIES["1"] = b.strip()
+            out["1"] = b.strip()
         elif "часть ii." in low or "часть ii " in low or "часть 2" in low:
-            _PART_SUMMARIES["2"] = b.strip()
+            out["2"] = b.strip()
         elif "часть iii." in low or "часть iii " in low or "часть 3" in low:
-            _PART_SUMMARIES["3"] = b.strip()
+            out["3"] = b.strip()
+    return out
+
+
+# Ядро и конспекты обоих эссе — читаем один раз при старте
+_CORES: dict[str, str] = {}
+_SUMS: dict[str, str] = {}
+_PART_SUMS: dict[str, dict[str, str]] = {}
+for _key, _f in _ESSAYS.items():
+    _CORES[_key] = _read(_f["core"])
+    _SUMS[_key] = _read(_f["sum"])
+    _PART_SUMS[_key] = _split_summaries(_SUMS[_key])
+
+# Совместимость со старым кодом, если он где-то опирался на эти имена
+_CORE = _CORES[_DEFAULT_ESSAY]
+_SUMMARIES = _SUMS[_DEFAULT_ESSAY]
+_PART_SUMMARIES = _PART_SUMS[_DEFAULT_ESSAY]
+
+
+def _pick(essay: Optional[str]) -> str:
+    """Какое эссе обсуждаем. Незнакомое имя — берём первое."""
+    e = (essay or "").strip().lower()
+    return e if e in _ESSAYS else _DEFAULT_ESSAY
+
 
 # Полные тексты частей — грузим лениво, только если явно попросят
 _FULL_CACHE: dict[str, str] = {}
 
 
-def _full_part(part: str) -> str:
-    if part not in _FULL_CACHE:
-        _FULL_CACHE[part] = _read(f"part{part}.txt")
-    return _FULL_CACHE[part]
+def _full_part(part: str, essay: str = _DEFAULT_ESSAY) -> str:
+    ключ = f"{essay}:{part}"
+    if ключ not in _FULL_CACHE:
+        _FULL_CACHE[ключ] = _read(_ESSAYS[essay]["part"].format(n=part))
+    return _FULL_CACHE[ключ]
 
 
 # ============================================================
@@ -78,21 +110,25 @@ def _full_part(part: str) -> str:
 # ============================================================
 
 
-def _build_system_prompt(part: Optional[str], include_full: bool = False) -> str:
-    """core.txt + конспект нужной части (+ полный текст, если include_full)."""
-    chunks = [_CORE]
+def _build_system_prompt(
+    part: Optional[str], include_full: bool = False, essay: Optional[str] = None
+) -> str:
+    """Ядро нужного эссе + конспект части (+ полный текст, если include_full)."""
+    e = _pick(essay)
+    chunks = [_CORES[e]]
 
-    if part and part in _PART_SUMMARIES:
+    сводки = _PART_SUMS[e]
+    if part and part in сводки:
         chunks.append(
             "СЕЙЧАС ЧИТАТЕЛЬ ОБСУЖДАЕТ ЭТУ ЧАСТЬ (краткое содержание):\n"
-            + _PART_SUMMARIES[part]
+            + сводки[part]
         )
     else:
         # часть не указана — даём конспект всего эссе
-        chunks.append("КРАТКОЕ СОДЕРЖАНИЕ ВСЕГО ЭССЕ:\n" + _SUMMARIES)
+        chunks.append("КРАТКОЕ СОДЕРЖАНИЕ ВСЕГО ЭССЕ:\n" + _SUMS[e])
 
     if include_full and part:
-        full = _full_part(part)
+        full = _full_part(part, e)
         if full:
             chunks.append("ПОЛНЫЙ ТЕКСТ ОБСУЖДАЕМОЙ ЧАСТИ:\n" + full)
 
@@ -110,12 +146,14 @@ async def chat_with_quantareon(
     history: Optional[list] = None,
     include_full: bool = False,
     chapter: Optional[str] = None,
+    essay: Optional[str] = None,
 ) -> dict:
     """
     Один ход диалога.
 
     Args:
         question: вопрос/реплика читателя
+        essay: "light-and-code" | "young-code" | None — какое эссе обсуждают
         part: "1" | "2" | "3" | None — какую часть обсуждают
         history: [{"role": "user"/"assistant", "content": "..."}, ...]
         include_full: подложить полный текст части (дороже по токенам)
@@ -127,7 +165,7 @@ async def chat_with_quantareon(
     if not question:
         return {"reply": "Задай вопрос — и обсудим.", "model": ""}
 
-    system_prompt = _build_system_prompt(part, include_full=include_full)
+    system_prompt = _build_system_prompt(part, include_full=include_full, essay=essay)
     if chapter:
         chapter = str(chapter).strip()[:200]
         system_prompt += (
@@ -396,6 +434,14 @@ _UDAR_WORDS = {
     "волны": "волныы",     # волны́ (род.п., "длина волны")
     "замки": "замкии",     # замки́ (запоры) — движок читает за́мки
     "мастеров": "мастиров",# мастеро́в — фонетическая (короткое частое слово)
+    "таймер": "тааймер",   # та́ймер — все формы ниже, из словаря книги
+    "таймера": "тааймера",
+    "таймеру": "тааймеру",
+    "таймеры": "тааймеры",
+    "таймеров": "тааймеров",
+    "таймерам": "тааймерам",
+    "таймерами": "тааймерами",
+    "таймерах": "тааймерах",
 }
 
 # Замены-подстроки (санскрит, аббревиатуры, устойчивые формы) —

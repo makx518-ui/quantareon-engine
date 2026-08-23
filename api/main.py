@@ -834,6 +834,9 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     question: str = Field(..., description="Вопрос/реплика читателя")
+    essay: Optional[str] = Field(
+        None, description="Какое эссе обсуждают: 'light-and-code' (по умолчанию) или 'young-code'"
+    )
     part: Optional[str] = Field(None, description="Обсуждаемая часть: '1', '2', '3'")
     chapter: Optional[str] = Field(None, description="Заголовок главы, где сейчас читатель")
     history: Optional[list[ChatMessage]] = Field(
@@ -2526,6 +2529,7 @@ async def chat_endpoint(req: ChatRequest, request: Request):
     history = [m.model_dump() for m in (req.history or [])]
     result = await chat_with_quantareon(
         question=req.question,
+        essay=req.essay,
         part=req.part,
         history=history,
         include_full=req.include_full,
