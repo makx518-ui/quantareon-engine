@@ -24,6 +24,8 @@ QUANTAREON VOICE — голосовой Квантареон для сайта q
 
 import os
 import asyncio
+import urllib.request      # 24.08 нужен для Яндекс SpeechKit
+import urllib.parse
 import json
 import logging
 import time
@@ -140,6 +142,28 @@ class Config:
     # дольше этого числа; попыток три → худший случай ~22 с вместо 75.
     # Здоровый Дмитрий отвечает за 2.5–6.4 с, так что 7 — с запасом.
     TTS_TIMEOUT: float = 7.0
+
+    # ═══════════════════════════════════════════════════════════════
+    # 🗣️ ЯНДЕКС SPEECHKIT — основной движок озвучки с 24.08.
+    # Почему перешли: голос ermil он выбрал сам («всегда им пользовался»),
+    # ударения ставятся ПЛЮСОМ перед гласной (з+амки / замк+и) вместо
+    # костыля с удвоением, и нет вечерних зависаний Microsoft.
+    # Замер 24.08 на его ключе: 1300 знаков → 104 с звука за 8.4 с,
+    # то есть в 12 раз быстрее речи. Короткая фраза 0.6–1.8 с.
+    # Дмитрий (edge-tts) остаётся ЗАПАСНЫМ: не ответил Яндекс — уходим
+    # к нему в ту же секунду, человек ничего не замечает.
+    # ⚠️ Ключ только из окружения, в код не класть.
+    # ═══════════════════════════════════════════════════════════════
+    YANDEX_API_KEY: str = os.getenv("YANDEX_API_KEY", "")
+    YANDEX_FOLDER_ID: str = os.getenv("YANDEX_FOLDER_ID", "")
+    YANDEX_VOICE: str = "ermil"        # его выбор из семи мужских
+    YANDEX_SPEED: str = "0.9"          # темп: 1.0 обычный, 0.9 чуть спокойнее
+    YANDEX_EMOTION: str = "neutral"    # neutral | good (радостный)
+    # ⏱️ Срок ожидания Яндекса. Замер 24.08: отвечает за 0.5–1.8 с, так что
+    # три секунды — запас почти двойной. Больше ставить НЕЛЬЗЯ: следом идут
+    # три попытки Дмитрия по 7 с, и худший случай молчания разрастётся.
+    # При 3 с он равен 25 с против 22 с вчера — прирост терпимый.
+    YANDEX_TIMEOUT: float = 3.0
 
     TTS_VOICE_EN: str = "en-US-AndrewMultilingualNeural"
     TTS_RATE_EN: str = "+0%"
@@ -541,6 +565,57 @@ _UDAR_WORDS = {
     "частоты": "частотты",  # частО́ты (мн.ч.)
 }
 
+# ═══════════════════════════════════════════════════════════════════
+# 🗣️ ТОТ ЖЕ СЛОВАРЬ, НО ДЛЯ ЯНДЕКСА — плюс ПЕРЕД ударной гласной.
+# У Edge приходилось удваивать гласную (замкии), потому что другого
+# способа не было. Яндекс понимает прямую разметку: з+амки — за́мки
+# (крепости), замк+и — замки́ (запоры). Проверено на слух 24.08.
+# Сюда же складывать всё новое, что он поймает.
+# ═══════════════════════════════════════════════════════════════════
+_UDAR_YA = {
+    "ума": "ум+а",              # ума́ (род.п.)
+    "ядра": "ядр+а",            # ядра́
+    "ходу": "х+оду",            # хо́ду
+    "часа": "ч+аса",            # ча́са
+    "волны": "в+олны",          # во́лны (мн.ч.)
+    "замки": "замк+и",          # замки́ (запоры), не за́мки
+    "мастеров": "мастер+ов",    # мастеро́в
+    "частоты": "част+оты",      # частО́ты (мн.ч.)
+    "виду": "в+иду",            # в+иду (о человеческом виде) — поймал 24.08
+}
+
+
+def _apply_udar_ya(text: str) -> str:
+    """Расставить ударения так, как их понимает Яндекс.
+
+    Отличие от _apply_udar: тот готовит текст для Edge (удвоение гласной),
+    а этот — для Яндекса (плюс перед гласной). Оба словаря держим рядом,
+    чтобы при возврате к Дмитрию ничего не сломалось.
+    """
+    t = text or ""
+
+    def _keep_case(good):
+        def _r(m):
+            w = m.group(0)
+            return good[0].upper() + good[1:] if w[:1].isupper() else good
+        return _r
+
+    for bad, good in _UDAR_SUBSTR:
+        t = re.sub(re.escape(bad), _keep_case(good), t, flags=re.IGNORECASE)
+    for bad, good in _UDAR_ABBR:
+        t = t.replace(bad, good)
+
+    def _wrepl(m):
+        w = m.group(0)
+        rep = _UDAR_YA[w.lower()]
+        return rep[0].upper() + rep[1:] if w[0].isupper() else rep
+
+    pattern = r"\b(" + "|".join(re.escape(k) for k in _UDAR_YA) + r")\b"
+    t = re.sub(pattern, _wrepl, t, flags=re.IGNORECASE)
+
+    t = _вcё_вместо_все(t)
+    return t
+
 # 🔤 «ВСЕ» ВМЕСТО «ВСЁ». Буква ё на письме часто теряется, и голос читает
 # «Все отлично» как «всЕ отлично» — будто про людей, а не про положение дел.
 # Он это услышал 08.08. Правим там, где однозначно: перед наречием или
@@ -678,8 +753,12 @@ def _чистка_разметки(text: str) -> str:
     return t
 
 
-def _tts_clean(text: str, language: str = "ru") -> str:
-    """Готовим текст к озвучке: убираем то, что голос прочитал бы как мусор."""
+def _tts_clean(text: str, language: str = "ru", udar: bool = True) -> str:
+    """Готовим текст к озвучке: убираем то, что голос прочитал бы как мусор.
+
+    udar=False — не ставить ударения старым способом (удвоение гласной).
+    Нужно для Яндекса: у него своя разметка, плюсом перед гласной.
+    """
     t = text or ""
 
     # 🌡️ ЯЗЫК БЕРЁМ У САМОГО ТЕКСТА, А НЕ У СТРАНИЦЫ.
@@ -873,7 +952,13 @@ def _tts_clean(text: str, language: str = "ru") -> str:
 
         t = re.sub(r"(\d+)\s?%", _проц, t)
         t = re.sub(r"\s+", " ", t).strip()
-        t = _apply_udar(t)
+        # 🗣️ 24.08 УДАРЕНИЯ СТАВИМ НЕ ВСЕГДА ЗДЕСЬ.
+        # Старый словарь удваивает гласную (замкии) — это язык Edge.
+        # Яндекс понимает плюсы (замк+и), и если сначала удвоить, а потом
+        # поставить плюс, слово будет испорчено дважды. Поэтому при работе
+        # через Яндекс сюда не заходим: он расставит своим словарём сам.
+        if udar:
+            t = _apply_udar(t)
     return t
 
 
@@ -2406,6 +2491,66 @@ class EdgeTTSTurbo:
         self.pitch = config.TTS_PITCH_EN if en else config.TTS_PITCH
         self.volume = config.TTS_VOLUME_EN if en else config.TTS_VOLUME
         self.lang = "en" if en else "ru"
+        # 🗣️ 24.08 Яндекс — основной, Дмитрий (Edge) — запасной.
+        # ⚠️ ТОЛЬКО РУССКИЙ. Английскую сторону он трогать запретил:
+        # там Эндрю его устраивает, а английский голос у Яндекса один
+        # и незнакомый. Ставим — не рискуем тем, что уже работает.
+        self.ya_voice = config.YANDEX_VOICE
+        self.ya_on = (not en) and bool(config.YANDEX_API_KEY
+                                       and config.YANDEX_FOLDER_ID)
+
+    @staticmethod
+    def _ya_text(text: str, lang: str) -> str:
+        """Текст в записи Яндекса: ударения плюсом перед гласной."""
+        return _apply_udar_ya(text) if lang == "ru" else text
+
+    async def _yandex(self, text: str) -> bytes:
+        """Озвучить у Яндекса. Пусто — значит не вышло, зовите Дмитрия.
+
+        Формат просим mp3 — тот же, что даёт Edge, поэтому ни проигрыватель,
+        ни окно разговора трогать не пришлось (проверено 24.08).
+        """
+        if not self.ya_on:
+            return b""
+        данные = urllib.parse.urlencode({
+            "text": self._ya_text(text, self.lang),
+            "lang": "ru-RU" if self.lang == "ru" else "en-US",
+            "voice": self.ya_voice,
+            "speed": config.YANDEX_SPEED,
+            "emotion": config.YANDEX_EMOTION,
+            "folderId": config.YANDEX_FOLDER_ID,
+            "format": "mp3",
+        }).encode()
+
+        def _сходить() -> bytes:
+            зпр = urllib.request.Request(
+                "https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize",
+                data=данные,
+                headers={"Authorization": f"Api-Key {config.YANDEX_API_KEY}",
+                         "Content-Type": "application/x-www-form-urlencoded"})
+            with urllib.request.urlopen(зпр, timeout=config.YANDEX_TIMEOUT) as о:
+                return о.read()
+
+        try:
+            звук = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(None, _сходить),
+                timeout=config.YANDEX_TIMEOUT)
+        except Exception as e:
+            logger.warning(f"🗣️ Яндекс не отдал звук ({type(e).__name__}) → Дмитрий")
+            return b""
+
+        # 🔇 24.08 СРЕЗАЕМ СЛУЖЕБНЫЙ ЗАГОЛОВОК ID3.
+        # Яндекс кладёт его в КАЖДЫЙ кусок (45 байт, только подпись
+        # кодировщика), а Edge отдаёт чистый звук. В потоке куски идут
+        # один за другим, и заголовок посреди потока браузер читает как
+        # мусор — щелчки на стыках. Дмитрий такого не давал, поэтому
+        # приводим Яндекс к тому же виду.
+        # ⚠️ Проверка длины обязательна: на обрывке ответа обращение к
+        # звук[9] уронило бы озвучку вместо честного ухода к Дмитрию.
+        if len(звук) > 10 and звук[:3] == b"ID3":
+            длина = (звук[6] << 21) | (звук[7] << 14) | (звук[8] << 7) | звук[9]
+            звук = звук[10 + длина:]
+        return звук
 
     @staticmethod
     async def _collect(communicate) -> bytes:
@@ -2419,10 +2564,30 @@ class EdgeTTSTurbo:
 
     async def synthesize(self, text: str) -> bytes:
         """Озвучить текст целиком."""
+        # 🔀 24.08 ДВЕ РАЗДЕЛЬНЫЕ ДОРОЖКИ — его требование, дословно:
+        # «это экспериментальный вариант, внутренняя кухня, я экспериментирую;
+        # не работает — не работает, никто этого не видит».
+        #
+        #   БЫСТРАЯ модель (все гости, по умолчанию) → только Дмитрий,
+        #       со всеми его настройками. Яндекса тут нет вовсе.
+        #   УМНАЯ модель (его админская кнопка)      → только Яндекс.
+        #       Не ответил — молчим, к Дмитрию НЕ бежим.
+        #
+        # Так каждая дорожка настраивается сама по себе, и правки на одной
+        # не задевают другую. Худший случай молчания на быстрой остаётся
+        # прежним (22 с), потому что Яндекс её не касается.
+        сырой = text
+        на_умной = current_model() == MODELS["big"]["id"]
+
+        if на_умной and self.ya_on:
+            # ── дорожка Ермила: Яндекс и точка
+            return await self._yandex(_tts_clean(сырой, self.lang, udar=False))
+
+        # ── дорожка Дмитрия: как было до 24.08
         text = _tts_clean(text, self.lang)   # словарь произношения + чистка
         if not text or not text.strip():
             return b""
-        
+
         try:
             communicate = edge_tts.Communicate(
                 text=text,
@@ -2450,10 +2615,24 @@ class EdgeTTSTurbo:
         Собираем весь аудио для текста, потом отправляем — без щелчков между кусками.
         🛡️ С RETRY логикой при сбоях.
         """
+        # 🔀 24.08 ДВЕ РАЗДЕЛЬНЫЕ ДОРОЖКИ (см. пояснение в synthesize).
+        сырой = text
+        if current_model() == MODELS["big"]["id"] and self.ya_on:
+            звук_я = await self._yandex(_tts_clean(сырой, self.lang, udar=False))
+            if звук_я:
+                try:
+                    await send_callback(звук_я)
+                except Exception as e:
+                    logger.warning(f"⚠️ отправка звука не прошла: {e}")
+            else:
+                logger.warning("🗣️ Яндекс молчит, а мы на умной модели — "
+                               "звука не будет (так задумано, это проба)")
+            return
+
         text = _tts_clean(text, self.lang)   # словарь произношения + чистка
         if not text or not text.strip():
             return
-        
+
         # 🛡️ RETRY до 3 попыток — ТОЛЬКО ДЛЯ СИНТЕЗА.
         # Отправку готового звука повторами не лечат: если она упала, значит
         # соединение с браузером закрылось или нас перебили — синтезировать
@@ -2900,24 +3079,20 @@ class VoiceSessionTurbo:
         """Кешируем филлер в фоне — готов к мгновенной отправке."""
         try:
             self.cached_filler_text = self.geo.generate_filler(self.lang)
-            
-            audio_buffer = io.BytesIO()
-            
-            communicate = edge_tts.Communicate(
-                _tts_clean(self.cached_filler_text, self.lang),
-                self.tts.voice,
-                rate=self.tts.rate,
-                pitch=self.tts.pitch,
-                volume=self.tts.volume
-            )
-            
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    audio_buffer.write(chunk["data"])
-            
-            self.cached_filler_audio = audio_buffer.getvalue()
+
+            # 🗣️ 24.08 ПРИСКАЗКА ИДЁТ ТЕМ ЖЕ ПУТЁМ, ЧТО И ОТВЕТ.
+            # Раньше она звалась к Edge напрямую, мимо класса озвучки. При
+            # переходе на Яндекс это дало бы разнобой в одном разговоре:
+            # присказку сказал бы Дмитрий, а ответ — Ермил. Теперь зовём
+            # synthesize, и он сам выбирает дорожку по текущей модели.
+            # ⚠️ Не вышло — присказки просто не будет: filler_ready всё равно
+            # ставится в finally, сессия не виснет, ждут её максимум 2 с.
+            # ⚠️ Готовится ОДИН РАЗ в начале сессии: переключишь модель
+            # посреди разговора — присказка останется прежним голосом.
+            self.cached_filler_audio = await self.tts.synthesize(
+                self.cached_filler_text)
             logger.info(f"[{self.session_id}] ✅ Filler cached: {len(self.cached_filler_audio)} bytes")
-            
+
         except Exception as e:
             logger.error(f"[{self.session_id}] Filler cache error: {e}")
             self.cached_filler_text = "Hello!" if self.lang == "en" else "Привет!"
