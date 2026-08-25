@@ -24,6 +24,7 @@ QUANTAREON VOICE — голосовой Квантареон для сайта q
 
 import os
 import asyncio
+import base64              # 25.08 готовый кусочек тишины
 import urllib.request      # 24.08 нужен для Яндекс SpeechKit
 import urllib.parse
 import json
@@ -168,6 +169,10 @@ class Config:
     # три попытки Дмитрия по 7 с, и худший случай молчания разрастётся.
     # При 3 с он равен 25 с против 22 с вчера — прирост терпимый.
     YANDEX_TIMEOUT: float = 3.0
+    # 🔇 25.08 ПАУЗА МЕЖДУ ПРЕДЛОЖЕНИЯМИ, миллисекунды. Его выбор на слух
+    # 25.08 его число, слово в слово как в образце rech_100. Внутри
+    # предложения пауз НЕ ставим — там Яндекс ведёт интонацию сам.
+    YANDEX_PAUSE_MS: int = 700
 
     TTS_VOICE_EN: str = "en-US-AndrewMultilingualNeural"
     TTS_RATE_EN: str = "+0%"
@@ -576,6 +581,17 @@ _UDAR_WORDS = {
 # (крепости), замк+и — замки́ (запоры). Проверено на слух 24.08.
 # Сюда же складывать всё новое, что он поймает.
 # ═══════════════════════════════════════════════════════════════════
+# 🔇 25.08 ОДИН КАДР ТИШИНЫ mp3 — ровно 24 мс, замерено.
+# Нужен, чтобы клеить паузы между предложениями БЕЗ ffmpeg: на Render
+# его может не оказаться, и вместо речи вышла бы тишина. Кадры mp3
+# склеиваются встык, поэтому пауза = нужное число таких кадров.
+# ⚠️ БРАЛ КУСОК ПОДЛИННЕЕ И ОШИБСЯ: он весил 144 мс вместо 100, и паузы
+# выходили 1.8 с вместо 0.7. Кадр — самая мелкая доля, ошибиться негде.
+_КАДР_ТИШИНЫ = base64.b64decode(
+    "//tUxFWDwAABpAAAACAAADSAAAAEVVVMQU1FMy4xMDBVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV")
+_КАДР_МС = 24
+
+
 _UDAR_YA = {
     "ума": "ум+а",              # ума́ (род.п.)
     "ядра": "ядр+а",            # ядра́
@@ -993,6 +1009,11 @@ _WORD_FIXES = [
     ("Что бы тебе обсудить", "Что бы ты хотел обсудить"),
     ("что бы тебе сейчас обсудить", "что бы ты хотел обсудить"),
     ("что бы тебе обсудить", "что бы ты хотел обсудить"),
+    # 25.08 поймано на слух: «если захотишь узнать» — модель склеила
+    # неверную форму, правильно «захочешь». Не распознавание, а выдумка
+    # самой модели: слово стояло в ЕЁ ответе.
+    ("захотишь", "захочешь"),
+    ("Захотишь", "Захочешь"),
     ("Квантарион", "Квантареон"),
     ("КВАНТАРИОН", "КВАНТАРЕОН"),
     ("квантарион", "квантареон"),
@@ -2509,11 +2530,38 @@ class EdgeTTSTurbo:
         return _apply_udar_ya(text) if lang == "ru" else text
 
     async def _yandex(self, text: str) -> bytes:
-        """Озвучить у Яндекса. Пусто — значит не вышло, зовите Дмитрия.
+        """Озвучить у Яндекса. Пусто — значит не вышло.
 
-        Формат просим mp3 — тот же, что даёт Edge, поэтому ни проигрыватель,
-        ни окно разговора трогать не пришлось (проверено 24.08).
+        🗣️ 25.08 РЕЖЕМ ПО ТОЧКАМ И КЛЕИМ С ПАУЗОЙ. Его находка на слух:
+        разметка SSML (<break/>) ЛОМАЕТ речь — Яндекс перестаёт вести
+        интонацию сам и рубит фразу везде, даже там, где знаков нет
+        («чувствуется прерывание везде, а надо только после знаков»).
+        Поэтому каждое предложение просим ОБЫЧНЫМ текстом — внутри него
+        Яндекс сам расставит дыхание на запятых и тире, как умеет, — а
+        паузу добавляем только МЕЖДУ предложениями, склейкой.
+        Замер на его отрывке: 3 предложения, пауза 0.7 с → 27.2 с речи;
+        без пауз 26.3 с. Он выбрал этот способ, послушав пять других.
         """
+        if not self.ya_on:
+            return b""
+
+        куски = [к.strip() for к in re.split(r"(?<=[.!?])\s+", text) if к.strip()]
+        if not куски:
+            return b""
+
+        собранное = []
+        тишина = _КАДР_ТИШИНЫ * max(1, round(config.YANDEX_PAUSE_MS / _КАДР_МС))
+        for i, кусок in enumerate(куски):
+            звук = await self._ya_один(кусок)
+            if not звук:          # не отдали хоть одно предложение — уходим целиком
+                return b""
+            собранное.append(звук)
+            if i < len(куски) - 1:
+                собранное.append(тишина)
+        return b"".join(собранное)
+
+    async def _ya_один(self, text: str) -> bytes:
+        """Одно предложение у Яндекса, сырым звуком (без сжатия)."""
         if not self.ya_on:
             return b""
         данные = urllib.parse.urlencode({
@@ -2523,6 +2571,8 @@ class EdgeTTSTurbo:
             "speed": config.YANDEX_SPEED,
             "emotion": config.YANDEX_EMOTION,
             "folderId": config.YANDEX_FOLDER_ID,
+            # mp3: куски склеиваются встык, паузу берём готовым кусочком
+            # (_КАДР_ТИШИНЫ) — так не нужен ffmpeg на сервере.
             "format": "mp3",
         }).encode()
 
@@ -2540,22 +2590,19 @@ class EdgeTTSTurbo:
                 asyncio.get_event_loop().run_in_executor(None, _сходить),
                 timeout=config.YANDEX_TIMEOUT)
         except Exception as e:
-            logger.warning(f"🗣️ Яндекс не отдал звук ({type(e).__name__}) → Дмитрий")
+            logger.warning(f"🗣️ Яндекс не отдал звук ({type(e).__name__})")
             return b""
 
-        # 🔇 24.08 СРЕЗАЕМ СЛУЖЕБНЫЙ ЗАГОЛОВОК ID3.
-        # Яндекс кладёт его в КАЖДЫЙ кусок (45 байт, только подпись
-        # кодировщика), а Edge отдаёт чистый звук. В потоке куски идут
-        # один за другим, и заголовок посреди потока браузер читает как
-        # мусор — щелчки на стыках. Дмитрий такого не давал, поэтому
-        # приводим Яндекс к тому же виду.
+        # 🔇 СРЕЗАЕМ СЛУЖЕБНЫЙ ЗАГОЛОВОК ID3 (45 байт, подпись кодировщика).
+        # Яндекс кладёт его в КАЖДОЕ предложение, а Edge отдаёт чистый звук.
+        # Куски идут в браузер один за другим, и заголовок посреди потока
+        # читается как мусор — щелчки на стыках.
         # ⚠️ Проверка длины обязательна: на обрывке ответа обращение к
-        # звук[9] уронило бы озвучку вместо честного ухода к Дмитрию.
+        # звук[9] уронило бы озвучку.
         if len(звук) > 10 and звук[:3] == b"ID3":
-            длина = (звук[6] << 21) | (звук[7] << 14) | (звук[8] << 7) | звук[9]
-            звук = звук[10 + длина:]
+            n = (звук[6] << 21) | (звук[7] << 14) | (звук[8] << 7) | звук[9]
+            звук = звук[10 + n:]
         return звук
-
     @staticmethod
     async def _collect(communicate) -> bytes:
         """Собрать весь звук от Edge. Вынесено отдельно, чтобы обернуть
@@ -2698,6 +2745,11 @@ class EdgeTTSTurbo:
 # ============================================================
 CACHED_GREETING_AUDIO: bytes = b""
 CACHED_GREETING_AUDIO_EN: bytes = b""
+# 🗣️ 25.08 ВТОРОЕ ПРИВЕТСТВИЕ — голосом Ермила, только для умной модели.
+# Файл один на всех отдавать нельзя: заменили бы — и гости на быстрой
+# слышали бы Ермила в приветствии, а дальше Дмитрия. Поэтому держим два,
+# и выбираем по текущей модели прямо при отдаче.
+CACHED_GREETING_ERMIL: bytes = b""
 
 
 async def warm_greetings():
@@ -2759,8 +2811,13 @@ async def warm_greetings():
         if not CACHED_GREETING_AUDIO_EN:
             CACHED_GREETING_AUDIO_EN = await EdgeTTSTurbo("en").synthesize(config.GREETING_TEXT_EN)
             откуда_en = "синтез"
+        # 🗣️ 25.08 ПРИВЕТСТВИЕ ЕРМИЛА для умной модели. Лежит в хранилище
+        # рядом со старым, отдельным файлом — старое остаётся гостям.
+        # Нет файла — не беда: на умной отдадим обычное, не замолчим.
+        CACHED_GREETING_ERMIL = await _из_хранилища("ru-ermil")
         logger.info(f"VOICE: приветствия готовы — RU {len(CACHED_GREETING_AUDIO)} ({откуда_ru}) / "
-                    f"EN {len(CACHED_GREETING_AUDIO_EN)} ({откуда_en}) байт")
+                    f"EN {len(CACHED_GREETING_AUDIO_EN)} ({откуда_en}) байт / "
+                    f"Ермил {len(CACHED_GREETING_ERMIL)} байт")
         logger.info(f"VOICE: голоса — RU {config.TTS_VOICE} @ {config.TTS_RATE} | "
                     f"EN {config.TTS_VOICE_EN} @ {config.TTS_RATE_EN}")
     except Exception as e:
@@ -2903,8 +2960,18 @@ async def voice_debug(key: str = ""):
 
 @router.get("/api/greeting")
 async def get_greeting(lang: str = "ru"):
-    """Отдать заранее озвученное приветствие (ru/en)."""
-    audio = CACHED_GREETING_AUDIO_EN if str(lang).lower().startswith("en") else CACHED_GREETING_AUDIO
+    """Отдать заранее озвученное приветствие (ru/en).
+
+    🗣️ 25.08 На умной модели отдаём приветствие ЕРМИЛА, чтобы голос не
+    менялся посреди разговора. Гости сидят на быстрой и слышат прежнее.
+    Нет файла Ермила в хранилище — молча отдаём обычное.
+    """
+    if str(lang).lower().startswith("en"):
+        audio = CACHED_GREETING_AUDIO_EN
+    elif current_model() == MODELS["big"]["id"] and CACHED_GREETING_ERMIL:
+        audio = CACHED_GREETING_ERMIL
+    else:
+        audio = CACHED_GREETING_AUDIO
     if audio:
         return Response(content=audio, media_type="audio/mpeg")
     return JSONResponse({"error": "greeting not ready"}, status_code=503)
