@@ -2754,7 +2754,7 @@ CACHED_GREETING_ERMIL: bytes = b""
 
 async def warm_greetings():
     """Озвучить приветствия заранее. Зовётся при старте приложения."""
-    global CACHED_GREETING_AUDIO, CACHED_GREETING_AUDIO_EN
+    global CACHED_GREETING_AUDIO, CACHED_GREETING_AUDIO_EN, CACHED_GREETING_ERMIL
     # заодно прогреваем знания о сайте, чтобы первый вопрос не ждал диска
     if site_knowledge is not None:
         try:
