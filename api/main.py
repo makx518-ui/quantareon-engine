@@ -837,6 +837,9 @@ class ChatRequest(BaseModel):
     essay: Optional[str] = Field(
         None, description="Какое эссе обсуждают: 'light-and-code' (по умолчанию) или 'young-code'"
     )
+    lang: Optional[str] = Field(
+        None, description="Язык страницы: 'ru' (по умолчанию) или 'en'"
+    )
     part: Optional[str] = Field(None, description="Обсуждаемая часть: '1', '2', '3'")
     chapter: Optional[str] = Field(None, description="Заголовок главы, где сейчас читатель")
     history: Optional[list[ChatMessage]] = Field(
@@ -2530,6 +2533,7 @@ async def chat_endpoint(req: ChatRequest, request: Request):
     result = await chat_with_quantareon(
         question=req.question,
         essay=req.essay,
+        lang=req.lang,
         part=req.part,
         history=history,
         include_full=req.include_full,
