@@ -32,15 +32,21 @@
     { id: "s2-часть-вторая-развертка", num: "2", label: "Часть II" },
     { id: "s3-часть-третья-выход", num: "3", label: "Часть III" },
   ];
+  var PARTS_YC_EN = [
+    { id: "s1-part-one-the-machinery", num: "1", label: "Part I" },
+    { id: "s2-part-two-the-unfolding", num: "2", label: "Part II" },
+    { id: "s3-part-three-the-way-out", num: "3", label: "Part III" },
+  ];
 
   // Определяем страницу по наличию якорей
-  var isYC = !!document.getElementById(PARTS_YC[0].id);
-  var isRU = !isYC && !!document.getElementById(PARTS_RU[0].id);
-  var isEN = !isYC && !isRU && !!document.getElementById(PARTS_EN[0].id);
-  if (!isRU && !isEN && !isYC) return; // не страница эссе — виджет не нужен
-  var PARTS = isYC ? PARTS_YC : (isRU ? PARTS_RU : PARTS_EN);
+  var isYC   = !!document.getElementById(PARTS_YC[0].id);
+  var isYCEN = !isYC && !!document.getElementById(PARTS_YC_EN[0].id);
+  var isRU = !isYC && !isYCEN && !!document.getElementById(PARTS_RU[0].id);
+  var isEN = !isYC && !isYCEN && !isRU && !!document.getElementById(PARTS_EN[0].id);
+  if (!isRU && !isEN && !isYC && !isYCEN) return; // не страница эссе — виджет не нужен
+  var PARTS = isYC ? PARTS_YC : (isYCEN ? PARTS_YC_EN : (isRU ? PARTS_RU : PARTS_EN));
   // Какое эссе обсуждаем: сервер по этому полю берёт нужные знания
-  var ESSAY = isYC ? "young-code" : "light-and-code";
+  var ESSAY = (isYC || isYCEN) ? "young-code" : "light-and-code";
   // Язык страницы. ВАЖНО: «Молодой код» русский, но isRU у него ложно —
   // поэтому везде, где нужен ЯЗЫК (озвучка, распознавание, голосовая связь),
   // берём эту переменную, а не isRU.
@@ -466,6 +472,7 @@
       body: JSON.stringify({
         question: q,
         essay: ESSAY,
+        lang: LANG,
         part: part.num,
         chapter: currentChapter(),
         history: history.slice(0, -1),

@@ -111,7 +111,8 @@ def _full_part(part: str, essay: str = _DEFAULT_ESSAY) -> str:
 
 
 def _build_system_prompt(
-    part: Optional[str], include_full: bool = False, essay: Optional[str] = None
+    part: Optional[str], include_full: bool = False, essay: Optional[str] = None,
+    lang: Optional[str] = None
 ) -> str:
     """Ядро нужного эссе + конспект части (+ полный текст, если include_full)."""
     e = _pick(essay)
@@ -132,6 +133,13 @@ def _build_system_prompt(
         if full:
             chunks.append("ПОЛНЫЙ ТЕКСТ ОБСУЖДАЕМОЙ ЧАСТИ:\n" + full)
 
+    if (lang or "").lower().startswith("en"):
+        chunks.append(
+            "ЯЗЫК ОТВЕТА: читатель открыл АНГЛИЙСКУЮ версию эссе. "
+            "Отвечай ТОЛЬКО по-английски, естественным литературным английским, "
+            "в той же спокойной манере. Русских слов в ответе быть не должно."
+        )
+
     return "\n\n".join(c for c in chunks if c)
 
 
@@ -147,6 +155,7 @@ async def chat_with_quantareon(
     include_full: bool = False,
     chapter: Optional[str] = None,
     essay: Optional[str] = None,
+    lang: Optional[str] = None,
 ) -> dict:
     """
     Один ход диалога.
@@ -165,7 +174,7 @@ async def chat_with_quantareon(
     if not question:
         return {"reply": "Задай вопрос — и обсудим.", "model": ""}
 
-    system_prompt = _build_system_prompt(part, include_full=include_full, essay=essay)
+    system_prompt = _build_system_prompt(part, include_full=include_full, essay=essay, lang=lang)
     if chapter:
         chapter = str(chapter).strip()[:200]
         system_prompt += (
