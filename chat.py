@@ -88,6 +88,19 @@ _SUMMARIES = _SUMS[_DEFAULT_ESSAY]
 _PART_SUMMARIES = _PART_SUMS[_DEFAULT_ESSAY]
 
 
+def _karta_po_yazyku(core: str, lang: Optional[str]) -> str:
+    """Оставляем только ту карту названий, что нужна по языку.
+    Модель не должна видеть чужую — на словах она это правило нарушает."""
+    import re as _re
+    англ = (lang or "").lower().startswith("en")
+    убрать = "КАРТА_РУ" if англ else "КАРТА_EN"
+    оставить = "КАРТА_EN" if англ else "КАРТА_РУ"
+    core = _re.sub(rf"<<{убрать}>>.*?<</{убрать}>>\s*", "", core, flags=_re.S)
+    core = core.replace(f"<<{оставить}>>\n", "").replace(f"<</{оставить}>>\n", "")
+    core = core.replace(f"<<{оставить}>>", "").replace(f"<</{оставить}>>", "")
+    return core
+
+
 def _pick(essay: Optional[str]) -> str:
     """Какое эссе обсуждаем. Незнакомое имя — берём первое."""
     e = (essay or "").strip().lower()
@@ -116,7 +129,7 @@ def _build_system_prompt(
 ) -> str:
     """Ядро нужного эссе + конспект части (+ полный текст, если include_full)."""
     e = _pick(essay)
-    chunks = [_CORES[e]]
+    chunks = [_karta_po_yazyku(_CORES[e], lang)]
 
     сводки = _PART_SUMS[e]
     if part and part in сводки:
@@ -146,6 +159,26 @@ def _build_system_prompt(
 # ============================================================
 # ОСНОВНАЯ ФУНКЦИЯ
 # ============================================================
+
+
+def _snyat_razmetku(t: str) -> str:
+    """Убираем разметку, которую окно чата показывает как мусор.
+    Модель иногда забывает запрет — здесь убираем наверняка."""
+    if not t:
+        return t
+    import re as _re
+    # **жирный** и *курсив* -> просто текст
+    t = _re.sub(r"\*\*(.+?)\*\*", r"\1", t, flags=_re.S)
+    t = _re.sub(r"(?<!\*)\*(?!\s)(.+?)(?<!\s)\*(?!\*)", r"\1", t, flags=_re.S)
+    t = t.replace("*", "")
+    # заголовки ## в начале строки
+    t = _re.sub(r"(?m)^\s*#{1,6}\s*", "", t)
+    # маркеры списка в начале строки
+    t = _re.sub(r"(?m)^\s*[-•]\s+", "", t)
+    # технические знаки, которые движок озвучки читает не так
+    for знак, слово in (("≈", "примерно "), ("→", " "), ("←", " "), ("%", " процентов")):
+        t = t.replace(знак, слово)
+    return t
 
 
 async def chat_with_quantareon(
@@ -202,7 +235,7 @@ async def chat_with_quantareon(
             "model": "",
         }
 
-    return {"reply": reply, "model": model_used}
+    return {"reply": _snyat_razmetku(reply), "model": model_used}
 
 
 # ============================================================
