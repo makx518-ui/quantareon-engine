@@ -88,6 +88,16 @@ _SUMMARIES = _SUMS[_DEFAULT_ESSAY]
 _PART_SUMMARIES = _PART_SUMS[_DEFAULT_ESSAY]
 
 
+def _vytashchit_kartu(core: str, lang: Optional[str]) -> str:
+    """Достаём сам список глав — он повторяется в конце промпта.
+    Конспект стоит ближе к вопросу и перетягивает внимание на себя,
+    поэтому точный перечень должен идти последним."""
+    import re as _re
+    метка = "КАРТА_EN" if (lang or "").lower().startswith("en") else "КАРТА_РУ"
+    m = _re.search(rf"<<{метка}>>(.*?)<</{метка}>>", core, flags=_re.S)
+    return m.group(1).strip() if m else ""
+
+
 def _karta_po_yazyku(core: str, lang: Optional[str]) -> str:
     """Оставляем только ту карту названий, что нужна по языку.
     Модель не должна видеть чужую — на словах она это правило нарушает."""
@@ -145,6 +155,20 @@ def _build_system_prompt(
         full = _full_part(part, e)
         if full:
             chunks.append("ПОЛНЫЙ ТЕКСТ ОБСУЖДАЕМОЙ ЧАСТИ:\n" + full)
+
+    карта = _vytashchit_kartu(_CORES[e], lang)
+    if карта:
+        если_англ = (
+            " Конспект выше написан по-русски и заголовки в нём русские — "
+            "в английском ответе их использовать нельзя, только названия из списка ниже."
+            if (lang or "").lower().startswith("en") else ""
+        )
+        chunks.append(
+            "НАПОМИНАНИЕ О НОМЕРАХ ГЛАВ. Номер главы по конспекту определять НЕЛЬЗЯ."
+            + если_англ +
+            " Если спрашивают о главе по номеру или просят назвать главу, "
+            "бери номер и название ТОЛЬКО отсюда:\n\n" + карта
+        )
 
     if (lang or "").lower().startswith("en"):
         chunks.append(
