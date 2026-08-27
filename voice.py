@@ -86,10 +86,12 @@ try:
     _sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "turn"))
     from inference import predict_endpoint as _слышит_конец
     SMART_TURN = True
+    print("VOICE: Smart Turn подключён — слушаю интонацию", flush=True)
     logger.info("VOICE: Smart Turn подключён — слушаю интонацию")
 except Exception as _e:
     _слышит_конец = None
     SMART_TURN = False
+    print(f"VOICE: Smart Turn НЕ подключился ({_e}) — работаю по числам", flush=True)
     logger.warning(f"VOICE: Smart Turn не подключился ({_e}) — работаю по числам")
 
 router = APIRouter()
@@ -3160,6 +3162,7 @@ async def voice_health():
         "stt": "Deepgram Nova-3",
         "tts_ru": f"{config.TTS_VOICE} @ {config.TTS_RATE}",
         "tts_en": f"{config.TTS_VOICE_EN} @ {config.TTS_RATE_EN}",
+        "smart_turn": "подключён" if SMART_TURN else "НЕ подключён",
         "greeting_ru_bytes": len(CACHED_GREETING_AUDIO),
         "greeting_en_bytes": len(CACHED_GREETING_AUDIO_EN),
     }
