@@ -1,209 +1,182 @@
-<!-- ИСТОРИЯ КАРТ · одна карточка на расчёт, внутри две ссылки
-     Его правило 05.09: слева карта клиента, справа механика для ИИ.
-     Открывается отдельной страницей, сверху стрелка возврата. -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>История разборов · Квантареон</title>
+<style>
+/* ── стиль сайта: те же цвета и шрифт, что на главной ── */
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0d0f1a;color:#d0d0d8;font-family:'Segoe UI',sans-serif;font-size:13px}
 
-<a href="/" class="ist-nazad" title="К картам">
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-       stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
-  </svg>
-  <span>к картам</span>
-</a>
+.hdr{background:#141628;border-bottom:1px solid #2a2d42;padding:6px 12px;
+     position:sticky;top:0;z-index:100;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hdr .ttl{color:#f0c040;font-size:14px;letter-spacing:3px;flex:1;text-align:center}
+.b{background:#2a3a5c;border:1px solid #3a4a6c;color:#c0c8e0;padding:3px 8px;
+   border-radius:3px;font-size:10px;cursor:pointer;text-decoration:none;
+   display:inline-flex;align-items:center;gap:4px}
+.b:hover{background:#3a5a8c}
+.b.bg{background:#5a4a1a;border-color:#8a7a3a;color:#f0c040}
+.b.bg:hover{background:#7a6420}
+.b.dan{background:#3a1a1a;border-color:#6c3a3a;color:#e09070}
+.b.dan:hover{background:#5a2020}
 
-<div class="ist-list">
-  <header class="ist-shapka">
-    <h1>📜 История разборов 📜</h1>
-    <div class="ist-schet"><span id="ist-vsego">0</span> расчётов</div>
-    <button class="ist-ochistit" onclick="история_очистить()">🗑 Очистить всю историю</button>
-  </header>
+.wrap{max-width:900px;margin:0 auto;padding:14px 10px 60px}
+.schet{text-align:center;color:#7078a0;font-size:10px;text-transform:uppercase;
+       letter-spacing:1px;margin:10px 0 12px}
+.schet b{color:#f0c040;font-size:13px}
 
-  <div class="ist-kolonki-zag">
-    <span>☉ карта клиенту</span>
-    <span>⚙ механика расклада</span>
-  </div>
+.kolonki{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 12px 5px;
+         color:#7078a0;font-size:9px;text-transform:uppercase;letter-spacing:1px}
 
-  <div id="ist-karty"></div>
+.karta{background:#12142a;border:1px solid #2a2d42;border-radius:4px;
+       margin-bottom:8px;padding:9px 12px}
+.karta:hover{border-color:#3a4a6c}
+.verh{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.nom{width:20px;height:20px;flex:0 0 auto;display:inline-flex;align-items:center;
+     justify-content:center;border-radius:50%;background:#1a2040;color:#8890b0;font-size:10px}
+.imya{color:#d0d0d8;font-size:13px}
+.tip{color:#8890b0;font-size:10px}
+.data{color:#7078a0;font-size:9px;margin-left:auto}
+
+.dve{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.pol{background:#0a0c16;border:1px solid #1a1d30;border-radius:3px;padding:8px 10px;
+     cursor:pointer;display:flex;flex-direction:column;gap:3px}
+.pol:hover{border-color:#8a7a3a;background:#0f1220}
+.pol.net{opacity:.4;cursor:default}
+.pol.net:hover{border-color:#1a1d30;background:#0a0c16}
+.pz{color:#c0c8e0;font-size:11px}
+.pp{color:#7078a0;font-size:9px}
+.pk{display:flex;align-items:center;gap:5px;margin-top:4px}
+.mini{background:transparent;border:1px solid #2a3a5c;color:#7078a0;width:20px;height:20px;
+      border-radius:3px;font-size:10px;cursor:pointer;padding:0}
+.mini:hover{border-color:#8a7a3a;color:#f0c040}
+.otk{margin-left:auto;color:#7078a0;font-size:9px}
+.pol:hover .otk{color:#f0c040}
+
+.pusto{text-align:center;color:#7078a0;padding:40px 0;font-size:12px}
+.vspl{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:200;
+      background:#5a4a1a;border:1px solid #8a7a3a;color:#f0c040;
+      padding:6px 16px;border-radius:3px;font-size:11px}
+
+@media(max-width:640px){
+  .dve,.kolonki{grid-template-columns:1fr}
+  .kolonki{display:none}
+  .hdr .ttl{font-size:11px;letter-spacing:1px}
+}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <a href="/" class="b" title="К картам">← к картам</a>
+  <span class="ttl">ИСТОРИЯ РАЗБОРОВ</span>
+  <button class="b dan" onclick="очистить()">🗑 очистить</button>
+</div>
+
+<div class="wrap">
+  <div class="schet"><b id="vsego">0</b> расчётов в архиве</div>
+  <div class="kolonki"><span>☉ карта клиенту</span><span>⚙ механика расклада</span></div>
+  <div id="spisok"></div>
 </div>
 
 <script>
-async function история_загрузить() {
-  try {
-    const о = await fetch("/api/istoriya").then(r => r.json());
-    история_нарисовать(о.raschety || []);
-  } catch (e) {
-    document.getElementById("ist-karty").innerHTML =
-      `<div class="ist-pusto">не удалось загрузить: ${e.message}</div>`;
+let РАСЧЁТЫ = [];
+
+function э(т){return String(т==null?"":т).replace(/[&<>"]/g,с=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[с]));}
+
+async function загрузить(){
+  try{
+    const о = await fetch("/api/istoriya").then(r=>r.json());
+    нарисовать(о.raschety||[]);
+  }catch(e){
+    document.getElementById("spisok").innerHTML =
+      `<div class="pusto">не удалось загрузить: ${э(e.message)}</div>`;
   }
 }
 
-function история_нарисовать(расчёты) {
-  document.getElementById("ist-vsego").textContent = расчёты.length;
-  const место = document.getElementById("ist-karty");
-  if (!расчёты.length) {
-    место.innerHTML = `<div class="ist-pusto">пока пусто — рассчитайте первую карту</div>`;
-    return;
-  }
-  место.innerHTML = расчёты.map((р, i) => `
-    <article class="ist-karta">
-      <div class="ist-verh">
-        <span class="ist-nomer">${расчёты.length - i}</span>
-        <span class="ist-imya">${р.imya}</span>
-        <span class="ist-tip">${р.znachok} ${р.zakaz}${р.rozhdenie ? " · " + р.rozhdenie : ""}</span>
-        <span class="ist-data">✧ ${р.data}</span>
-        <button class="ist-knopka ist-udalit" title="удалить расчёт"
-                onclick="история_udalit('${р.id}')">🗑</button>
+function нарисовать(р){
+  РАСЧЁТЫ = р;
+  document.getElementById("vsego").textContent = р.length;
+  const м = document.getElementById("spisok");
+  if(!р.length){ м.innerHTML = `<div class="pusto">пока пусто — рассчитайте первую карту</div>`; return; }
+  м.innerHTML = р.map((з,i)=>`
+    <div class="karta">
+      <div class="verh">
+        <span class="nom">${р.length-i}</span>
+        <span class="imya">${э(з.imya)}</span>
+        <span class="tip">${з.znachok} ${э(з.zakaz)}${з.rozhdenie?" · "+э(з.rozhdenie):""}</span>
+        <span class="data">${э(з.data)}</span>
+        <button class="mini" data-i="${i}" data-act="del" title="удалить расчёт">🗑</button>
       </div>
-
-      <div class="ist-dve">
-        ${половина("karta", р, "☉", "карта клиенту", "трактовка без терминов")}
-        ${половина("kuhnya", р, "⚙", "механика расклада", "все слои, для ученика")}
+      <div class="dve">
+        ${пол("karta",з,i,"☉","карта клиенту","трактовка без терминов")}
+        ${пол("kuhnya",з,i,"⚙","механика расклада","все слои, для ученика")}
       </div>
-    </article>`).join("");
+    </div>`).join("");
+  // ⚠️ пути НЕ в атрибутах: там кириллица и слэши, атрибут ломался
+  м.querySelectorAll("[data-act]").forEach(у=>{
+    у.addEventListener("click", с=>{
+      с.stopPropagation();
+      const з = РАСЧЁТЫ[+у.dataset.i]; if(!з) return;
+      const вид = у.dataset.vid;
+      const файл = вид==="karta" ? з.fayl_karty : з.fayl_kuhni;
+      const что = у.dataset.act;
+      if(что==="del") удалить(з.id);
+      else if(что==="open") window.open(`/istoriya/${вид}?f=`+encodeURIComponent(файл),"_blank");
+      else if(что==="copy") копировать(вид,файл);
+      else if(что==="save") скачать(вид,файл,з.imya);
+    });
+  });
 }
 
-function половина(вид, р, значок, подпись, пояснение) {
-  const файл = вид === "karta" ? р.fayl_karty : р.fayl_kuhni;
-  if (!файл) {
-    return `<div class="ist-pol ist-net"><span class="ist-pol-zag">${значок} ${подпись}</span>
-              <span class="ist-pol-net">не создана</span></div>`;
-  }
-  return `<div class="ist-pol" onclick="открыть('${вид}','${файл}')">
-      <span class="ist-pol-zag">${значок} ${подпись}</span>
-      <span class="ist-pol-pod">${пояснение}</span>
-      <span class="ist-pol-knopki">
-        <button class="ist-mini" title="скопировать"
-                onclick="event.stopPropagation(); скопировать('${вид}','${файл}')">⧉</button>
-        <button class="ist-mini" title="скачать"
-                onclick="event.stopPropagation(); скачать('${вид}','${файл}','${р.imya}')">↓</button>
-        <span class="ist-otkryt">открыть ›</span>
+function пол(вид,з,i,значок,подпись,поясн){
+  const файл = вид==="karta" ? з.fayl_karty : з.fayl_kuhni;
+  if(!файл) return `<div class="pol net"><span class="pz">${значок} ${подпись}</span><span class="pp">не создана</span></div>`;
+  return `<div class="pol" data-i="${i}" data-vid="${вид}" data-act="open">
+      <span class="pz">${значок} ${подпись}</span>
+      <span class="pp">${поясн}</span>
+      <span class="pk">
+        <button class="mini" data-i="${i}" data-vid="${вид}" data-act="copy" title="скопировать">⧉</button>
+        <button class="mini" data-i="${i}" data-vid="${вид}" data-act="save" title="скачать">↓</button>
+        <span class="otk">открыть ›</span>
       </span>
     </div>`;
 }
 
-function открыть(вид, файл) {
-  window.open(`/istoriya/${вид}?f=` + encodeURIComponent(файл), "_blank");
-}
-
-async function скопировать(вид, файл) {
-  const о = await fetch(`/api/${вид}?f=` + encodeURIComponent(файл));
-  const т = await о.text();
+async function копировать(вид,файл){
+  const т = await fetch(`/api/${вид}?f=`+encodeURIComponent(файл)).then(r=>r.text());
   await navigator.clipboard.writeText(т);
-  всплывашка("скопировано");
+  всплыть("скопировано");
 }
 
-async function скачать(вид, файл, имя) {
-  const о = await fetch(`/api/${вид}?f=` + encodeURIComponent(файл));
-  const б = await о.blob();
+async function скачать(вид,файл,имя){
+  const б = await fetch(`/api/${вид}?f=`+encodeURIComponent(файл)).then(r=>r.blob());
   const с = document.createElement("a");
   с.href = URL.createObjectURL(б);
-  с.download = `${имя} · ${вид === "karta" ? "карта" : "механика"}.${вид === "karta" ? "html" : "json"}`;
-  с.click();
-  URL.revokeObjectURL(с.href);
+  с.download = `${имя} · ${вид==="karta"?"карта":"механика"}.${вид==="karta"?"html":"json"}`;
+  с.click(); URL.revokeObjectURL(с.href);
 }
 
-function всплывашка(т) {
-  const у = document.createElement("div");
-  у.className = "ist-vsplyv"; у.textContent = т;
-  document.body.appendChild(у);
-  setTimeout(() => у.remove(), 1600);
+function всплыть(т){
+  const у=document.createElement("div"); у.className="vspl"; у.textContent=т;
+  document.body.appendChild(у); setTimeout(()=>у.remove(),1500);
 }
 
-async function история_udalit(id) {
-  if (!confirm("Удалить этот расчёт целиком — карту и механику?")) return;
-  await fetch("/api/istoriya/udalit", {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ id })
-  });
-  история_загрузить();
+async function удалить(ид){
+  if(!confirm("Удалить расчёт целиком — карту и механику?")) return;
+  await fetch("/api/istoriya/udalit",{method:"POST",
+    headers:{"Content-Type":"application/json"},body:JSON.stringify({id:ид})});
+  загрузить();
 }
 
-async function история_очистить() {
-  if (!confirm("Очистить всю историю? Это нельзя отменить.")) return;
-  await fetch("/api/istoriya/ochistit", { method: "POST" });
-  история_загрузить();
+async function очистить(){
+  if(!confirm("Очистить всю историю? Это нельзя отменить.")) return;
+  await fetch("/api/istoriya/ochistit",{method:"POST"});
+  загрузить();
 }
 
-document.addEventListener("DOMContentLoaded", история_загрузить);
+document.addEventListener("DOMContentLoaded", загрузить);
 </script>
-
-<style>
-.ist-nazad {
-  position: fixed; top: 14px; left: 16px; z-index: 1000;
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 7px 13px 7px 10px; border-radius: 9px;
-  border: 1px solid rgba(255,255,255,.16); background: rgba(20,24,36,.82);
-  color: #d9d2c4; font-size: 13px; text-decoration: none;
-}
-.ist-nazad:hover { border-color: rgba(232,178,58,.55); color: #E8B23A; }
-
-.ist-list { max-width: 900px; margin: 0 auto; padding: 60px 16px 80px; }
-.ist-shapka { text-align: center; margin-bottom: 22px; }
-.ist-shapka h1 { font-family: Georgia, serif; font-size: 25px; font-weight: 400; color: #e6ddc9; }
-.ist-schet { color: #9b8fb0; font-size: 13px; margin: 6px 0 14px; }
-.ist-ochistit {
-  padding: 9px 20px; border-radius: 10px; cursor: pointer;
-  border: 1px solid rgba(224,118,79,.45); background: rgba(224,118,79,.1);
-  color: #e0764f; font-size: 13.5px;
-}
-.ist-ochistit:hover { background: rgba(224,118,79,.18); }
-
-.ist-kolonki-zag {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
-  padding: 0 18px 8px; margin-bottom: 6px;
-  color: #7d8496; font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase;
-}
-
-.ist-karta {
-  margin-bottom: 14px; padding: 15px 18px;
-  border: 1px solid rgba(155,143,176,.26); border-radius: 14px;
-  background: rgba(26,27,63,.36);
-}
-.ist-verh { display: flex; align-items: center; gap: 10px; margin-bottom: 13px; flex-wrap: wrap; }
-.ist-nomer {
-  width: 25px; height: 25px; flex: 0 0 auto;
-  display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 50%; background: rgba(155,143,176,.24); color: #e6ddc9; font-size: 12px;
-}
-.ist-imya { font-family: Georgia, serif; font-size: 16px; color: #e6ddc9; }
-.ist-tip { color: #c9bfd8; font-size: 12.5px; }
-.ist-data { color: #9b8fb0; font-size: 12px; margin-left: auto; }
-.ist-knopka {
-  width: 29px; height: 29px; border-radius: 8px; cursor: pointer;
-  border: 1px solid rgba(255,255,255,.14); background: transparent; color: #c9bfd8; font-size: 13px;
-}
-.ist-udalit:hover { border-color: rgba(224,118,79,.6); color: #e0764f; }
-
-.ist-dve { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.ist-pol {
-  padding: 12px 14px; border-radius: 11px; cursor: pointer;
-  border: 1px solid rgba(255,255,255,.1); background: rgba(10,14,39,.5);
-  display: flex; flex-direction: column; gap: 5px; transition: all .15s ease;
-}
-.ist-pol:hover { border-color: rgba(232,178,58,.45); background: rgba(10,14,39,.75); }
-.ist-pol-zag { color: #e6ddc9; font-size: 13.5px; }
-.ist-pol-pod { color: #7d8496; font-size: 11.5px; }
-.ist-pol-knopki { display: flex; align-items: center; gap: 7px; margin-top: 5px; }
-.ist-mini {
-  width: 25px; height: 25px; border-radius: 6px; cursor: pointer;
-  border: 1px solid rgba(255,255,255,.13); background: transparent;
-  color: #9b8fb0; font-size: 12px;
-}
-.ist-mini:hover { border-color: rgba(232,178,58,.5); color: #E8B23A; }
-.ist-otkryt { margin-left: auto; color: #9b8fb0; font-size: 12px; }
-.ist-net { opacity: .45; cursor: default; }
-.ist-pol-net { color: #6b6478; font-size: 11.5px; }
-
-.ist-pusto { text-align: center; color: #6b6478; padding: 40px 0; font-size: 14px; }
-.ist-vsplyv {
-  position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%);
-  padding: 9px 20px; border-radius: 9px; z-index: 2000;
-  background: rgba(232,178,58,.16); border: 1px solid rgba(232,178,58,.4);
-  color: #E8B23A; font-size: 13px;
-}
-
-@media (max-width: 680px) {
-  .ist-dve, .ist-kolonki-zag { grid-template-columns: 1fr; }
-  .ist-kolonki-zag { display: none; }
-  .ist-nazad span { display: none; }
-}
-</style>
+</body>
+</html>

@@ -579,6 +579,7 @@ window.onload=function(){
 })();
 </script>
 
+<div id="rasklBlok" style="display:none;padding:12px 14px;border-top:1px solid #2a3050"></div>
 <script>
 // ═══ РАСКЛАДКА ЧЕРЕЗ НАШ ДВИЖОК · добавлено 05.09.2026 ═══
 // Кнопки «Транзиты» и «Соляр» зовут /api/raschet.
@@ -631,7 +632,11 @@ async function raskladka(заказ) {
     });
     var д = await о.json();
     if (д.detail || д.oshibka) {
-      document.getElementById("st").textContent = "Ошибка: " + (д.detail || д.oshibka);
+      var о_ = document.getElementById("rasklBlok");
+      if (о_) { о_.style.display = "block";
+        о_.innerHTML = '<div style="color:#e08060">Ошибка: ' +
+          String(д.detail || д.oshibka).replace(/</g,"&lt;") + '</div>'; }
+      document.getElementById("st").textContent = "Ошибка расчёта";
       return;
     }
     показатьРаскладку(д, заказ);
@@ -645,8 +650,11 @@ async function raskladka(заказ) {
 }
 
 function показатьРаскладку(д, заказ) {
-  var место = document.getElementById("kt");
+  // ⚠️ 05.09: пишем в СВОЙ блок, а не в #kt — иначе затираются
+  // таблицы натала, которые рисует старый код.
+  var место = document.getElementById("rasklBlok");
   if (!место) return;
+  место.style.display = "block";
   var шапка = д.shapka
     ? '<div style="color:#c9a961;font-size:12px;margin-bottom:10px">' + д.shapka + '</div>'
     : "";
@@ -656,6 +664,7 @@ function показатьРаскладку(д, заказ) {
         (заказ === "solyar" ? "КАРТА ГОДА" : "ГДЕ ТЫ СЕЙЧАС") + '</b>' +
       '<button class="b" onclick="копироватьРаскладку()">⧉ копировать</button>' +
       '<a class="b" href="/istoriya" style="text-decoration:none;padding:3px 12px">📜 в историю</a>' +
+      '<button class="b" onclick="document.getElementById(\'rasklBlok\').style.display=\'none\'">✕</button>' +
     '</div>' +
     '<pre id="rasklPre" style="white-space:pre-wrap;word-break:break-word;' +
       'font:12px/1.65 ui-monospace,Menlo,Consolas,monospace;color:#c9c2b4;' +
