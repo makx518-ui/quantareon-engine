@@ -222,7 +222,7 @@ def prognoz_page():
 # ═══════════════════════════════════════════════════════════════════
 
 from api_vhod import (расчёт, карта_файлом, история,
-                      отдать, удалить_расчёт, очистить_историю)
+                      отдать, удалить_расчёт, очистить_историю, удалить_файл)
 
 
 # ── РАСЧЁТ КАРТЫ ────────────────────────────────────────────────
@@ -319,6 +319,12 @@ def prosmotr_kuhni(f: str = Query(...)):
 async def api_udalit(тело: dict):
     """Убирает расчёт целиком — и карту, и кухню."""
     return удалить_расчёт(тело.get("id", ""))
+
+
+@app.post("/api/istoriya/udalit-fayl")
+async def api_udalit_fayl(тело: dict):
+    """Убирает один файл — карту или механику по отдельности."""
+    return удалить_файл(тело.get("fayl", ""))
 
 
 @app.post("/api/istoriya/ochistit")
@@ -2272,6 +2278,27 @@ async def chart_wheel_natal():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+
+def _дорисовать_тж(svg, req, второй=None):
+    """Ставит Точку Жизни на колесо.
+
+    ⚠️ Его правило 05.09: ТЖ нужна ТОЛЬКО там, где есть прожитое время —
+    транзиты и соляр. В натале она всегда в нуле Овна у всех, показывать
+    бессмысленно. В синастрии две неподвижные карты — тоже ни к чему.
+    """
+    try:
+        from tochka_zhizni_svg import дорисовать_на_колесе
+        from engine.tzh import градус_тж
+        from datetime import datetime, timezone
+        т = градус_тж(datetime(req.year, req.month, req.day,
+                               req.hour, req.minute, tzinfo=timezone.utc),
+                      datetime.now(timezone.utc))
+        г = т.get("градус") if isinstance(т, dict) else т
+        return дорисовать_на_колесе(svg, float(г))
+    except Exception:
+        return svg
+
 @app.post("/chart-wheel-transit")
 async def chart_wheel_transit(req: KerykeionRequest, theme: str = "dark-high-contrast"):
     """Круг натал+транзит (wheel only) — для реалтайм каждую секунду."""
@@ -2312,6 +2339,7 @@ async def chart_wheel_transit(req: KerykeionRequest, theme: str = "dark-high-con
                         _h = str(int(float(_vb[3])))
                         svg = svg.replace("width='100%'", "width='" + _w + "'", 1)
                         svg = svg.replace("height='100%'", "height='" + _h + "'", 1)
+                svg = _дорисовать_тж(svg, req)
                 return Response(content=svg, media_type="image/svg+xml")
         raise HTTPException(status_code=500, detail="SVG not generated")
     except Exception as e:
@@ -2570,7 +2598,7 @@ async def chart_svg_synastry(req: SynastryChartRequest, theme: str = "dark-high-
                             _h = str(int(float(_vb[3])))
                             svg = svg.replace("width='100%'", "width='" + _w + "'", 1)
                             svg = svg.replace("height='100%'", "height='" + _h + "'", 1)
-                    return Response(content=svg, media_type="image/svg+xml")
+                return Response(content=svg, media_type="image/svg+xml")
         else:
             chart.makeSVG()
             for f in os.listdir(_td):
@@ -2779,3 +2807,5 @@ if __name__ == "__main__":
 
 # статика — в самом конце, чтоб не перебивала эндпоинты
 app.mount("/", StaticFiles(directory=str(FRONT), html=True), name="front")
+
+
