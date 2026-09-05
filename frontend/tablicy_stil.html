@@ -1,0 +1,108 @@
+<!-- ЗАГОЛОВКИ И РАЗДЕЛИТЕЛИ ТАБЛИЦ · страница астро-фрактала
+     Его просьба 05.09: подписать таблицы и поставить полоски между ними.
+     Вставить стиль в <head>, разметку применить к блокам таблиц. -->
+
+<style>
+/* ── блок одной таблицы ── */
+.tabl-blok {
+  margin: 26px 0 0;
+  padding-top: 22px;
+  border-top: 1px solid rgba(232, 178, 58, .22);   /* полоска-разделитель */
+}
+.tabl-blok:first-of-type { border-top: none; padding-top: 0; }
+
+/* ── заголовок таблицы ── */
+.tabl-zag {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.tabl-zag b {
+  color: #E8B23A;
+  font-size: 13px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.tabl-zag i {
+  color: #7d8496;
+  font-size: 11.5px;
+  font-style: normal;
+}
+/* тонкая линия справа от заголовка — доводит до края */
+.tabl-zag::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, rgba(232,178,58,.28), transparent);
+}
+
+/* ── сама таблица ── */
+.tabl-blok table { width: 100%; border-collapse: collapse; }
+.tabl-blok th {
+  color: #7d8496;
+  font-size: 10.5px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  font-weight: 500;
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.tabl-blok td {
+  padding: 5px 10px;
+  font-size: 13px;
+  color: #d9d2c4;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.tabl-blok tr:hover td { background: rgba(255,255,255,.03); }
+.tabl-blok tr:last-child td { border-bottom: none; }
+</style>
+
+<!-- ── как применять ── -->
+
+<div class="tabl-blok">
+  <div class="tabl-zag"><b>Транзиты</b><i>сейчас на небе</i></div>
+  <table><!-- существующая таблица --></table>
+</div>
+
+<div class="tabl-blok">
+  <div class="tabl-zag"><b>Углы live</b><i>бегут за асцендентом</i></div>
+  <table></table>
+</div>
+
+<div class="tabl-blok">
+  <div class="tabl-zag"><b>Дома live</b><i>плацидус</i></div>
+  <table></table>
+</div>
+
+<div class="tabl-blok">
+  <div class="tabl-zag"><b>Натальная карта</b><i>позиции и дома</i></div>
+  <table></table>
+</div>
+
+<div class="tabl-blok">
+  <div class="tabl-zag"><b>Колесо жизни</b><i>стержень периода</i></div>
+  <table></table>
+</div>
+
+<div class="tabl-blok">
+  <div class="tabl-zag"><b>Дирекции</b><i>что вызрело изнутри</i></div>
+  <table></table>
+</div>
+
+<div class="tabl-blok">
+  <div class="tabl-zag"><b>Прогрессии</b><i>день за год</i></div>
+  <table></table>
+</div>
+
+<div class="tabl-blok">
+  <div class="tabl-zag"><b>Лунарная сетка</b><i>лунации и затмения</i></div>
+  <table></table>
+</div>
+
+<div class="tabl-blok">
+  <div class="tabl-zag"><b>Аспекты</b><i>с весом связи</i></div>
+  <table></table>
+</div>

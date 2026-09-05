@@ -1,0 +1,39 @@
+<!-- КНОПКА ИСТОРИИ · рядом с «Тема», справа вверху
+     Его вопрос 05.09: где на странице кнопка истории. -->
+
+<a href="/istoriya" class="kn-istoriya" title="Все сделанные карты">
+  <span class="ki-znachok">📜</span>
+  <span class="ki-podpis">История</span>
+  <span class="ki-schet" id="ki-schet"></span>
+</a>
+
+<script>
+// счётчик карт на кнопке
+(async () => {
+  try {
+    const о = await fetch("/api/istoriya").then(r => r.json());
+    const n = (о.karty || []).length;
+    const у = document.getElementById("ki-schet");
+    if (у && n) у.textContent = n;
+  } catch (e) { /* тихо */ }
+})();
+</script>
+
+<style>
+.kn-istoriya {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 13px; border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.16);
+  background: rgba(20,24,36,.6);
+  color: #c9bfd8; font-size: 13px; text-decoration: none;
+  transition: all .15s ease;
+}
+.kn-istoriya:hover { border-color: rgba(232,178,58,.5); color: #E8B23A; }
+.ki-znachok { font-size: 14px; }
+.ki-schet:not(:empty) {
+  min-width: 18px; padding: 1px 6px; border-radius: 9px;
+  background: rgba(232,178,58,.2); color: #E8B23A;
+  font-size: 11px; text-align: center;
+}
+@media (max-width: 620px) { .ki-podpis { display: none; } }
+</style>

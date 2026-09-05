@@ -1,0 +1,118 @@
+<!-- ПРАВАЯ КОЛОНКА · страница /prognoz
+     Его просьба 05.09: разделить страницу пополам, справа вывести то,
+     чего нет слева. Данные приходят из нашей машины одним запросом. -->
+
+<div class="dve-kolonki">
+
+  <!-- ЛЕВАЯ: всё как было — колесо, лента, узлы, главы, полочка -->
+  <div class="kol-levo" id="kol-levo">
+    <!-- сюда ничего не трогаем: существующая разметка -->
+  </div>
+
+  <!-- ПРАВАЯ: дополнение -->
+  <aside class="kol-pravo">
+
+    <section class="dop-blok">
+      <div class="dop-zag"><b>Стержень дня</b><i>завязка и раскрытие</i></div>
+      <dl id="dop-sterzhen"></dl>
+    </section>
+
+    <section class="dop-blok">
+      <div class="dop-zag"><b>Медленные</b><i>сроки и коридоры</i></div>
+      <dl id="dop-medlennye"></dl>
+    </section>
+
+    <section class="dop-blok">
+      <div class="dop-zag"><b>Лунария</b><i>лунации и затмения</i></div>
+      <dl id="dop-lunariya"></dl>
+    </section>
+
+    <section class="dop-blok">
+      <div class="dop-zag"><b>Ночь и мухурта</b><i>что зреет во сне</i></div>
+      <dl id="dop-noch"></dl>
+    </section>
+
+    <section class="dop-blok">
+      <div class="dop-zag"><b>Вес узлов</b><i>что громче в сутках</i></div>
+      <dl id="dop-ves"></dl>
+    </section>
+
+  </aside>
+</div>
+
+<script>
+// ── заполнить правую колонку из ответа машины ──
+function правая_колонка(д) {
+  const пара = (к, з) => `<dt>${к}</dt><dd>${з}</dd>`;
+  const в = (id, строки) => {
+    const у = document.getElementById(id);
+    if (у) у.innerHTML = строки.length ? строки.join("") : `<dt class="tiho">тихо</dt>`;
+  };
+
+  // 1 · стержень дня
+  в("dop-sterzhen", [
+    д.zavyazka ? пара("завязка", `${д.zavyazka.gradus} <em>${д.zavyazka.kod}</em>`) : "",
+    д.kulminaciya ? пара("кульминация", `${д.kulminaciya} — тема выходит наружу`) : "",
+    д.zamok ? пара("замок", `${д.zamok} — возвращается как понимание`) : ""
+  ].filter(Boolean));
+
+  // 2 · медленные
+  в("dop-medlennye", (д.medlennye || []).map(x =>
+    пара(x.tochka, `${x.poziciya}${x.srok ? ` <span class="srok">${x.srok}</span>` : ""}`)));
+
+  // 3 · лунария
+  в("dop-lunariya", [
+    д.lunnyy_den ? пара("лунный день", д.lunnyy_den) : "",
+    д.faza ? пара("фаза", д.faza) : "",
+    ...(д.lunacii || []).map(x =>
+      пара(x.data, `${x.vid} ${x.gradus}${x.kasaniya ? ` <span class="zadel">${x.kasaniya}</span>` : ""}`)),
+    ...(д.zatmeniya || []).map(x =>
+      пара(x.data, `<b class="vazhno">${x.vid}</b> ${x.gradus}${x.kasaniya ? ` <span class="zadel">${x.kasaniya}</span>` : ""}`))
+  ].filter(Boolean));
+
+  // 4 · ночь и мухурта
+  в("dop-noch", [
+    д.noch ? пара("ночь", `${д.noch.okno} · ${д.noch.minut} мин`) : "",
+    ...((д.noch && д.noch.glavnoe) || []).map(x => пара(x.vremya, x.chto)),
+    д.muhurta ? пара("мухурта", д.muhurta.okno) : "",
+    д.muhurta && д.muhurta.luchshee ? пара("лучшее время", д.muhurta.luchshee) : ""
+  ].filter(Boolean));
+
+  // 5 · вес узлов
+  в("dop-ves", [
+    д.ves ? пара("главных", `${д.ves.glavnyh} — бьют в несущую ось`) : "",
+    д.ves ? пара("рабочих", д.ves.rabochih) : "",
+    д.ves ? пара("фоновых", д.ves.fonovyh) : "",
+    ...((д.ves && д.ves.spisok) || []).map(x =>
+      пара(x.vremya, `${x.chto} <span class="zadel">${x.nagruzka}</span>`))
+  ].filter(Boolean));
+}
+</script>
+
+<style>
+.dve-kolonki { display: grid; grid-template-columns: 1fr 380px; gap: 22px; align-items: start; }
+.kol-pravo { position: sticky; top: 60px; }
+
+.dop-blok { margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid rgba(232,178,58,.18); }
+.dop-blok:last-child { border-bottom: none; }
+
+.dop-zag { display: flex; align-items: baseline; gap: 9px; margin-bottom: 9px; }
+.dop-zag b { color: #E8B23A; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; font-weight: 600; }
+.dop-zag i { color: #7d8496; font-size: 11px; font-style: normal; }
+.dop-zag::after { content: ""; flex: 1; height: 1px;
+  background: linear-gradient(to right, rgba(232,178,58,.26), transparent); }
+
+.dop-blok dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; }
+.dop-blok dt { color: #7d8496; font-size: 11.5px; white-space: nowrap; }
+.dop-blok dd { margin: 0; color: #d9d2c4; font-size: 12.5px; line-height: 1.5; }
+.dop-blok em { color: #9aa3b8; font-style: normal; font-size: 11.5px; }
+.dop-blok .srok { color: #7d8496; font-size: 11px; }
+.dop-blok .zadel { color: #E8B23A; font-size: 11px; }
+.dop-blok .vazhno { color: #e0764f; }
+.dop-blok .tiho { color: #5c6478; font-size: 12px; grid-column: 1 / -1; }
+
+@media (max-width: 1100px) {
+  .dve-kolonki { grid-template-columns: 1fr; }
+  .kol-pravo { position: static; }
+}
+</style>

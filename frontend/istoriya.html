@@ -1,0 +1,209 @@
+<!-- ИСТОРИЯ КАРТ · одна карточка на расчёт, внутри две ссылки
+     Его правило 05.09: слева карта клиента, справа механика для ИИ.
+     Открывается отдельной страницей, сверху стрелка возврата. -->
+
+<a href="/" class="ist-nazad" title="К картам">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+  </svg>
+  <span>к картам</span>
+</a>
+
+<div class="ist-list">
+  <header class="ist-shapka">
+    <h1>📜 История разборов 📜</h1>
+    <div class="ist-schet"><span id="ist-vsego">0</span> расчётов</div>
+    <button class="ist-ochistit" onclick="история_очистить()">🗑 Очистить всю историю</button>
+  </header>
+
+  <div class="ist-kolonki-zag">
+    <span>☉ карта клиенту</span>
+    <span>⚙ механика расклада</span>
+  </div>
+
+  <div id="ist-karty"></div>
+</div>
+
+<script>
+async function история_загрузить() {
+  try {
+    const о = await fetch("/api/istoriya").then(r => r.json());
+    история_нарисовать(о.raschety || []);
+  } catch (e) {
+    document.getElementById("ist-karty").innerHTML =
+      `<div class="ist-pusto">не удалось загрузить: ${e.message}</div>`;
+  }
+}
+
+function история_нарисовать(расчёты) {
+  document.getElementById("ist-vsego").textContent = расчёты.length;
+  const место = document.getElementById("ist-karty");
+  if (!расчёты.length) {
+    место.innerHTML = `<div class="ist-pusto">пока пусто — рассчитайте первую карту</div>`;
+    return;
+  }
+  место.innerHTML = расчёты.map((р, i) => `
+    <article class="ist-karta">
+      <div class="ist-verh">
+        <span class="ist-nomer">${расчёты.length - i}</span>
+        <span class="ist-imya">${р.imya}</span>
+        <span class="ist-tip">${р.znachok} ${р.zakaz}${р.rozhdenie ? " · " + р.rozhdenie : ""}</span>
+        <span class="ist-data">✧ ${р.data}</span>
+        <button class="ist-knopka ist-udalit" title="удалить расчёт"
+                onclick="история_udalit('${р.id}')">🗑</button>
+      </div>
+
+      <div class="ist-dve">
+        ${половина("karta", р, "☉", "карта клиенту", "трактовка без терминов")}
+        ${половина("kuhnya", р, "⚙", "механика расклада", "все слои, для ученика")}
+      </div>
+    </article>`).join("");
+}
+
+function половина(вид, р, значок, подпись, пояснение) {
+  const файл = вид === "karta" ? р.fayl_karty : р.fayl_kuhni;
+  if (!файл) {
+    return `<div class="ist-pol ist-net"><span class="ist-pol-zag">${значок} ${подпись}</span>
+              <span class="ist-pol-net">не создана</span></div>`;
+  }
+  return `<div class="ist-pol" onclick="открыть('${вид}','${файл}')">
+      <span class="ist-pol-zag">${значок} ${подпись}</span>
+      <span class="ist-pol-pod">${пояснение}</span>
+      <span class="ist-pol-knopki">
+        <button class="ist-mini" title="скопировать"
+                onclick="event.stopPropagation(); скопировать('${вид}','${файл}')">⧉</button>
+        <button class="ist-mini" title="скачать"
+                onclick="event.stopPropagation(); скачать('${вид}','${файл}','${р.imya}')">↓</button>
+        <span class="ist-otkryt">открыть ›</span>
+      </span>
+    </div>`;
+}
+
+function открыть(вид, файл) {
+  window.open(`/istoriya/${вид}?f=` + encodeURIComponent(файл), "_blank");
+}
+
+async function скопировать(вид, файл) {
+  const о = await fetch(`/api/${вид}?f=` + encodeURIComponent(файл));
+  const т = await о.text();
+  await navigator.clipboard.writeText(т);
+  всплывашка("скопировано");
+}
+
+async function скачать(вид, файл, имя) {
+  const о = await fetch(`/api/${вид}?f=` + encodeURIComponent(файл));
+  const б = await о.blob();
+  const с = document.createElement("a");
+  с.href = URL.createObjectURL(б);
+  с.download = `${имя} · ${вид === "karta" ? "карта" : "механика"}.${вид === "karta" ? "html" : "json"}`;
+  с.click();
+  URL.revokeObjectURL(с.href);
+}
+
+function всплывашка(т) {
+  const у = document.createElement("div");
+  у.className = "ist-vsplyv"; у.textContent = т;
+  document.body.appendChild(у);
+  setTimeout(() => у.remove(), 1600);
+}
+
+async function история_udalit(id) {
+  if (!confirm("Удалить этот расчёт целиком — карту и механику?")) return;
+  await fetch("/api/istoriya/udalit", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ id })
+  });
+  история_загрузить();
+}
+
+async function история_очистить() {
+  if (!confirm("Очистить всю историю? Это нельзя отменить.")) return;
+  await fetch("/api/istoriya/ochistit", { method: "POST" });
+  история_загрузить();
+}
+
+document.addEventListener("DOMContentLoaded", история_загрузить);
+</script>
+
+<style>
+.ist-nazad {
+  position: fixed; top: 14px; left: 16px; z-index: 1000;
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 13px 7px 10px; border-radius: 9px;
+  border: 1px solid rgba(255,255,255,.16); background: rgba(20,24,36,.82);
+  color: #d9d2c4; font-size: 13px; text-decoration: none;
+}
+.ist-nazad:hover { border-color: rgba(232,178,58,.55); color: #E8B23A; }
+
+.ist-list { max-width: 900px; margin: 0 auto; padding: 60px 16px 80px; }
+.ist-shapka { text-align: center; margin-bottom: 22px; }
+.ist-shapka h1 { font-family: Georgia, serif; font-size: 25px; font-weight: 400; color: #e6ddc9; }
+.ist-schet { color: #9b8fb0; font-size: 13px; margin: 6px 0 14px; }
+.ist-ochistit {
+  padding: 9px 20px; border-radius: 10px; cursor: pointer;
+  border: 1px solid rgba(224,118,79,.45); background: rgba(224,118,79,.1);
+  color: #e0764f; font-size: 13.5px;
+}
+.ist-ochistit:hover { background: rgba(224,118,79,.18); }
+
+.ist-kolonki-zag {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  padding: 0 18px 8px; margin-bottom: 6px;
+  color: #7d8496; font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase;
+}
+
+.ist-karta {
+  margin-bottom: 14px; padding: 15px 18px;
+  border: 1px solid rgba(155,143,176,.26); border-radius: 14px;
+  background: rgba(26,27,63,.36);
+}
+.ist-verh { display: flex; align-items: center; gap: 10px; margin-bottom: 13px; flex-wrap: wrap; }
+.ist-nomer {
+  width: 25px; height: 25px; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; background: rgba(155,143,176,.24); color: #e6ddc9; font-size: 12px;
+}
+.ist-imya { font-family: Georgia, serif; font-size: 16px; color: #e6ddc9; }
+.ist-tip { color: #c9bfd8; font-size: 12.5px; }
+.ist-data { color: #9b8fb0; font-size: 12px; margin-left: auto; }
+.ist-knopka {
+  width: 29px; height: 29px; border-radius: 8px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,.14); background: transparent; color: #c9bfd8; font-size: 13px;
+}
+.ist-udalit:hover { border-color: rgba(224,118,79,.6); color: #e0764f; }
+
+.ist-dve { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ist-pol {
+  padding: 12px 14px; border-radius: 11px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,.1); background: rgba(10,14,39,.5);
+  display: flex; flex-direction: column; gap: 5px; transition: all .15s ease;
+}
+.ist-pol:hover { border-color: rgba(232,178,58,.45); background: rgba(10,14,39,.75); }
+.ist-pol-zag { color: #e6ddc9; font-size: 13.5px; }
+.ist-pol-pod { color: #7d8496; font-size: 11.5px; }
+.ist-pol-knopki { display: flex; align-items: center; gap: 7px; margin-top: 5px; }
+.ist-mini {
+  width: 25px; height: 25px; border-radius: 6px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,.13); background: transparent;
+  color: #9b8fb0; font-size: 12px;
+}
+.ist-mini:hover { border-color: rgba(232,178,58,.5); color: #E8B23A; }
+.ist-otkryt { margin-left: auto; color: #9b8fb0; font-size: 12px; }
+.ist-net { opacity: .45; cursor: default; }
+.ist-pol-net { color: #6b6478; font-size: 11.5px; }
+
+.ist-pusto { text-align: center; color: #6b6478; padding: 40px 0; font-size: 14px; }
+.ist-vsplyv {
+  position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%);
+  padding: 9px 20px; border-radius: 9px; z-index: 2000;
+  background: rgba(232,178,58,.16); border: 1px solid rgba(232,178,58,.4);
+  color: #E8B23A; font-size: 13px;
+}
+
+@media (max-width: 680px) {
+  .ist-dve, .ist-kolonki-zag { grid-template-columns: 1fr; }
+  .ist-kolonki-zag { display: none; }
+  .ist-nazad span { display: none; }
+}
+</style>

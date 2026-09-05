@@ -1,0 +1,46 @@
+<!-- СТРЕЛКА НАЗАД · для страницы /prognoz
+     Его просьба 05.09: слева вверху, чтобы вернуться к картам.
+     Вставить сразу после открытия <body>. -->
+
+<a href="/" class="nazad" title="К картам: натал, транзиты, соляр, синастрия">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+       stroke="currentColor" stroke-width="2"
+       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <line x1="19" y1="12" x2="5" y2="12"/>
+    <polyline points="12 19 5 12 12 5"/>
+  </svg>
+  <span>к картам</span>
+</a>
+
+<style>
+.nazad {
+  position: fixed;
+  top: 14px;
+  left: 16px;
+  z-index: 1000;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px 7px 10px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  background: rgba(20, 24, 36, .82);
+  backdrop-filter: blur(6px);
+  color: #d9d2c4;
+  font-size: 13px;
+  text-decoration: none;
+  transition: all .15s ease;
+}
+.nazad:hover {
+  border-color: rgba(232, 178, 58, .55);
+  color: #E8B23A;
+  background: rgba(28, 32, 46, .92);
+}
+.nazad svg { flex: 0 0 auto; }
+
+/* на узком экране оставляем только стрелку */
+@media (max-width: 620px) {
+  .nazad span { display: none; }
+  .nazad { padding: 8px; }
+}
+</style>

@@ -1,0 +1,128 @@
+<!-- КНОПКИ РАСЧЁТА · вставка в окно астро-фрактала
+     Его порядок 04.09: пока лежит в коде, деплой потом. -->
+
+<div class="knopki-rascheta">
+  <!-- уже есть на странице -->
+  <button id="btn-natal" class="kn kn-glavnaya" onclick="раскладка('natal')">
+    Рассчитать
+  </button>
+
+  <!-- ДОБАВЛЕНО: второй слой отдельно -->
+  <button id="btn-tranzit" class="kn" onclick="раскладка('tranzity')">
+    Транзиты сейчас
+  </button>
+
+  <!-- ДОБАВЛЕНО: соляр с полем года -->
+  <span class="kn-para">
+    <input id="god-solyara" class="kn-pole" type="text" inputmode="numeric"
+           placeholder="год" maxlength="4" title="пусто — действующий соляр">
+    <button id="btn-solyar" class="kn" onclick="раскладка('solyar')">
+      Соляр
+    </button>
+  </span>
+
+  <!-- уже есть -->
+  <button id="btn-sinastriya" class="kn" onclick="раскладка('sinastriya')">
+    Рассчитать синастрию
+  </button>
+  <button id="btn-den" class="kn" onclick="раскладка('den')">
+    Прогноз на день
+  </button>
+</div>
+
+<script>
+// ── собрать данные из окна и позвать машину ──
+function собрать(префикс) {
+  const п = (имя) => (document.getElementById(префикс + имя) || {}).value || "";
+  return {
+    imya:    п("-imya"),
+    data:    п("-data"),
+    vremya:  п("-vremya"),      // пусто — машина посчитает солнечный час
+    mesto:   п("-gorod"),
+    shirota: parseFloat(п("-shirota")),
+    dolgota: parseFloat(п("-dolgota")),
+    gmt:     parseFloat(п("-gmt")) || 0
+  };
+}
+
+async function раскладка(заказ) {
+  const тело = собрать("natal");
+  // ⚠️ 05.09: имя нужно — по нему карта ложится в архив
+  if (!тело.imya || !тело.imya.trim()) {
+    const поле = document.getElementById("natal-imya");
+    if (поле) { поле.focus(); поле.placeholder = "впишите имя — по нему сохранится карта"; }
+    показать({ oshibka: "Впишите имя: карта сохраняется в архив под ним." });
+    return;
+  }
+  тело.zakaz = заказ;
+  тело.seychas = {
+    shirota: parseFloat(document.getElementById("seychas-shirota").value),
+    dolgota: parseFloat(document.getElementById("seychas-dolgota").value),
+    gmt:     parseFloat(document.getElementById("seychas-gmt").value) || 0,
+    mesto:   (document.getElementById("seychas-gorod") || {}).value || ""
+  };
+
+  if (заказ === "solyar") {
+    const год = document.getElementById("god-solyara").value.trim();
+    тело.god_solyara = год ? parseInt(год, 10) : null;   // пусто = действующий
+  }
+  if (заказ === "sinastriya") {
+    тело.partner = собрать("partner");
+  }
+
+  const кнопка = document.activeElement;
+  if (кнопка && кнопка.tagName === "BUTTON") {
+    кнопка.disabled = true;
+    кнопка.dataset.было = кнопка.textContent;
+    кнопка.textContent = "считаю…";
+  }
+  try {
+    const ответ = await fetch("/api/raschet", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(тело)
+    });
+    const данные = await ответ.json();
+    показать(данные);
+  } catch (е) {
+    показать({ oshibka: "не удалось посчитать: " + е.message });
+  } finally {
+    if (кнопка && кнопка.dataset.было) {
+      кнопка.disabled = false;
+      кнопка.textContent = кнопка.dataset.было;
+    }
+  }
+}
+
+function показать(данные) {
+  const место = document.getElementById("vyvod-raskladki");
+  if (!место) return;
+  if (данные.oshibka) { место.textContent = данные.oshibka; return; }
+  место.textContent = (данные.shapka ? данные.shapka + "\n\n" : "") + данные.polnyy_tekst;
+  const метка = document.getElementById("arhiv-metka");
+  if (метка) {
+    метка.textContent = данные.arhiv
+      ? "сохранено в архив: " + данные.arhiv.split("/").slice(-2).join("/")
+      : "";
+  }
+}
+</script>
+
+<style>
+.knopki-rascheta { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:12px 0; }
+.kn { padding:8px 16px; border-radius:8px; border:1px solid rgba(255,255,255,.18);
+      background:transparent; color:inherit; font-size:14px; cursor:pointer; }
+.kn:hover { background:rgba(255,255,255,.06); }
+.kn:disabled { opacity:.5; cursor:default; }
+.kn-glavnaya { border-color:rgba(255,200,90,.55); }
+.kn-para { display:inline-flex; gap:6px; align-items:center; }
+.kn-pole { width:70px; padding:8px 10px; border-radius:8px; font-size:14px;
+           border:1px solid rgba(255,255,255,.18); background:transparent; color:inherit; }
+</style>
+
+<!-- метка архива под кнопками -->
+<div id="arhiv-metka" class="arhiv-metka"></div>
+<style>
+.arhiv-metka { margin-top: 8px; font-size: 11.5px; color: #7d8496; }
+.arhiv-metka:not(:empty)::before { content: "💾 "; }
+</style>
