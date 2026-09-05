@@ -51,6 +51,7 @@ body{background:#0d0f1a;color:#d0d0d8;font-family:'Segoe UI',sans-serif;font-siz
 .mini{background:transparent;border:1px solid #2a3a5c;color:#7078a0;width:20px;height:20px;
       border-radius:3px;font-size:10px;cursor:pointer;padding:0}
 .mini:hover{border-color:#8a7a3a;color:#f0c040}
+.mini.del:hover{border-color:#6c3a3a;color:#e09070}
 .otk{margin-left:auto;color:#7078a0;font-size:9px}
 .pol:hover .otk{color:#f0c040}
 
@@ -123,8 +124,8 @@ function нарисовать(р){
       const файл = вид==="karta" ? з.fayl_karty : з.fayl_kuhni;
       const что = у.dataset.act;
       if(что==="del") удалить(з.id);
+      else if(что==="delone") удалитьОдин(файл, вид);
       else if(что==="open") window.open(`/istoriya/${вид}?f=`+encodeURIComponent(файл),"_blank");
-      else if(что==="copy") копировать(вид,файл);
       else if(что==="save") скачать(вид,файл,з.imya);
     });
   });
@@ -137,25 +138,40 @@ function пол(вид,з,i,значок,подпись,поясн){
       <span class="pz">${значок} ${подпись}</span>
       <span class="pp">${поясн}</span>
       <span class="pk">
-        <button class="mini" data-i="${i}" data-vid="${вид}" data-act="copy" title="скопировать">⧉</button>
         <button class="mini" data-i="${i}" data-vid="${вид}" data-act="save" title="скачать">↓</button>
+        <button class="mini del" data-i="${i}" data-vid="${вид}" data-act="delone" title="удалить только это">🗑</button>
         <span class="otk">открыть ›</span>
       </span>
     </div>`;
 }
 
-async function копировать(вид,файл){
-  const т = await fetch(`/api/${вид}?f=`+encodeURIComponent(файл)).then(r=>r.text());
-  await navigator.clipboard.writeText(т);
-  всплыть("скопировано");
+async function удалитьОдин(файл, вид){
+  const что = вид==="karta" ? "карту клиенту" : "механику расклада";
+  if(!confirm(`Удалить только ${что}?`)) return;
+  await fetch("/api/istoriya/udalit-fayl",{method:"POST",
+    headers:{"Content-Type":"application/json"},body:JSON.stringify({fayl:файл})});
+  всплыть("удалено");
+  загрузить();
 }
 
 async function скачать(вид,файл,имя){
-  const б = await fetch(`/api/${вид}?f=`+encodeURIComponent(файл)).then(r=>r.blob());
-  const с = document.createElement("a");
-  с.href = URL.createObjectURL(б);
-  с.download = `${имя} · ${вид==="karta"?"карта":"механика"}.${вид==="karta"?"html":"json"}`;
-  с.click(); URL.revokeObjectURL(с.href);
+  // ⚠️ 05.09: ссылку надо ВСТАВИТЬ в страницу, иначе часть браузеров
+  // не срабатывает на click(). И имя без пробелов — надёжнее.
+  try{
+    const о = await fetch(`/api/${вид}?f=`+encodeURIComponent(файл));
+    if(!о.ok){ всплыть("не удалось скачать: "+о.status); return; }
+    const б = await о.blob();
+    const урл = URL.createObjectURL(б);
+    const с = document.createElement("a");
+    с.href = урл;
+    с.download = (имя||"карта").replace(/[^\wа-яА-ЯёЁ-]+/g,"_") + "_" +
+                 (вид==="karta"?"karta.html":"mehanika.json");
+    с.style.display = "none";
+    document.body.appendChild(с);
+    с.click();
+    setTimeout(()=>{ document.body.removeChild(с); URL.revokeObjectURL(урл); }, 1000);
+    всплыть("скачано");
+  }catch(e){ всплыть("ошибка: "+e.message); }
 }
 
 function всплыть(т){
