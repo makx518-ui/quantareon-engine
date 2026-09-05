@@ -216,6 +216,117 @@ def prognoz_page():
     })
 
 
+# ═══════════════════════════════════════════════════════════════════
+#  РАСЧЁТ КАРТ И ИСТОРИЯ · добавлено 05.09.2026
+#  Одна точка входа на все заказы, архив карт, страница истории.
+# ═══════════════════════════════════════════════════════════════════
+
+from api_vhod import (расчёт, карта_файлом, история,
+                      отдать, удалить_расчёт, очистить_историю)
+
+
+# ── РАСЧЁТ КАРТЫ ────────────────────────────────────────────────
+# Одна точка на все заказы: натал, транзиты, соляр, день, синастрия.
+# Машина сама решает — есть время или нет, дома или от Солнца.
+
+@app.post("/api/raschet")
+async def api_raschet(запрос: dict):
+    """Считает карту и кладёт кухню в архив."""
+    try:
+        return расчёт(запрос)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/karta")
+async def api_karta_klientu(тело: dict):
+    """Собирает красивый HTML для клиента.
+    тело: {"zapros": {...}, "razdely": [["Заголовок","текст"], ...]}"""
+    try:
+        разделы = [(з, т) for з, т in тело.get("razdely", [])]
+        return карта_файлом(тело["zapros"], разделы)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── ИСТОРИЯ ─────────────────────────────────────────────────────
+
+@app.get("/istoriya", response_class=HTMLResponse)
+def stranica_istorii():
+    """Страница списка карт."""
+    return FileResponse(FRONT / "istoriya.html", headers={
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    })
+
+
+@app.get("/api/istoriya")
+def api_istoriya():
+    """Все расчёты: пара из карты и кухни на каждый."""
+    return история()
+
+
+@app.get("/api/karta")
+def api_otdat_kartu(f: str = Query(...)):
+    """HTML карты клиента по относительному пути."""
+    т = отдать(f)
+    if т is None:
+        raise HTTPException(status_code=404, detail="карта не найдена")
+    return HTMLResponse(т)
+
+
+@app.get("/api/kuhnya")
+def api_otdat_kuhnyu(f: str = Query(...)):
+    """Механика расклада — для ученика."""
+    т = отдать(f)
+    if т is None:
+        raise HTTPException(status_code=404, detail="механика не найдена")
+    return Response(т, media_type="application/json; charset=utf-8")
+
+
+@app.get("/istoriya/karta", response_class=HTMLResponse)
+def prosmotr_karty(f: str = Query(...)):
+    """Карта отдельной страницей."""
+    т = отдать(f)
+    if т is None:
+        raise HTTPException(status_code=404, detail="карта не найдена")
+    return HTMLResponse(т)
+
+
+@app.get("/istoriya/kuhnya", response_class=HTMLResponse)
+def prosmotr_kuhni(f: str = Query(...)):
+    """Механика отдельной страницей — простым видом."""
+    т = отдать(f)
+    if т is None:
+        raise HTTPException(status_code=404, detail="механика не найдена")
+    экран = ("<!DOCTYPE html><html lang='ru'><head><meta charset='utf-8'>"
+             "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+             "<title>Механика расклада</title><style>"
+             "body{background:#0b0f18;color:#d9d2c4;font:13px/1.7 ui-monospace,"
+             "Menlo,Consolas,monospace;padding:56px 18px 60px;margin:0}"
+             "a.nazad{position:fixed;top:14px;left:16px;padding:7px 13px;"
+             "border:1px solid rgba(255,255,255,.16);border-radius:9px;"
+             "background:rgba(20,24,36,.85);color:#d9d2c4;text-decoration:none;"
+             "font:13px system-ui}a.nazad:hover{color:#E8B23A;"
+             "border-color:rgba(232,178,58,.5)}"
+             "pre{white-space:pre-wrap;word-break:break-word;max-width:1000px;margin:0 auto}"
+             "</style></head><body>"
+             "<a class='nazad' href='/istoriya'>← к истории</a><pre>")
+    import html as _h
+    return HTMLResponse(экран + _h.escape(т) + "</pre></body></html>")
+
+
+@app.post("/api/istoriya/udalit")
+async def api_udalit(тело: dict):
+    """Убирает расчёт целиком — и карту, и кухню."""
+    return удалить_расчёт(тело.get("id", ""))
+
+
+@app.post("/api/istoriya/ochistit")
+async def api_ochistit():
+    """Всё под корень."""
+    return очистить_историю()
+
+
 @app.get("/cities.json")
 def cities_json():
     """База городов (страна, название, широта, долгота, часовая зона) —
