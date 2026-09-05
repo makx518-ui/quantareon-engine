@@ -177,51 +177,38 @@ def карта_файлом(запрос, трактовка_по_раздела
 
 
 def история():
-    """Все расчёты — пара из карты и кухни на каждый.
-    Его правило 05.09: одна карточка на расчёт, внутри две ссылки."""
-    import os, json, re
+    """Все расчёты — пара из карты и кухни. Читается из R2."""
+    import json, re
     from engine import arhiv
     расчёты = {}
-    if not os.path.isdir(arhiv.АРХИВ):
-        return {"raschety": []}
-    for клиент in os.listdir(arhiv.АРХИВ):
-        корень = os.path.join(arhiv.АРХИВ, клиент)
-        if not os.path.isdir(корень):
+    for ключ in arhiv.перечислить(arhiv.АРХИВ + "/"):
+        м = re.search(r"/([^/]+)/(карты|кухня)/"
+                      r"(\d{4}-\d{2}-\d{2}_\d{2}-\d{2})(?:_(\w+))?\.(html|json)$", ключ)
+        if not м:
             continue
-        # карты клиента
-        пк = os.path.join(корень, "карты")
-        if os.path.isdir(пк):
-            for ф in os.listdir(пк):
-                м = re.match(r"(\d{4}-\d{2}-\d{2}_\d{2}-\d{2})_(\w+)\.html", ф)
-                if not м:
-                    continue
-                ключ = f"{клиент}|{м.group(1)}"
-                з = расчёты.setdefault(ключ, {"imya": клиент.replace("_", " "),
-                                              "id": ключ, "zakaz_kod": м.group(2)})
-                з["fayl_karty"] = os.path.relpath(os.path.join(пк, ф), arhiv.КОРЕНЬ)
-        # кухня
-        пх = os.path.join(корень, "кухня")
-        if os.path.isdir(пх):
-            for ф in os.listdir(пх):
-                м = re.match(r"(\d{4}-\d{2}-\d{2}_\d{2}-\d{2})\.json", ф)
-                if not м:
-                    continue
-                ключ = f"{клиент}|{м.group(1)}"
-                з = расчёты.setdefault(ключ, {"imya": клиент.replace("_", " "), "id": ключ})
-                путь = os.path.join(пх, ф)
-                з["fayl_kuhni"] = os.path.relpath(путь, arhiv.КОРЕНЬ)
-                try:
-                    д = json.load(open(путь, encoding="utf-8"))
-                    з["zakaz_kod"] = з.get("zakaz_kod") or д.get("заказ", "natal")
-                    з["rozhdenie"] = д.get("данные_рождения", {}).get("дата", "")
-                except Exception:
-                    pass
+        клиент, вид, когда, заказ_кода, расш = м.groups()
+        ид = f"{клиент}|{когда}"
+        з = расчёты.setdefault(ид, {"imya": клиент.replace("_", " "), "id": ид})
+        if вид == "карты":
+            з["fayl_karty"] = ключ
+            з["zakaz_kod"] = заказ_кода or з.get("zakaz_kod") or "natal"
+        else:
+            з["fayl_kuhni"] = ключ
+            if not з.get("zakaz_kod") or not з.get("rozhdenie"):
+                т = arhiv._взять(ключ)
+                if т:
+                    try:
+                        д = json.loads(т)
+                        з["zakaz_kod"] = з.get("zakaz_kod") or д.get("заказ", "natal")
+                        з["rozhdenie"] = д.get("данные_рождения", {}).get("дата", "")
+                    except Exception:
+                        pass
     итог = []
-    for ключ, з in расчёты.items():
-        когда = ключ.split("|")[1]
-        г, м_, д_, ч, мин = когда[:4], когда[5:7], когда[8:10], когда[11:13], когда[14:16]
+    for ид, з in расчёты.items():
+        когда = ид.split("|")[1]
         код = з.get("zakaz_kod", "natal")
-        з["data"] = f"{д_}.{м_}.{г} {ч}:{мин}"
+        з["data"] = (f"{когда[8:10]}.{когда[5:7]}.{когда[:4]} "
+                     f"{когда[11:13]}:{когда[14:16]}")
         з["zakaz"] = НАЗВАНИЯ.get(код, код.upper())
         з["znachok"] = ЗНАЧКИ.get(код, "✦")
         з.setdefault("rozhdenie", "")
@@ -235,39 +222,31 @@ def история():
     return {"raschety": итог}
 
 
-def отдать(отн_путь):
-    """Файл по относительному пути — карта или кухня."""
-    import os
+def отдать(ключ):
+    """Файл по ключу — карта или кухня."""
     from engine import arhiv
-    путь = os.path.normpath(os.path.join(arhiv.КОРЕНЬ, отн_путь))
-    if not путь.startswith(os.path.normpath(arhiv.КОРЕНЬ)) or not os.path.exists(путь):
-        return None
-    return open(путь, encoding="utf-8").read()
+    return arhiv.отдать_файл(ключ)
 
 
 def удалить_расчёт(ид):
     """Убирает расчёт целиком — и карту, и кухню."""
-    import os, re
+    import re
     from engine import arhiv
-    if "|" not in ид:
+    if "|" not in (ид or ""):
         return {"udaleno": 0}
     клиент, когда = ид.split("|", 1)
     убрано = 0
-    for под, конец in (("карты", ".html"), ("кухня", ".json")):
-        папка = os.path.join(arhiv.АРХИВ, клиент, под)
-        if not os.path.isdir(папка):
-            continue
-        for ф in os.listdir(папка):
-            if ф.startswith(когда) and ф.endswith(конец):
-                os.remove(os.path.join(папка, ф))
-                убрано += 1
+    for ключ in arhiv.перечислить(f"{arhiv.АРХИВ}/{клиент}/"):
+        if когда in ключ and arhiv._убрать(ключ):
+            убрано += 1
     return {"udaleno": убрано}
 
 
 def очистить_историю():
     """Всё под корень. Спрашивается дважды на странице."""
-    import shutil, os
     from engine import arhiv
-    if os.path.isdir(arhiv.АРХИВ):
-        shutil.rmtree(arhiv.АРХИВ)
-    return {"ochischeno": True}
+    убрано = 0
+    for ключ in arhiv.перечислить(arhiv.АРХИВ + "/"):
+        if arhiv._убрать(ключ):
+            убрано += 1
+    return {"ochischeno": True, "udaleno": убрано}
