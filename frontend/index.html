@@ -96,7 +96,7 @@ white-space:nowrap;box-shadow:0 6px 22px rgba(0,0,0,.55)}
   <label>Долг</label><input id="tlon" value="53.233333" style="width:64px" title="Долгота">
   <button class="b" onclick="clearNow()" title="Очистить — вписать другое место">✕</button>
   <div class="sep"></div>
-  <button class="b" id="bthm" onclick="toggleTheme()">🌙 Тема</button>
+  <button class="b" id="bthm" onclick="toggleTheme()">🌙 Тема</button><a class="b" href="/istoriya" id="bist" style="text-decoration:none;padding:3px 12px" title="Все сделанные карты">📜 История <span id="istN" style="color:#f0c040"></span></a>
 </div>
 
 <div class="irow">
@@ -112,7 +112,7 @@ white-space:nowrap;box-shadow:0 6px 22px rgba(0,0,0,.55)}
   <label>Долг</label><input id="lo" placeholder="долгота" style="width:72px">
   <button class="b" onclick="clearMe()" title="Очистить (ввести другого)">✕</button>
   <button class="b bm" onclick="loadMatrix()" title="Вернуть мои данные (из engine/matrix.py) и построить мой натал">📌 Мои данные</button>
-  <button class="b bg" onclick="showNatal()">🔮 Рассчитать</button>
+  <button class="b bg" onclick="showNatal()">🔮 Рассчитать</button><button class="b" onclick="raskladka('tranzity')" title="Узор на сейчас относительно карты" style="border-left:3px solid #7fb3d5">⟳ Транзиты</button><span style="display:inline-flex;gap:4px;align-items:center"><input id="godSol" placeholder="год" maxlength="4" style="width:52px" title="Пусто — действующий соляр"><button class="b" onclick="raskladka('solyar')" title="Карта года" style="border-left:3px solid #f0c040">☀ Соляр</button></span>
 </div>
 <div id="geo" style="display:none;padding:5px 12px;border-top:1px solid #2a3050;background:#10142a"></div>
 
@@ -578,5 +578,110 @@ window.onload=function(){
   if(d) d.textContent='v21 · '+(typeof QAPI!=='undefined'?QAPI.replace(/^https?:\/\//,''):'QAPI НЕТ!');
 })();
 </script>
+
+<script>
+// ═══ РАСКЛАДКА ЧЕРЕЗ НАШ ДВИЖОК · добавлено 05.09.2026 ═══
+// Кнопки «Транзиты» и «Соляр» зовут /api/raschet.
+// Ответ ложится в архив, показывается под колесом.
+
+function _полеЗначение(id) {
+  var э = document.getElementById(id);
+  return э ? (э.value || "").trim() : "";
+}
+
+async function raskladka(заказ) {
+  var имя = _полеЗначение("nm");
+  if (!имя) {
+    var п = document.getElementById("nm");
+    if (п) п.focus();
+    document.getElementById("st").textContent =
+      "Впишите имя — карта сохранится в архив под ним.";
+    return;
+  }
+  var тело = {
+    zakaz: заказ,
+    imya: имя,
+    data: _полеЗначение("dt"),
+    vremya: _полеЗначение("tm"),
+    mesto: _полеЗначение("pl"),
+    shirota: parseFloat(_полеЗначение("la")),
+    dolgota: parseFloat(_полеЗначение("lo")),
+    gmt: parseFloat(_полеЗначение("tz")) || 0,
+    seychas: {
+      shirota: parseFloat(_полеЗначение("tlat")),
+      dolgota: parseFloat(_полеЗначение("tlon")),
+      gmt: parseFloat(_полеЗначение("tgmt")) || 0,
+      mesto: _полеЗначение("tcity")
+    }
+  };
+  if (заказ === "solyar") {
+    var год = _полеЗначение("godSol");
+    тело.god_solyara = год ? parseInt(год, 10) : null;
+  }
+  if (!тело.data || isNaN(тело.shirota)) {
+    document.getElementById("st").textContent =
+      "Заполните дату и место — нажмите 🔍 для координат.";
+    return;
+  }
+  document.getElementById("st").textContent = "Считаю…";
+  try {
+    var о = await fetch("/api/raschet", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(тело)
+    });
+    var д = await о.json();
+    if (д.detail || д.oshibka) {
+      document.getElementById("st").textContent = "Ошибка: " + (д.detail || д.oshibka);
+      return;
+    }
+    показатьРаскладку(д, заказ);
+    document.getElementById("st").textContent =
+      (заказ === "solyar" ? "Соляр готов" : "Транзиты готовы") +
+      (д.arhiv ? " · сохранено в архив" : "");
+    обновитьСчётИстории();
+  } catch (e) {
+    document.getElementById("st").textContent = "Ошибка: " + e.message;
+  }
+}
+
+function показатьРаскладку(д, заказ) {
+  var место = document.getElementById("kt");
+  if (!место) return;
+  var шапка = д.shapka
+    ? '<div style="color:#c9a961;font-size:12px;margin-bottom:10px">' + д.shapka + '</div>'
+    : "";
+  место.innerHTML = шапка +
+    '<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">' +
+      '<b style="color:#f0c040;font-size:12px;letter-spacing:1.4px">' +
+        (заказ === "solyar" ? "КАРТА ГОДА" : "ГДЕ ТЫ СЕЙЧАС") + '</b>' +
+      '<button class="b" onclick="копироватьРаскладку()">⧉ копировать</button>' +
+      '<a class="b" href="/istoriya" style="text-decoration:none;padding:3px 12px">📜 в историю</a>' +
+    '</div>' +
+    '<pre id="rasklPre" style="white-space:pre-wrap;word-break:break-word;' +
+      'font:12px/1.65 ui-monospace,Menlo,Consolas,monospace;color:#c9c2b4;' +
+      'max-height:70vh;overflow:auto;margin:0">' +
+      д.polnyy_tekst.replace(/[&<>]/g, function(с){
+        return {"&":"&amp;","<":"&lt;",">":"&gt;"}[с]; }) +
+    '</pre>';
+}
+
+async function копироватьРаскладку() {
+  var п = document.getElementById("rasklPre");
+  if (!п) return;
+  await navigator.clipboard.writeText(п.textContent);
+  document.getElementById("st").textContent = "Скопировано";
+}
+
+async function обновитьСчётИстории() {
+  try {
+    var о = await fetch("/api/istoriya").then(function(r){ return r.json(); });
+    var n = (о.raschety || []).length;
+    var у = document.getElementById("istN");
+    if (у) у.textContent = n ? "· " + n : "";
+  } catch (e) { }
+}
+document.addEventListener("DOMContentLoaded", обновитьСчётИстории);
+</script>
+
 </body>
 </html>

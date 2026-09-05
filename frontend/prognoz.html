@@ -83,6 +83,37 @@ white-space:nowrap;box-shadow:0 6px 22px rgba(0,0,0,.55)}
 </style>
 </head>
 <body>
+<!-- добавлено 05.09.2026: возврат к картам и вход в историю -->
+<div class="verh-knopki">
+  <a href="/" class="vk" title="К картам: натал, транзиты, соляр, синастрия">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+    </svg><span>к картам</span>
+  </a>
+  <a href="/istoriya" class="vk" title="Все сделанные карты">
+    <span>📜</span><span>История</span><span class="vk-schet" id="vkSchet"></span>
+  </a>
+</div>
+<style>
+.verh-knopki { position:fixed; top:12px; left:14px; z-index:1000; display:flex; gap:8px; }
+.vk { display:inline-flex; align-items:center; gap:6px; padding:6px 12px;
+      border:1px solid rgba(255,255,255,.16); border-radius:9px;
+      background:rgba(18,22,34,.86); backdrop-filter:blur(6px);
+      color:#c9bfd8; font:13px system-ui,sans-serif; text-decoration:none; }
+.vk:hover { border-color:rgba(240,192,64,.55); color:#f0c040; }
+.vk-schet:not(:empty) { padding:1px 6px; border-radius:9px;
+      background:rgba(240,192,64,.2); color:#f0c040; font-size:11px; }
+@media (max-width:640px){ .vk span:not(.vk-schet):last-child { display:none; } }
+</style>
+<script>
+(async function(){ try {
+  var о = await fetch("/api/istoriya").then(function(r){return r.json()});
+  var n = (о.raschety||[]).length, у = document.getElementById("vkSchet");
+  if (у && n) у.textContent = n;
+} catch(e){} })();
+</script>
+
 <div class="hdr">
 <div class="ttl">ПРОГНОЗ НА ДЕНЬ</div>
 <div class="row">
