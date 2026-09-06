@@ -2518,6 +2518,12 @@ async def chart_wheel_zakaz(req: КолесоЗаказа):
             if len(_vb) == 4:
                 svg = svg.replace("width='100%'", "width='" + str(int(float(_vb[2]))) + "'", 1)
                 svg = svg.replace("height='100%'", "height='" + str(int(float(_vb[3]))) + "'", 1)
+        if req.koltso:
+            # значки As/Mc/Ds/Ic кольца, которые Кериkeion ставит во внешнем ряду (жёлтые), гасим —
+            # углы кольца рисует страница своим цветом (соляр зелёный, транзиты оранжевый)
+            import re as _re
+            svg = _re.sub(r"(?:<line class='transit-planet-line'[^>]*/>\s*)?(?:<g transform='translate\([^)]*\)'><text[^>]*>[^<]*</text></g>\s*)?<g class='transit-planet-name'[^>]*><g[^>]*><use [^>]*href='#(?:Ascendant|Medium_Coeli|Descendant|Imum_Coeli)' /></g></g>",
+                          lambda м: "<g style='display:none'>" + м.group(0) + "</g>", svg)
         if req.tochka_zhizni:
             svg = _дорисовать_тж(svg, суб, асцендент=натал.first_house.abs_pos)
 
@@ -2539,6 +2545,7 @@ async def chart_wheel_zakaz(req: КолесоЗаказа):
         except Exception:
             pass
         return {"svg": svg, "zakaz": req.zakaz,
+                "asc_vnutri": round(натал.first_house.abs_pos, 4),   # градус разворота колеса (АС натала / Солнце космограммы) — для слоёв страницы
                 "vremya_izvestno": req.vremya_izvestno,
                 "solnechnyy_chas": солнечный_час,
                 "solnce_na_ascendente": солнце_на_асц,
