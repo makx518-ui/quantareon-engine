@@ -456,15 +456,15 @@ var _имяК=(h===0?'Асцендент':h===9?'MC — Середина неб�
 var _тК='<b>'+_имяК+'</b> \u00b7 '+тДМС(cusps[h])+' \u00b7 <i>'+ПОДП+'</i>';
 подсказка(ln,_тК);g.appendChild(ln);
 var ci=((cusps[h]%30)+30)%30,cd=Math.floor(ci),cm=Math.floor((ci-cd)*60);
-var gp=degToScreen(cusps[h],196);
+var _угол=(h===0||h===9||h===6||h===3);var gp=degToScreen(cusps[h],(КОНТУР&&_угол)?226:196);
 var gt=document.createElementNS(NS,'text');gt.setAttribute('x',gp[0].toFixed(1));gt.setAttribute('y',gp[1].toFixed(1));
 gt.setAttribute('fill',RED);gt.setAttribute('font-size','8');gt.setAttribute('font-weight','600');gt.setAttribute('stroke','#0a0c16');gt.setAttribute('stroke-width','2.5');gt.setAttribute('paint-order','stroke');gt.setAttribute('opacity','0.95');
 gt.setAttribute('text-anchor','middle');gt.setAttribute('dominant-baseline','middle');
 gt.textContent=cd+'\u00b0'+String(cm).padStart(2,'0')+'\u2032';подсказка(gt,_тК);g.appendChild(gt);
 var БУКВЫ={0:'As',9:'Mc',6:'Ds',3:'Ic'};
-if(БУКВЫ[h]!==undefined){var bp=degToScreen(cusps[h],КОНТУР?254:248);
+if(БУКВЫ[h]!==undefined){var bp=degToScreen(cusps[h],КОНТУР?243:248);
 var bt=document.createElementNS(NS,'text');bt.setAttribute('x',bp[0].toFixed(1));bt.setAttribute('y',bp[1].toFixed(1));
-if(КОНТУР){bt.setAttribute('fill',RED);bt.setAttribute('fill-opacity','0.55');bt.setAttribute('font-size','9');bt.setAttribute('font-weight','600');bt.setAttribute('stroke','none');}else{bt.setAttribute('fill',RED);bt.setAttribute('font-size','18');bt.setAttribute('font-weight','600');
+if(КОНТУР){bt.setAttribute('fill','#3ddc84');bt.setAttribute('font-size','10');bt.setAttribute('font-weight','700');bt.setAttribute('stroke','#0a0c16');bt.setAttribute('stroke-width','2');bt.setAttribute('paint-order','stroke');}else{bt.setAttribute('fill',RED);bt.setAttribute('font-size','18');bt.setAttribute('font-weight','600');
 bt.setAttribute('stroke','#0a0c16');bt.setAttribute('stroke-width','2.5');bt.setAttribute('paint-order','stroke');}
 bt.setAttribute('text-anchor','middle');bt.setAttribute('dominant-baseline','middle');
 bt.textContent=БУКВЫ[h];подсказка(bt,_тК);g.appendChild(bt);}
@@ -516,7 +516,7 @@ try{
   оснаститьКарту();
 }catch(e){}}
 
-function renderLive(d){var sn=['Овен','Телец','Близнецы','Рак','Лев','Дева','Весы','Скорпион','Стрелец','Козерог','Водолей','Рыбы'];
+function renderLive(d){if(!timerOn){return;}/* 06.09: запоздавший ответ после выключения часов слой не рисует */var sn=['Овен','Телец','Близнецы','Рак','Лев','Дева','Весы','Скорпион','Стрелец','Козерог','Водолей','Рыбы'];
 function dms(dg){dg=((dg%360)+360)%360;var dd=Math.floor(dg%30),mm=Math.floor((dg%30-dd)*60),ss=Math.floor(((dg%30-dd)*60-mm)*60);
 return dd+'\u00b0'+String(mm).padStart(2,'0')+"'"+String(ss).padStart(2,'0')+'" '+sn[Math.floor(dg/30)];}
 var h='<div class="st">ТРАНЗИТЫ LIVE — '+new Date().toLocaleTimeString('ru-RU',{hour12:false})+'</div><table><tr><th>Планета</th><th>Позиция</th><th>Дом</th><th>°/день</th></tr>';

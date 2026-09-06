@@ -552,17 +552,19 @@ var _имяК=(h===0?'Асцендент':h===9?'MC — Середина неб�
 var _тК='<b>'+_имяК+'</b> \u00b7 '+тДМС(cusps[h])+' \u00b7 <i>сейчас</i>';
 подсказка(ln,_тК);g.appendChild(ln);
 var ci=((cusps[h]%30)+30)%30,cd=Math.floor(ci),cm=Math.floor((ci-cd)*60);
-var gp=degToScreen(cusps[h],196);
+/* 06.09, его слово: у четырёх углов градус стоит прямо ПОД буквой, за краем колеса, чтобы ничего не закрывал; у остальных куспидов — как было, на 196 */
+var _угол=(h===0||h===9||h===6||h===3);
+var gp=degToScreen(cusps[h],_угол?226:196);
 var gt=document.createElementNS(NS,'text');gt.setAttribute('x',gp[0].toFixed(1));gt.setAttribute('y',gp[1].toFixed(1));
-gt.setAttribute('fill',RED);gt.setAttribute('font-size','8');gt.setAttribute('font-weight','600');gt.setAttribute('stroke','#0a0c16');gt.setAttribute('stroke-width','2.5');gt.setAttribute('paint-order','stroke');gt.setAttribute('opacity','0.95');
+gt.setAttribute('fill',RED);gt.setAttribute('font-size',_угол?'7':'8');gt.setAttribute('font-weight','600');gt.setAttribute('stroke','#0a0c16');gt.setAttribute('stroke-width',_угол?'1.5':'2.5');gt.setAttribute('paint-order','stroke');gt.setAttribute('opacity','0.95');
 gt.setAttribute('text-anchor','middle');gt.setAttribute('dominant-baseline','middle');
 gt.textContent=cd+'\u00b0'+String(cm).padStart(2,'0')+'\u2032';подсказка(gt,_тК);g.appendChild(gt);
 var БУКВЫ={0:'As',9:'Mc',6:'Ds',3:'Ic'};
-if(БУКВЫ[h]!==undefined){var bp=degToScreen(cusps[h],248);
+if(БУКВЫ[h]!==undefined){var bp=degToScreen(cusps[h],257);
 var bt=document.createElementNS(NS,'text');bt.setAttribute('x',bp[0].toFixed(1));bt.setAttribute('y',bp[1].toFixed(1));
 /* 06.09, его слово: буквы углов — только контур, без заливки и без тёмной обводки, чтобы не закрывали цифры */
-bt.setAttribute('fill','none');bt.setAttribute('font-size','11');bt.setAttribute('font-weight','600');
-bt.setAttribute('stroke',RED);bt.setAttribute('stroke-width','0.9');bt.setAttribute('opacity','0.9');
+bt.setAttribute('fill',RED);bt.setAttribute('font-size','10');bt.setAttribute('font-weight','700');
+bt.setAttribute('stroke','#0a0c16');bt.setAttribute('stroke-width','1.5');bt.setAttribute('paint-order','stroke');bt.setAttribute('opacity','0.95');
 bt.setAttribute('text-anchor','middle');bt.setAttribute('dominant-baseline','middle');
 bt.textContent=БУКВЫ[h];подсказка(bt,_тК);g.appendChild(bt);}
 var mid=cusps[h]+(((cusps[(h+1)%12]-cusps[h])+360)%360)/2;var np=degToScreen(mid,178);
