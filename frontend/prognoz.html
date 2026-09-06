@@ -181,8 +181,8 @@ body.таблицы #kt, body.таблицы #nd, body.таблицы #cd, body.
   <select id="страна_р" style="width:108px"></select>
   <select id="город_р" style="width:124px"></select>
   <input id="поиск_р" placeholder="поиск города" style="width:90px" autocomplete="off">
-  <label>Ш</label><input id="шир_р" placeholder="54.42985" style="width:64px">
-  <label>Д</label><input id="долг_р" placeholder="70.34136" style="width:64px">
+  <label>Ш</label><input id="шир_р" placeholder="широта" style="width:64px">
+  <label>Д</label><input id="долг_р" placeholder="долгота" style="width:64px">
   <label>GMT</label><input id="gmt_р" placeholder="+6" style="width:34px">
   <button class="b" onclick="очиститьЧеловека()" title="Очистить данные рождения и снять карту">✕</button>
   <span id="подсказки_р" style="color:#5a6080;font-size:10px"></span>
@@ -1905,7 +1905,7 @@ async function таблицыВнизу(ч, шр, др, gmtР){
 // ── 06.09, его слово: крестик у «Человека» — чистит данные рождения и снимает всё, что было посчитано ──
 function очиститьЧеловека(){
   ["имя","дата_р","поиск_р","шир_р","долг_р","gmt_р"].forEach(id => { const e = $(id); if (e) e.value = ""; });
-  ["страна_р","город_р"].forEach(id => { const e = $(id); if (e) e.selectedIndex = 0; });
+  ["страна_р","город_р"].forEach(id => { const e = $(id); if (e) e.selectedIndex = -1; });
   window.сетка = null; window.natal = null;
   const св = document.getElementById("wh").querySelector("svg");
   if (св) ["пятно","медленные","узлы","колесо","космограмма","selenaZakaz","domaKoltsa","liveHouses","liveASC","transitDeg"].forEach(id => { const g = св.querySelector("#" + id); if (g) g.remove(); });
@@ -1918,8 +1918,6 @@ function очиститьЧеловека(){
 // 5. При открытии — живой хорар, как на карте
 window.addEventListener("load", ()=>{
   setTimeout(()=>{
-    /* 06.09: браузер сам восстанавливает поля после F5 — данные рождения при открытии чистим */
-    ["имя","дата_р","поиск_р","шир_р","долг_р","gmt_р"].forEach(id => { const e = $(id); if (e) { e.value = ""; e.setAttribute("autocomplete","off"); } });
     подставитьМестоВКарту();
     try{ if (typeof showHorar === "function") showHorar(); }catch(e){}
     $("статус").textContent = "живое колесо · вбей данные и нажми «Рассчитать день»";
