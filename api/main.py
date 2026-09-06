@@ -2521,6 +2521,15 @@ async def chart_wheel_zakaz(req: КолесоЗаказа):
         if req.tochka_zhizni:
             svg = _дорисовать_тж(svg, суб, асцендент=натал.first_house.abs_pos)
 
+        # Селена (Белая Луна) — Кериkeion её не рисует, страница дорисует сама: натальная и на момент кольца
+        try:
+            from engine.natal import _compute_selena as _сел
+            import swisseph as _swe2
+            _jd = lambda т: _swe2.julday(т.year, т.month, т.day, т.hour + т.minute / 60.0 + т.second / 3600.0)
+            сведения["selena_natal"] = round(_сел(_jd(рождение_utc)), 4)
+            сведения["selena_koltso"] = round(_сел(_jd(момент)), 4)
+        except Exception:
+            pass
         return {"svg": svg, "zakaz": req.zakaz,
                 "vremya_izvestno": req.vremya_izvestno,
                 "solnechnyy_chas": солнечный_час,

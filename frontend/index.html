@@ -194,7 +194,7 @@ var TPLANETS=['Солнце','Луна','Меркурий','Венера','Ма�
 var RDEG=234;
 var RDEGS={'Солнце':228,'Луна':234,'Меркурий':228,'Венера':222,'Марс':225,'Юпитер':225,'Сатурн':234,'Уран':234,'Нептун':234,'Плутон':216,'Сев.Узел':214,'Юж.Узел':210,'Лилит':234,'Селена':222,'Хирон':234};
 var ADX={'Солнце':0,'Луна':0,'Меркурий':0,'Венера':0,'Марс':-15,'Юпитер':0,'Сатурн':0,'Уран':0,'Нептун':0,'Плутон':10,'Сев.Узел':-3,'Юж.Узел':4,'Лилит':0,'Селена':0,'Хирон':0};var ADY={'Венера':-6,'Плутон':-3,'Юж.Узел':-6,'Сев.Узел':-6,'Марс':16};
-function drawTransitDeg(d){var wrap=document.getElementById('wh');if(!wrap)return;var svg=wrap.querySelector('svg');if(!svg)return;var tg=svg.querySelector('[transform*="translate(100"]')||svg;var NS='http://www.w3.org/2000/svg';var grp=svg.querySelector('#transitDeg');if(!grp){grp=document.createElementNS(NS,'g');grp.setAttribute('id','transitDeg');tg.appendChild(grp);}grp.innerHTML='';if(!d||!d.planets)return;for(var i=0;i<TPLANETS.length;i++){var n=TPLANETS[i],p=d.planets[n];if(!p)continue;var dg=p.abs_degree||0,dd=Math.floor(dg%30),mm=Math.floor((dg%30-dd)*60),ss=Math.floor(((dg%30-dd)*60-mm)*60);var pos=degToScreen(dg,(RDEGS[n]||RDEG));var tx=document.createElementNS(NS,'text');tx.setAttribute('x',(pos[0]+(ADX[n]||0)).toFixed(1));tx.setAttribute('y',(pos[1]+(ADY[n]||0)).toFixed(1));tx.setAttribute('fill','#7fb0ff');tx.setAttribute('font-size','6');tx.setAttribute('font-weight','300');tx.setAttribute('text-anchor','middle');tx.setAttribute('dominant-baseline','middle');tx.textContent=dd+'°'+String(mm).padStart(2,'0')+"'"+String(ss).padStart(2,'0')+'"';grp.appendChild(tx);}function _selG(L,R,col,sz,чей){var pp=degToScreen(L,R);var t=document.createElementNS(NS,'text');t.setAttribute('x',pp[0].toFixed(1));t.setAttribute('y',pp[1].toFixed(1));t.setAttribute('fill',col);t.setAttribute('font-size',sz);t.setAttribute('font-weight','600');t.setAttribute('stroke','#0a0c16');t.setAttribute('stroke-width','2.5');t.setAttribute('paint-order','stroke');t.setAttribute('text-anchor','middle');t.setAttribute('dominant-baseline','middle');t.textContent='⚜';подсказка(t,'<b>Селена — Белая Луна</b> \u00b7 '+тДМС(L)+(чей?' \u00b7 '+чей:''));grp.appendChild(t);}function _selD(L,R,col){var a=((L%360)+360)%360,ins=a%30,d2=Math.floor(ins),m2=Math.floor((ins-d2)*60);var pp=degToScreen(L,R);var t=document.createElementNS(NS,'text');t.setAttribute('x',pp[0].toFixed(1));t.setAttribute('y',pp[1].toFixed(1));t.setAttribute('fill',col);t.setAttribute('font-size','6');t.setAttribute('font-weight','300');t.setAttribute('text-anchor','middle');t.setAttribute('dominant-baseline','middle');t.textContent=d2+'°'+String(m2).padStart(2,'0')+"'";grp.appendChild(t);}var _st=d.planets['Селена'];if(_st)_selG(_st.abs_degree||0,RSEL_T,'#ffe9a8','14','сейчас');var _sn=(natal&&natal.planets&&natal.planets['Селена'])?natal.planets['Селена']:null;if(_sn){_selG(_sn.abs_degree||0,RSEL_N,'#ffe9a8','14','в натале');_selD(_sn.abs_degree||0,RSEL_N+13,'#ffd98a');}if(d.angles){var _mc=d.angles.MC||0,_as=d.angles.ASC||0;var _AA=[_mc,(_mc+180)%360,(_as+180)%360];for(var _ai=0;_ai<_AA.length;_ai++){var _av=((_AA[_ai]%360)+360)%360,_in=_av%30,_dd=Math.floor(_in),_mm=Math.floor((_in-_dd)*60);var _pp=degToScreen(_av,RANG);var _t=document.createElementNS(NS,'text');_t.setAttribute('x',_pp[0].toFixed(1));_t.setAttribute('y',_pp[1].toFixed(1));_t.setAttribute('fill','#e8202a');_t.setAttribute('font-size','7');_t.setAttribute('font-weight','600');_t.setAttribute('stroke','#0a0c16');_t.setAttribute('stroke-width','2');_t.setAttribute('paint-order','stroke');_t.setAttribute('text-anchor','middle');_t.setAttribute('dominant-baseline','middle');_t.textContent=_dd+'°'+String(_mm).padStart(2,'0')+"'";grp.appendChild(_t);}}}
+function drawTransitDeg(d){var wrap=document.getElementById('wh');if(!wrap)return;var svg=wrap.querySelector('svg');if(!svg)return;var tg=svg.querySelector('[transform*="translate(100"]')||svg;var NS='http://www.w3.org/2000/svg';var grp=svg.querySelector('#transitDeg');if(!grp){grp=document.createElementNS(NS,'g');grp.setAttribute('id','transitDeg');tg.appendChild(grp);}grp.innerHTML='';if(!d||!d.planets)return;for(var i=0;i<TPLANETS.length;i++){var n=TPLANETS[i],p=d.planets[n];if(!p)continue;var dg=p.abs_degree||0,dd=Math.floor(dg%30),mm=Math.floor((dg%30-dd)*60),ss=Math.floor(((dg%30-dd)*60-mm)*60);var pos=degToScreen(dg,(RDEGS[n]||RDEG));var tx=document.createElementNS(NS,'text');tx.setAttribute('x',(pos[0]+(ADX[n]||0)).toFixed(1));tx.setAttribute('y',(pos[1]+(ADY[n]||0)).toFixed(1));tx.setAttribute('fill','#7fb0ff');tx.setAttribute('font-size','6');tx.setAttribute('font-weight','300');tx.setAttribute('text-anchor','middle');tx.setAttribute('dominant-baseline','middle');tx.textContent=dd+'°'+String(mm).padStart(2,'0')+"'"+String(ss).padStart(2,'0')+'"';grp.appendChild(tx);}function _selG(L,R,col,sz,чей){var pp=degToScreen(L,R);var t=document.createElementNS(NS,'text');t.setAttribute('x',pp[0].toFixed(1));t.setAttribute('y',pp[1].toFixed(1));t.setAttribute('fill',col);t.setAttribute('font-size',sz);t.setAttribute('font-weight','600');t.setAttribute('stroke','#0a0c16');t.setAttribute('stroke-width','2.5');t.setAttribute('paint-order','stroke');t.setAttribute('text-anchor','middle');t.setAttribute('dominant-baseline','middle');t.textContent='⚜';подсказка(t,'<b>Селена — Белая Луна</b> \u00b7 '+тДМС(L)+(чей?' \u00b7 '+чей:''));grp.appendChild(t);}function _selD(L,R,col){var a=((L%360)+360)%360,ins=a%30,d2=Math.floor(ins),m2=Math.floor((ins-d2)*60);var pp=degToScreen(L,R);var t=document.createElementNS(NS,'text');t.setAttribute('x',pp[0].toFixed(1));t.setAttribute('y',pp[1].toFixed(1));t.setAttribute('fill',col);t.setAttribute('font-size','6');t.setAttribute('font-weight','300');t.setAttribute('text-anchor','middle');t.setAttribute('dominant-baseline','middle');t.textContent=d2+'°'+String(m2).padStart(2,'0')+"'";grp.appendChild(t);}var _st=d.planets['Селена'];if(_st)_selG(_st.abs_degree||0,RSEL_T,'#ffe9a8','14','сейчас');var _sn=(mode!=='horar'&&natal&&natal.planets&&natal.planets['Селена'])?natal.planets['Селена']:null;/* 06.09: в хораре «натал» — карта момента, натальной Селены там нет */if(_sn){_selG(_sn.abs_degree||0,RSEL_N,'#ffe9a8','14','в натале');_selD(_sn.abs_degree||0,RSEL_N+13,'#ffd98a');}if(d.angles){var _mc=d.angles.MC||0,_as=d.angles.ASC||0;var _AA=[_mc,(_mc+180)%360,(_as+180)%360];for(var _ai=0;_ai<_AA.length;_ai++){var _av=((_AA[_ai]%360)+360)%360,_in=_av%30,_dd=Math.floor(_in),_mm=Math.floor((_in-_dd)*60);var _pp=degToScreen(_av,RANG);var _t=document.createElementNS(NS,'text');_t.setAttribute('x',_pp[0].toFixed(1));_t.setAttribute('y',_pp[1].toFixed(1));_t.setAttribute('fill','#e8202a');_t.setAttribute('font-size','7');_t.setAttribute('font-weight','600');_t.setAttribute('stroke','#0a0c16');_t.setAttribute('stroke-width','2');_t.setAttribute('paint-order','stroke');_t.setAttribute('text-anchor','middle');_t.setAttribute('dominant-baseline','middle');_t.textContent=_dd+'°'+String(_mm).padStart(2,'0')+"'";grp.appendChild(_t);}}}
 var RSEL_T=208,RSEL_N=130,RANG=234;var RPARTNER=181;var RDEGP=192;var PROT=0;
 var PGLYPH={'Солнце':'☉','Луна':'☽','Меркурий':'☿','Венера':'♀','Марс':'♂','Юпитер':'♃','Сатурн':'♄','Уран':'♅','Нептун':'♆','Плутон':'♇','Сев.Узел':'☊','Юж.Узел':'☋','Лилит':'⚸','Селена':'⚜','Хирон':'⚷'};
 var partnerOn=false,partnerData=null;var APX={'Солнце':0,'Луна':-10,'Меркурий':0,'Венера':0,'Марс':0,'Юпитер':0,'Сатурн':-10,'Уран':0,'Нептун':0,'Плутон':0,'Сев.Узел':0,'Юж.Узел':0,'Лилит':0,'Селена':0,'Хирон':0};var APY={'Солнце':0,'Луна':16,'Меркурий':0,'Венера':0,'Марс':0,'Юпитер':0,'Сатурн':4,'Уран':0,'Нептун':0,'Плутон':0,'Сев.Узел':0,'Юж.Узел':0,'Лилит':0,'Селена':0,'Хирон':0};var APGY={'Солнце':0,'Луна':0,'Меркурий':0,'Венера':0,'Марс':0,'Юпитер':0,'Сатурн':0,'Уран':-8,'Нептун':0,'Плутон':0,'Сев.Узел':0,'Юж.Узел':0,'Лилит':0,'Селена':0,'Хирон':0};
@@ -326,7 +326,10 @@ q.style.left=x+'px';q.style.top=y+'px';});
 document.addEventListener('mouseout',function(e){if(e.relatedTarget&&e.relatedTarget.closest&&e.relatedTarget.closest('[data-tip]'))return;
 var q=плашка();if(q)q.style.display='none';});})();
 
-function setWheel(svgT,live){var w=document.getElementById('wh');if(!svgT||svgT.indexOf('<svg')<0)return false;w.innerHTML=svgT;
+function setWheel(svgT,live){var w=document.getElementById('wh');if(!svgT||svgT.indexOf('<svg')<0)return false;
+/* 06.09: колесо заказа (транзиты/соляр) никто живой не перерисовывает — запоздавший liveUp/showHorar после setTimerOff уже ничего не заменит */
+if(live&&mode==='zakaz')return false;
+w.innerHTML=svgT;
 // Буквы углов из серверного SVG.
 // ХОРАР: колесо построено на текущую секунду → его As/Mc/Ds/Ic это ТЕ ЖЕ живые
 // углы, что я рисую красным → прячем, чтобы не двоилось.
@@ -540,7 +543,7 @@ var _e=chkI(gI());if(_e){showHorar();return}mode='natal';document.getElementById
 var _безВремени=!_полеЗначение('tm');var _gi=gI();
 if(_безВремени){var _т=телоКолеса('tranzity');_т.koltso=false;_т.tochka_zhizni=false;var _к=await колесоЗаказа(_т);setWheel(_к.svg,false);спрятатьДомаНаКолесе();var _сч=(_к.solnechnyy_chas||'12:00:00').split(':');_gi.hour=+_сч[0];_gi.minute=+_сч[1];_gi.second=+_сч[2];document.getElementById('st').textContent='время не указано — космограмма по солнечному часу '+_к.solnechnyy_chas;}
 else{var r=await fetch(QAPI+(live?'/chart-wheel-transit':'/chart-wheel-natal')+'?theme='+TH,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(gK())});if(r.ok){setWheel(await r.text(),live);}}
-var _тк=телоКолеса('tranzity');_тк.koltso=false;_тк.tochka_zhizni=false;таблицыКерикеона(_тк);var n=await fetch(QAPI+'/natal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_gi)});natal=await n.json();if(!natal.detail){buildTbl(natal,_безВремени);if(natal.angles&&natal.angles.ASC)natalASC=natal.angles.ASC.abs_degree;}document.getElementById('st').textContent=_безВремени?('Натал построен · время не указано — космограмма по солнечному часу '+(_к.solnechnyy_chas||'')):'Натал построен'}catch(e){document.getElementById('st').textContent='Ошибка: '+e.message}}
+var _тк=телоКолеса('tranzity');_тк.koltso=false;_тк.tochka_zhizni=false;таблицыКерикеона(_тк);var n=await fetch(QAPI+'/natal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_gi)});natal=await n.json();if(!natal.detail){buildTbl(natal,_безВремени);if(natal.planets&&natal.planets['Селена'])селенаНаКолесе(natal.planets['Селена'].abs_degree||0,null);if(natal.angles&&natal.angles.ASC)natalASC=natal.angles.ASC.abs_degree;}document.getElementById('st').textContent=_безВремени?('Натал построен · время не указано — космограмма по солнечному часу '+(_к.solnechnyy_chas||'')):'Натал построен'}catch(e){document.getElementById('st').textContent='Ошибка: '+e.message}}
 async function showTransit(){mode='transit';if(!natal){var r=await fetch(QAPI+'/natal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(gI())});natal=await r.json();if(!natal.detail)buildTbl(natal)}document.getElementById('st').textContent='Транзиты...';try{var w=await fetch(QAPI+'/chart-wheel-transit?theme='+TH,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(gK())});if(w.ok)setWheel(await w.text(),true);document.getElementById('kt').innerHTML='';await liveUp();document.getElementById('st').textContent='Натал + Транзиты LIVE'}catch(e){document.getElementById('st').textContent='Ошибка: '+e.message}}
 
 async function resolvePartnerPlace(){var q=document.getElementById('ppl').value.trim();if(!q){return}try{var r=await fetch(QAPI+'/resolve-place?q='+encodeURIComponent(q));var j=await r.json();if(j.found){document.getElementById('py').value=j.lat;document.getElementById('px').value=j.lng;document.getElementById('ppl').dataset.tz=j.tz_str;document.getElementById('st').textContent='Место: '+q+' → '+j.tz_str+' ('+j.lat+', '+j.lng+')'}else{document.getElementById('st').textContent='«'+q+'» не найдено — введи координаты и GMT вручную'}}catch(e){document.getElementById('st').textContent='Ошибка поиска: '+e.message}}
@@ -575,6 +578,8 @@ el.value=из.join(разд);});}
 ['tm','pt'].forEach(function(id){цифроввод(id,[2,2,2],':')});   // время: 205640 → 20:56:40
 
 window.onload=function(){
+  /* 06.09, его слово: после перезагрузки данные рождения не остаются — браузер сам восстанавливает поля, чистим */
+  try{['nm','dt','tm','cn','cr','cd','pl','tz','la','lo','godSol','pn','pd','pt','pcn','pcr','pcd','ppl','pz','py','px','pasc'].forEach(function(id){var e=document.getElementById(id);if(e&&e.tagName==='INPUT'){e.value='';e.setAttribute('autocomplete','off');}});}catch(e){}
   try{var sv=localStorage.getItem('qa_now');if(sv){var o=JSON.parse(sv);if(o.city)document.getElementById('tcity').value=o.city;if(o.lat)document.getElementById('tlat').value=o.lat;if(o.lon)document.getElementById('tlon').value=o.lon;if(o.gmt)document.getElementById('tgmt').value=o.gmt}}catch(e){}
   doCalc();
   var l=document.getElementById('tlbl'),c=document.getElementById('tclk');
@@ -630,6 +635,26 @@ async function таблицыКерикеона(тело) {
   } catch (e) {}
   document.getElementById("kt").innerHTML = "";
   return false;
+}
+// Селена (Белая Луна): Кериkeion её не рисует. Ставим сами тем же значком ⚜, что в живом режиме:
+// натальная — на внутреннем радиусе, на момент кольца — на внешнем. Градусы приходят с сервера.
+function селенаНаКолесе(натальная, кольцо, чейКольцо) {
+  var wrap = document.getElementById('wh'); if (!wrap) return; var svg = wrap.querySelector('svg'); if (!svg) return;
+  var tg = svg.querySelector('[transform*="translate(100"]') || svg, NS = 'http://www.w3.org/2000/svg';
+  var g = svg.querySelector('#selenaZakaz'); if (g) g.remove();
+  g = document.createElementNS(NS, 'g'); g.setAttribute('id', 'selenaZakaz'); tg.appendChild(g);
+  function значок(L, R, чей) {
+    var pp = degToScreen(L, R), t = document.createElementNS(NS, 'text');
+    t.setAttribute('x', pp[0].toFixed(1)); t.setAttribute('y', pp[1].toFixed(1)); t.setAttribute('fill', '#ffe9a8'); t.setAttribute('font-size', '14'); t.setAttribute('font-weight', '600');
+    t.setAttribute('stroke', '#0a0c16'); t.setAttribute('stroke-width', '2.5'); t.setAttribute('paint-order', 'stroke'); t.setAttribute('text-anchor', 'middle'); t.setAttribute('dominant-baseline', 'middle');
+    t.textContent = '⚜'; подсказка(t, '<b>Селена — Белая Луна</b> \u00b7 ' + тДМС(L) + ' \u00b7 ' + чей); g.appendChild(t);
+    var a = ((L % 360) + 360) % 360, ins = a % 30, d2 = Math.floor(ins), m2 = Math.floor((ins - d2) * 60);
+    var pd = degToScreen(L, R + 13), tt = document.createElementNS(NS, 'text');
+    tt.setAttribute('x', pd[0].toFixed(1)); tt.setAttribute('y', pd[1].toFixed(1)); tt.setAttribute('fill', '#ffd98a'); tt.setAttribute('font-size', '7'); tt.setAttribute('text-anchor', 'middle'); tt.setAttribute('dominant-baseline', 'middle');
+    tt.textContent = d2 + '°' + String(m2).padStart(2, '0') + "'"; g.appendChild(tt);
+  }
+  if (натальная != null) значок(натальная, RSEL_N, 'в натале');
+  if (кольцо != null) значок(кольцо, RSEL_T, чейКольцо || 'сейчас');
 }
 // ═══ КОЛЕСО ЗАКАЗА · добавлено 05.09.2026 (вечер) ═══
 // Транзиты и соляр рисуются Кериkeion'ом: внутри натал с домами (время есть)
@@ -718,12 +743,13 @@ async function raskladka(заказ) {
   var шапкаКол = "";
   try {
     // ── 1. колесо: внутри натал/космограмма, снаружи кольцо момента ──
-    setTimerOff();
+    setTimerOff(); mode = 'zakaz';
     var _oa = document.getElementById('liveASC'); if (_oa) _oa.remove();   // красные живые углы «сейчас» — не для карты заказа
     document.getElementById('tl').innerHTML = '';
     var кол = await колесоЗаказа(телоКолеса(заказ));
     setWheel(кол.svg, false);
     if (!кол.vremya_izvestno) спрятатьДомаНаКолесе();
+    селенаНаКолесе(кол.selena_natal, кол.selena_koltso, заказ === 'solyar' ? 'соляр' : 'сейчас');
     таблицыКерикеона(телоКолеса(заказ));   // таблицы Кериkeion к этой паре карт, в #kt
     шапкаКол = шапкаКолеса(кол, заказ);
     document.getElementById("st").textContent = шапкаКол + " · раскладка…";
