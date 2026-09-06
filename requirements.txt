@@ -1,7 +1,7 @@
 pyswisseph==2.10.3.2
 fastapi>=0.104.0
 uvicorn>=0.24.0
-kerykeion>=4.0.0
+kerykeion>=5.12,<6   # 06.09: на 5.x проверено всё; на 4.x нет фабрики с секундами и разметки для скрытия домов
 geopy>=2.4.0
 timezonefinder>=6.2.0
 pytz>=2023.3

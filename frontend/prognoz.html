@@ -79,6 +79,8 @@ white-space:nowrap;box-shadow:0 6px 22px rgba(0,0,0,.55)}
 
 /* прежние таблицы карты в прогнозе не нужны — их место занимает наше */
 #kt, #tl, #nd, #cd, #fc { display:none !important; }
+/* 06.09: после расчёта дня таблицы и окна градусов открываются внизу (класс на body) */
+body.таблицы #kt, body.таблицы #nd, body.таблицы #cd, body.таблицы #fc { display:block !important; }
 .data > .st { display:none !important; }
 </style>
 </head>
@@ -556,13 +558,14 @@ gt.textContent=cd+'\u00b0'+String(cm).padStart(2,'0')+'\u2032';подсказк�
 var БУКВЫ={0:'As',9:'Mc',6:'Ds',3:'Ic'};
 if(БУКВЫ[h]!==undefined){var bp=degToScreen(cusps[h],248);
 var bt=document.createElementNS(NS,'text');bt.setAttribute('x',bp[0].toFixed(1));bt.setAttribute('y',bp[1].toFixed(1));
-bt.setAttribute('fill',RED);bt.setAttribute('font-size','18');bt.setAttribute('font-weight','600');
-bt.setAttribute('stroke','#0a0c16');bt.setAttribute('stroke-width','2.5');bt.setAttribute('paint-order','stroke');
+/* 06.09, его слово: буквы углов — только контур, без заливки и без тёмной обводки, чтобы не закрывали цифры */
+bt.setAttribute('fill','none');bt.setAttribute('font-size','11');bt.setAttribute('font-weight','600');
+bt.setAttribute('stroke',RED);bt.setAttribute('stroke-width','0.9');bt.setAttribute('opacity','0.9');
 bt.setAttribute('text-anchor','middle');bt.setAttribute('dominant-baseline','middle');
 bt.textContent=БУКВЫ[h];подсказка(bt,_тК);g.appendChild(bt);}
 var mid=cusps[h]+(((cusps[(h+1)%12]-cusps[h])+360)%360)/2;var np=degToScreen(mid,178);
 var t=document.createElementNS(NS,'text');t.setAttribute('x',np[0].toFixed(1));t.setAttribute('y',np[1].toFixed(1));
-t.setAttribute('fill',RED);t.setAttribute('font-size','13');t.setAttribute('font-weight','700');t.setAttribute('stroke','#0a0c16');t.setAttribute('stroke-width','3');t.setAttribute('paint-order','stroke');t.setAttribute('opacity','0.95');
+t.setAttribute('fill','none');t.setAttribute('font-size','13');t.setAttribute('font-weight','700');t.setAttribute('stroke',RED);t.setAttribute('stroke-width','0.8');t.setAttribute('opacity','0.9');t.setAttribute('opacity','0.95');
 t.setAttribute('text-anchor','middle');t.setAttribute('dominant-baseline','middle');t.textContent=String(h+1);подсказка(t,'<b>'+(h+1)+' дом сейчас</b> \u00b7 от '+тДМС(cusps[h])+' до '+тДМС(cusps[(h+1)%12]));g.appendChild(t);}}
 // Синастрия: угловые точки ПАРТНЁРА — ярко-белые, крупные, в кольце знаков (R=186,
 // туда же Кериткеон ставит символы знаков), чтобы не сливались с номерами домов.
@@ -1316,6 +1319,18 @@ function эл(вид, атрибуты, текст){
   return э;
 }
 
+// ── кнопка «паутина» (06.09): показать натальные аспекты Кериkeion, спрятанные под пятном ──
+// нажал — пятно с медленными уходит, видна вся паутина; нажал ещё — медленные вернулись
+window.паутинаОткрыта = false;
+function паутина(){
+  const свг = document.getElementById("wh").querySelector("svg"); if (!свг) return;
+  window.паутинаОткрыта = !window.паутинаОткрыта;
+  ["пятно","медленные"].forEach(id => { const г = свг.querySelector("#"+id); if (г) г.style.display = window.паутинаОткрыта ? "none" : ""; });
+  const ст = $("статус");
+  if (ст) ст.textContent = window.паутинаОткрыта ? "паутина: натальные аспекты Кериkeion открыты, медленные спрятаны — нажми ещё раз, чтобы вернуть"
+                                                 : "паутина закрыта — медленные в центре";
+}
+
 // ── белое пятно: закрывает паутину аспектов Кериткеона; на нём живут медленные ──
 function пятноВЦентре(){
   const г = слой("пятно"); if (!г) return;
@@ -1827,6 +1842,58 @@ async function рассчитатьДень(){
 
   await взятьСетку();     // круг суток: главы, узлы, медленные, полочка
   нашиСлои();
+  таблицыВнизу(ч, шр, др, gmtР);   // 06.09, его слово: внизу — все таблицы, как на других картах
+}
+
+
+// ── 06.09, его слово: медленные планеты отдельной таблицей — где стоят на момент дня и их связи ──
+function таблицаМедленных(перед){
+  const с = window.сетка, м = с && с.медленные; if (!м) return;
+  let б = document.getElementById("medl"); if (б) б.remove();
+  б = document.createElement("div"); б.id = "medl"; б.className = "data"; б.style.maxWidth = "1500px";
+  const дир = м.дирекции || [], прог = м.прогрессии || [], асп = м.аспекты || [];
+  const прогПо = {}; прог.forEach(p => { прогПо[p.имя] = p; });
+  let h = `<div class="st" style="display:block !important">Медленные планеты на ${$("день").value || "этот день"} · дуга ${(+м.дуга).toFixed(2)}° · прожито ${(+м.лет).toFixed(1)} лет</div>`;
+  h += '<table><tr><th>Точка</th><th>Дирекция</th><th>Прогрессия</th></tr>';
+  const имена = [...new Set([...дир.map(d => d.имя), ...прог.map(p => p.имя)])];
+  const дирПо = {}; дир.forEach(d => { дирПо[d.имя] = d; });
+  имена.forEach(и => { const d = дирПо[и], p = прогПо[и];
+    h += `<tr><td>${и}</td><td style="color:#a0a8c0">${d ? d.текст : "—"}</td><td style="color:#a0a8c0">${p ? p.текст : "—"}</td></tr>`; });
+  h += '</table>';
+  h += `<div class="st" style="display:block !important">Связи медленных с космограммой · орбис 1° · ${асп.length}</div>`;
+  h += '<table><tr><th>Слой</th><th>Точка</th><th>Аспект</th><th>К</th><th>Орбис</th></tr>';
+  асп.slice().sort((a, b) => a.орбис - b.орбис).forEach(a => {
+    const цв = /квадрат|оппозиц/.test(a.аспект) ? "#e05555" : (/трин|секстил/.test(a.аспект) ? "#4fbf7a" : "#e0e0e0");
+    h += `<tr><td style="color:#5060a0">${a.слой}</td><td>${a.точка} <span style="color:#7080a0">${дмс(a.градус)}</span></td><td style="color:${цв}">${a.аспект}</td><td>${(a.к||"").replace("космограмма ","")} <span style="color:#7080a0">${дмс(a.градус_цели)}</span></td><td style="color:#a0a8c0">${(+a.орбис).toFixed(2)}°</td></tr>`; });
+  h += '</table>';
+  б.innerHTML = h;
+  перед.parentNode.insertBefore(б, перед);
+}
+// ── 06.09: таблицы внизу страницы — наши (углы, планеты, аспекты, окна градусов)
+//    и таблицы Кериkeion к паре «космограмма + момент дня». Ставятся после полочки.
+async function таблицыВнизу(ч, шр, др, gmtР){
+  const nd = $("nd"), kt = $("kt"), полка = $("карта_полочка");
+  if (!nd || !kt) return;
+  if (полка && полка.parentNode){ полка.parentNode.insertBefore(nd, полка.nextSibling); nd.parentNode.insertBefore(kt, nd.nextSibling); }
+  document.body.classList.add("таблицы");
+  таблицаМедленных(nd);
+  // наши таблицы уже собраны картой (#nd) — космограмма без времени: углов нет, домов нет
+  if (typeof buildTbl === "function" && window.natal && !window.natal.detail){
+    const h0 = nd.innerHTML; buildTbl(window.natal);
+    nd.innerHTML = nd.innerHTML.replace(/<div class="st">Углы<\/div><table>.*?<\/table>/s, "")
+                               .replace(/<div class="st">Планеты<\/div>/, '<div class="st">Планеты · космограмма, время рождения не указано</div>')
+                               .replace(/<td style="color:#5a6080">\d+ \(\d\/3\)<\/td>/g, '<td style="color:#5a6080">—</td>');
+  }
+  kt.innerHTML = '<div class="st">Таблицы Кериkeion · космограмма + момент дня</div>';
+  try{
+    const ш = parseFloat($("шир_с").value), д = parseFloat($("долг_с").value);
+    const тело = { zakaz:"tranzity", year:ч[2], month:ч[1], day:ч[0], vremya_izvestno:false, gmt:gmtР,
+                   latitude:шр, longitude:др, tr_lat:ш, tr_lon:д, view:"tables",
+                   moment_utc: (window.сетка && window.сетка.начало_utc) ? window.сетка.начало_utc : null };
+    const о = await fetch("/chart-wheel-zakaz", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(тело) });
+    if (о.ok){ const j = await о.json(); kt.innerHTML += j.tables || ""; }
+    else kt.innerHTML += '<div class="err">таблицы Кериkeion: ' + (await о.text()).slice(0,200) + '</div>';
+  }catch(e){ kt.innerHTML += '<div class="err">таблицы Кериkeion: ' + e.message + '</div>'; }
 }
 
 // 5. При открытии — живой хорар, как на карте

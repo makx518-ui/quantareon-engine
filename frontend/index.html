@@ -335,7 +335,7 @@ function setWheel(svgT,live){var w=document.getElementById('wh');if(!svgT||svgT.
 s.querySelectorAll('text').forEach(function(t){var c=(t.textContent||'').trim();
 if(c==='As'||c==='Ds'||c==='Mc'||c==='Ic'||c==='Asc'||c==='Dsc')t.style.display='none';});})();
 if(live&&mode!=='synastry'&&mode!=='matrix'){var a=calcASClocal();if(a!=null)updateASConly(a);}
-if(mode==='synastry')drawSynastryDeg();else{drawZodiacRays();if(window._lastTr&&mode!=='matrix')drawLiveHouses(window._lastTr.cusps);}
+if(mode==='synastry')drawSynastryDeg();else{drawZodiacRays();if(live&&window._lastTr&&mode!=='matrix')drawLiveHouses(window._lastTr.cusps);}
 if(partnerOn&&partnerData)drawPartnerRing();
 оснаститьКарту();
 return true;}
@@ -532,17 +532,30 @@ document.getElementById('tl').innerHTML=h;
 drawTransitDeg(d);drawLiveHouses(d.cusps);оснаститьКарту();}
 async function transTable(){if(mode==='synastry'||!timerOn)return;try{var _t=trLL();if(!_t.ok){document.getElementById('st').textContent='Впиши место для транзита (📍 Я сейчас) и нажми 🔍';return}var r=await fetch(QAPI+'/transit?latitude='+_t.la+'&longitude='+_t.lo);var d=await r.json();window._lastTr=d;renderLive(d)}catch(e){}}
 function cropW(s){return s.replace(/viewBox=['"]([\d]+)\s+(-?[\d]+)\s+([\d]+)\s+([\d]+)['"]/,function(m,x,y,w,h){return"viewBox='"+x+' '+y+' 540 '+h+"'"})}
-async function showNatal(live){if(live===undefined)live=true;var _e=chkI(gI());if(_e){showHorar();return}mode='natal';document.getElementById('st').textContent='Загрузка натала...';try{var r=await fetch(QAPI+(live?'/chart-wheel-transit':'/chart-wheel-natal')+'?theme='+TH,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(gK())});if(r.ok){setWheel(await r.text(),live);}document.getElementById('kt').innerHTML='';var n=await fetch(QAPI+'/natal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(gI())});natal=await n.json();if(!natal.detail){buildTbl(natal);if(natal.angles&&natal.angles.ASC)natalASC=natal.angles.ASC.abs_degree;}document.getElementById('st').textContent='Натал построен'}catch(e){document.getElementById('st').textContent='Ошибка: '+e.message}}
+async function showNatal(live){
+/* 05.09 (вечер), его слово: кнопка «Рассчитать» — ЧИСТЫЙ НАТАЛ. Статичная карта Кериkeion: без транзитного кольца, без живых углов и домов, без Точки Жизни. Живой режим с транзитами — щелчок на часах (LIVE), он идёт через showTransit, эту функцию не трогает. */
+live=false;setTimerOff();var _oa0=document.getElementById('liveASC');if(_oa0)_oa0.remove();document.getElementById('tl').innerHTML='';window._lastTr=null;
+var _e=chkI(gI());if(_e){showHorar();return}mode='natal';document.getElementById('st').textContent='Загрузка натала...';try{
+/* времени нет → космограмма по солнечному часу, Солнце на асценденте. Таблицы строятся на тот же час, чтобы сходились с колесом. */
+var _безВремени=!_полеЗначение('tm');var _gi=gI();
+if(_безВремени){var _т=телоКолеса('tranzity');_т.koltso=false;_т.tochka_zhizni=false;var _к=await колесоЗаказа(_т);setWheel(_к.svg,false);спрятатьДомаНаКолесе();var _сч=(_к.solnechnyy_chas||'12:00:00').split(':');_gi.hour=+_сч[0];_gi.minute=+_сч[1];_gi.second=+_сч[2];document.getElementById('st').textContent='время не указано — космограмма по солнечному часу '+_к.solnechnyy_chas;}
+else{var r=await fetch(QAPI+(live?'/chart-wheel-transit':'/chart-wheel-natal')+'?theme='+TH,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(gK())});if(r.ok){setWheel(await r.text(),live);}}
+var _тк=телоКолеса('tranzity');_тк.koltso=false;_тк.tochka_zhizni=false;таблицыКерикеона(_тк);var n=await fetch(QAPI+'/natal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_gi)});natal=await n.json();if(!natal.detail){buildTbl(natal,_безВремени);if(natal.angles&&natal.angles.ASC)natalASC=natal.angles.ASC.abs_degree;}document.getElementById('st').textContent=_безВремени?('Натал построен · время не указано — космограмма по солнечному часу '+(_к.solnechnyy_chas||'')):'Натал построен'}catch(e){document.getElementById('st').textContent='Ошибка: '+e.message}}
 async function showTransit(){mode='transit';if(!natal){var r=await fetch(QAPI+'/natal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(gI())});natal=await r.json();if(!natal.detail)buildTbl(natal)}document.getElementById('st').textContent='Транзиты...';try{var w=await fetch(QAPI+'/chart-wheel-transit?theme='+TH,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(gK())});if(w.ok)setWheel(await w.text(),true);document.getElementById('kt').innerHTML='';await liveUp();document.getElementById('st').textContent='Натал + Транзиты LIVE'}catch(e){document.getElementById('st').textContent='Ошибка: '+e.message}}
 
 async function resolvePartnerPlace(){var q=document.getElementById('ppl').value.trim();if(!q){return}try{var r=await fetch(QAPI+'/resolve-place?q='+encodeURIComponent(q));var j=await r.json();if(j.found){document.getElementById('py').value=j.lat;document.getElementById('px').value=j.lng;document.getElementById('ppl').dataset.tz=j.tz_str;document.getElementById('st').textContent='Место: '+q+' → '+j.tz_str+' ('+j.lat+', '+j.lng+')'}else{document.getElementById('st').textContent='«'+q+'» не найдено — введи координаты и GMT вручную'}}catch(e){document.getElementById('st').textContent='Ошибка поиска: '+e.message}}
-async function showSynastry(){var _e=chkI(gI())||chkP(gP());if(_e){document.getElementById('st').textContent=_e;return}mode='synastry';setTimerOff();var _oa=document.getElementById('liveASC');if(_oa)_oa.remove();document.getElementById('tl').innerHTML='';document.getElementById('st').textContent='Синастрия...';try{var _asc=parseFloat(document.getElementById('pasc').value);if(!isNaN(_asc)){var _pd=document.getElementById('pd').value.split(/[.:\s]+/);var _rt=await fetch(QAPI+'/asc-to-time?asc='+_asc+'&year='+(+_pd[2])+'&month='+(+_pd[1])+'&day='+(+_pd[0])+'&lat='+(+document.getElementById('py').value)+'&lng='+(+document.getElementById('px').value)+'&gmt='+(parseInt(document.getElementById('pz').value)||0));var _tj=await _rt.json();if(_tj.found){document.getElementById('pt').value=_tj.hour+':'+_tj.minute+':'+_tj.second}}var d={client:gK(),operator:gP()};var rw=await fetch(QAPI+'/chart-svg-synastry?view=wheel&theme='+TH,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});if(!rw.ok){var _et=await rw.text();document.getElementById('st').textContent='СИНАСТРИЯ НЕ ПОСТРОИЛАСЬ. HTTP '+rw.status+' \u2014 '+_et.slice(0,300);return}var _sv=await rw.text();if(_sv.indexOf('<svg')<0){document.getElementById('st').textContent='СИНАСТРИЯ: сервер вернул не SVG \u2014 '+_sv.slice(0,200);return}setWheel(_sv,false);drawPartnerAngles();var rt=await fetch(QAPI+'/chart-svg-synastry?view=tables&theme='+TH,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});if(rt.ok)document.getElementById('kt').innerHTML=await rt.text();document.getElementById('st').textContent='Синастрия построена'}catch(e){document.getElementById('st').textContent='Ошибка: '+e.message}}
+async function showSynastry(){var _e=chkI(gI())||chkP(gP());if(_e){document.getElementById('st').textContent=_e;return}mode='synastry';setTimerOff();var _oa=document.getElementById('liveASC');if(_oa)_oa.remove();document.getElementById('tl').innerHTML='';document.getElementById('st').textContent='Синастрия...';try{var _asc=parseFloat(document.getElementById('pasc').value);if(!isNaN(_asc)){var _pd=document.getElementById('pd').value.split(/[.:\s]+/);var _rt=await fetch(QAPI+'/asc-to-time?asc='+_asc+'&year='+(+_pd[2])+'&month='+(+_pd[1])+'&day='+(+_pd[0])+'&lat='+(+document.getElementById('py').value)+'&lng='+(+document.getElementById('px').value)+'&gmt='+(parseInt(document.getElementById('pz').value)||0));var _tj=await _rt.json();if(_tj.found){document.getElementById('pt').value=_tj.hour+':'+_tj.minute+':'+_tj.second}}/* 06.09, его правило: у кого время есть — внутрь с домами; у кого нет — космограмма снаружи; время только у партнёра — он внутрь. */
+var _мв=!!_полеЗначение('tm'),_пв=!!document.getElementById('pt').value.trim();var d={client:gK(),operator:gP(),client_vremya:_мв,operator_vremya:_пв};var rw=await fetch(QAPI+'/chart-svg-synastry?view=wheel&theme='+TH,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});if(!rw.ok){var _et=await rw.text();document.getElementById('st').textContent='СИНАСТРИЯ НЕ ПОСТРОИЛАСЬ. HTTP '+rw.status+' \u2014 '+_et.slice(0,300);return}var _sv=await rw.text();if(_sv.indexOf('<svg')<0){document.getElementById('st').textContent='СИНАСТРИЯ: сервер вернул не SVG \u2014 '+_sv.slice(0,200);return}setWheel(_sv,false);if(_мв&&_пв)drawPartnerAngles();
+var _вн=rw.headers.get('X-Vnutri'),_сч=(rw.headers.get('X-Solnechnyy-Chas')||'|').split('|');var _прим=[];
+if(!_мв)_прим.push('у тебя времени нет — космограмма по солнечному часу '+_сч[0]);if(!_пв)_прим.push('у партнёра времени нет — космограмма по солнечному часу '+_сч[1]);
+if(_вн==='operator')_прим.push('внутри партнёр (у него есть время и дома), ты снаружи');window._синПрим=_прим.join(' · ');
+var rt=await fetch(QAPI+'/chart-svg-synastry?view=tables&theme='+TH,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});if(rt.ok)document.getElementById('kt').innerHTML=await rt.text();document.getElementById('st').textContent='Синастрия построена'+(window._синПрим?' · '+window._синПрим:'')}catch(e){document.getElementById('st').textContent='Ошибка: '+e.message}}
 (function(){function _cang(e){var w=document.getElementById('wh');var sv=w&&w.querySelector('svg');if(!sv)return null;var r=sv.getBoundingClientRect();return{a:Math.atan2(e.clientY-(r.top+r.height/2),e.clientX-(r.left+r.width/2))*180/Math.PI,r:r};}window._autoSpin=false;window._spinTimer=null;function toggleAutoSpin(){window._autoSpin=!window._autoSpin;if(window._autoSpin){window._spinTimer=setInterval(function(){if(typeof PROT!=='undefined'){PROT=((PROT+0.15)%360+360)%360;}if(typeof partnerData!=='undefined'&&partnerData&&typeof drawPartnerRing==='function')drawPartnerRing();},30);}else{if(window._spinTimer)clearInterval(window._spinTimer);window._spinTimer=null;if(typeof partnerData!=='undefined'&&partnerData&&typeof drawPartnerRing==='function')drawPartnerRing();}}document.addEventListener('mousedown',function(e){if(!document.querySelector('#partnerRing'))return;var c=_cang(e);if(!c)return;if(e.clientX<c.r.left||e.clientX>c.r.right||e.clientY<c.r.top||e.clientY>c.r.bottom)return;var _ccx=c.r.left+c.r.width/2,_ccy=c.r.top+c.r.height/2;var _cdist=Math.sqrt((e.clientX-_ccx)*(e.clientX-_ccx)+(e.clientY-_ccy)*(e.clientY-_ccy));if(_cdist<c.r.width*0.035){toggleAutoSpin();e.preventDefault();return;}if(window._autoSpin)toggleAutoSpin();window._prDrag=true;window._prLA=c.a;e.preventDefault();});document.addEventListener('mousemove',function(e){if(!window._prDrag)return;var c=_cang(e);if(!c)return;var d=c.a-window._prLA;window._prLA=c.a;if(typeof PROT!=='undefined'){PROT=((PROT-d)%360+360)%360;}if(typeof partnerData!=='undefined'&&partnerData&&typeof drawPartnerRing==='function')drawPartnerRing();});document.addEventListener('mouseup',function(){window._prDrag=false;});})();
 function drawZodiacRays(){var wrap=document.getElementById('wh');if(!wrap)return;var svg=wrap.querySelector('svg');if(!svg)return;var tg=svg.querySelector('[transform*="translate(100"]')||svg;var NS='http://www.w3.org/2000/svg';var old=svg.querySelector('#zodiacRays');if(old)old.remove();var g=document.createElementNS(NS,'g');g.setAttribute('id','zodiacRays');tg.appendChild(g);var _zcol=document.body.classList.contains('lt')?'#8a90ac':'#ffffff';for(var i=0;i<12;i++){var lp=degToScreen(i*30,238);var ln=document.createElementNS(NS,'line');ln.setAttribute('x1',lp[0].toFixed(1));ln.setAttribute('y1',lp[1].toFixed(1));ln.setAttribute('x2','240');ln.setAttribute('y2','240');ln.setAttribute('stroke',_zcol);ln.setAttribute('stroke-width','0.7');ln.setAttribute('opacity','0.35');g.appendChild(ln);}var ZS=['♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓'];for(var zi=0;zi<12;zi++){var zp=degToScreen(zi*30+15,238);var zt=document.createElementNS(NS,'text');zt.setAttribute('x',zp[0].toFixed(1));zt.setAttribute('y',zp[1].toFixed(1));zt.setAttribute('fill','#9aa3c8');zt.setAttribute('font-size','13');zt.setAttribute('text-anchor','middle');zt.setAttribute('dominant-baseline','middle');zt.setAttribute('opacity','0.32');zt.textContent=ZS[zi];
 var _ЗР=['Овен','Телец','Близнецы','Рак','Лев','Дева','Весы','Скорпион','Стрелец','Козерог','Водолей','Рыбы'];
-подсказка(zt,'<b>'+_ЗР[zi]+'</b> \u00b7 знак зодиака');g.appendChild(zt);}}async function liveUp(){if(mode==='synastry'||mode==='matrix')return;if(mode==='horar'){await showHorar();return}try{var w=await fetch(QAPI+'/chart-wheel-transit?theme='+TH,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(gK())});if(w.ok){var svgT=await w.text();setWheel(svgT,true);}var _t=trLL();if(!_t.ok){document.getElementById('st').textContent='Впиши место для транзита (📍 Я сейчас) и нажми 🔍';return}var r=await fetch(QAPI+'/transit?latitude='+_t.la+'&longitude='+_t.lo);var d=await r.json();window._lastTr=d;renderLive(d)}catch(e){document.getElementById('st').textContent='LIVE: '+e.message}}
+подсказка(zt,'<b>'+_ЗР[zi]+'</b> \u00b7 знак зодиака');g.appendChild(zt);}}async function liveUp(){if(mode==='synastry'||mode==='matrix')return;if(mode==='horar'){await showHorar();return}try{if(!_полеЗначение('tm')){var _т=телоКолеса('tranzity');_т.tochka_zhizni=false;var _к=await колесоЗаказа(_т);setWheel(_к.svg,false);спрятатьДомаНаКолесе();}else{var w=await fetch(QAPI+'/chart-wheel-transit?theme='+TH,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(gK())});if(w.ok){var svgT=await w.text();setWheel(svgT,true);}}var _t=trLL();if(!_t.ok){document.getElementById('st').textContent='Впиши место для транзита (📍 Я сейчас) и нажми 🔍';return}var r=await fetch(QAPI+'/transit?latitude='+_t.la+'&longitude='+_t.lo);var d=await r.json();window._lastTr=d;renderLive(d)}catch(e){document.getElementById('st').textContent='LIVE: '+e.message}}
 async function doCalc(){var _e=chkI(gI());if(_e){showHorar();return}document.getElementById('st').textContent='Считаю...';try{var r=await fetch(QAPI+'/natal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(gI())});natal=await r.json();if(natal.detail){document.getElementById('st').textContent=natal.detail;return}showNatal();buildTbl(natal);liveUp()}catch(e){document.getElementById('st').textContent='Ошибка: '+e.message}}
-function buildTbl(d){var h='<div class="st">Углы</div><table><tr><th></th><th>Угол</th><th>Позиция</th><th>Дом</th><th>Сабиан</th></tr>';var _AH={'ASC':1,'MC':10,'DSC':7,'IC':4};for(var n in d.angles){var ag=d.angles[n];h+='<tr><td style="font-size:13px;color:#e8c060">'+(ag.sign_symbol||'')+'</td><td><span style="cursor:pointer" onclick="openCW('+(ag.abs_degree||0).toFixed(6)+',\''+n.replace(/\x27/g,'')+'\')">'+n+' \u26a1</span></td><td style="color:#a0a8c0">'+ag.formatted+'</td><td style="color:#5a6080">'+(_AH[n]||'')+'</td><td style="color:#7080a0;font-size:10px;cursor:pointer;text-decoration:underline dotted" onclick="openDW('+(ag.abs_degree||0).toFixed(4)+',\''+n.replace(/\x27/g,'')+'\')">саб.'+(ag.sabian||'')+'\u00b0</td></tr>'}h+='</table><div class="st">Планеты</div><table><tr><th></th><th>Планета</th><th>Позиция</th><th>Дом</th><th>Сабиан</th></tr>';for(var n in d.planets){var p=d.planets[n],rt=p.retrograde?' <span style="color:#e05040;font-size:9px">R</span>':'',sb=p.sign?(Math.floor(p.sign.degree_in_sign||0)+1):'';h+='<tr><td style="font-size:13px">'+(p.symbol||'')+'</td><td><span style="cursor:pointer" onclick="openCW('+(p.abs_degree||0).toFixed(6)+',\''+n.replace(/'/g,'')+'\')">'+ n+rt+' ⚡</span></td><td style="color:#a0a8c0">'+p.sign.formatted+'</td><td style="color:#5a6080">'+p.house+' ('+p.house_part+'/3)</td><td style="color:#7080a0;font-size:10px;cursor:pointer;text-decoration:underline dotted" onclick="openDW('+(p.abs_degree||0).toFixed(4)+',\''+n.replace(/'/g,'')+'\')">саб.'+sb+'°</td></tr>'}h+='</table><div class="st">Аспекты (орб &lt; 3°)</div><table>';for(var a of(d.aspects||[]))if(a.orb<=3)h+='<tr><td>'+a.planet1+'</td><td>'+a.aspect_symbol+'</td><td>'+a.planet2+'</td><td style="color:#5a6080">'+a.aspect+' '+a.orb+'°</td></tr>';h+='</table>';document.getElementById('nd').innerHTML=h}
+function buildTbl(d,безВремени){var h='';if(!безВремени){h='<div class="st">Углы</div><table><tr><th></th><th>Угол</th><th>Позиция</th><th>Дом</th><th>Сабиан</th></tr>';}var _AH={'ASC':1,'MC':10,'DSC':7,'IC':4};for(var n in (безВремени?{}:d.angles)){var ag=d.angles[n];h+='<tr><td style="font-size:13px;color:#e8c060">'+(ag.sign_symbol||'')+'</td><td><span style="cursor:pointer" onclick="openCW('+(ag.abs_degree||0).toFixed(6)+',\''+n.replace(/\x27/g,'')+'\')">'+n+' \u26a1</span></td><td style="color:#a0a8c0">'+ag.formatted+'</td><td style="color:#5a6080">'+(_AH[n]||'')+'</td><td style="color:#7080a0;font-size:10px;cursor:pointer;text-decoration:underline dotted" onclick="openDW('+(ag.abs_degree||0).toFixed(4)+',\''+n.replace(/\x27/g,'')+'\')">саб.'+(ag.sabian||'')+'\u00b0</td></tr>'}h+=(безВремени?'':'</table>')+'<div class="st">Планеты'+(безВремени?' · космограмма, время рождения не указано':'')+'</div><table><tr><th></th><th>Планета</th><th>Позиция</th><th>Дом</th><th>Сабиан</th></tr>';for(var n in d.planets){var p=d.planets[n],rt=p.retrograde?' <span style="color:#e05040;font-size:9px">R</span>':'',sb=p.sign?(Math.floor(p.sign.degree_in_sign||0)+1):'';h+='<tr><td style="font-size:13px">'+(p.symbol||'')+'</td><td><span style="cursor:pointer" onclick="openCW('+(p.abs_degree||0).toFixed(6)+',\''+n.replace(/'/g,'')+'\')">'+ n+rt+' ⚡</span></td><td style="color:#a0a8c0">'+p.sign.formatted+'</td><td style="color:#5a6080">'+(безВремени?'—':(p.house+' ('+p.house_part+'/3)'))+'</td><td style="color:#7080a0;font-size:10px;cursor:pointer;text-decoration:underline dotted" onclick="openDW('+(p.abs_degree||0).toFixed(4)+',\''+n.replace(/'/g,'')+'\')">саб.'+sb+'°</td></tr>'}h+='</table><div class="st">Аспекты (орб &lt; 3°)</div><table>';for(var a of(d.aspects||[]))if(a.orb<=3)h+='<tr><td>'+a.planet1+'</td><td>'+a.aspect_symbol+'</td><td>'+a.planet2+'</td><td style="color:#5a6080">'+a.aspect+' '+a.orb+'°</td></tr>';h+='</table>';document.getElementById('nd').innerHTML=h}
 async function doFrac(){document.getElementById('st').textContent='Фракталы...';try{var r=await fetch(QAPI+'/cascade-full',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(gI())});var d=await r.json();document.getElementById('cd').innerHTML='<div class="st">Фракталы: '+d.summary.total_planets+' × 4</div><div class="cbox">'+(d.markers_text||'')+'</div>';document.getElementById('st').textContent='Фракталы готовы'}catch(e){document.getElementById('cd').innerHTML='<div class="err">'+e.message+'</div>'}}
 async function doAI(){document.getElementById('st').textContent='ИИ читает... (до минуты)';try{var r=await fetch(QAPI+'/interpret',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(gI())});var d=await r.json();document.getElementById('cd').innerHTML='<div class="st">ИИ ТРАКТОВКА</div><div class="cbox" style="font-family:Segoe UI;font-size:13px;color:#d0d0d8;line-height:1.6">'+(d.interpretation||d.detail||'Нет')+'</div>';document.getElementById('st').textContent='Трактовка готова'}catch(e){document.getElementById('cd').innerHTML='<div class="err">'+e.message+'</div>'}}
 var wc=0;function openFW(t,h){wc++;var w=document.createElement('div');w.className='fw';w.id='fw'+wc;w.style.left=(100+wc*20)+'px';w.style.top=(80+wc*20)+'px';w.innerHTML='<div class="fwh" onmousedown="sd(event,\'fw'+wc+'\')"><span>'+t+'</span><span class="fwx" onclick="this.parentElement.parentElement.remove()">✕</span></div><div class="fwb">'+h+'</div>';document.getElementById('fc').appendChild(w)}
@@ -590,6 +603,83 @@ function _полеЗначение(id) {
   return э ? (э.value || "").trim() : "";
 }
 
+// Без времени рождения домов и углов НЕТ: колесо — космограмма, Солнце стоит
+// на асценденте условно. Прячем домовые слои Кериkeion и буквы углов —
+// та же функция, что на странице прогноза дня.
+function спрятатьДомаНаКолесе() {
+  var свг = document.getElementById("wh").querySelector("svg");
+  if (!свг) return 0;
+  var скрыто = 0;
+  свг.querySelectorAll("g").forEach(function (g) {
+    var узел = g.getAttribute("kr:node");
+    if (узел === "Cusp" || узел === "HouseNumber" || узел === "Houses_Wheel") { g.style.display = "none"; скрыто++; }
+  });
+  свг.querySelectorAll("text").forEach(function (t) {
+    var c = (t.textContent || "").trim();
+    if (c === "As" || c === "Ds" || c === "Mc" || c === "Ic") { t.style.display = "none"; скрыто++; }
+  });
+  return скрыто;
+}
+
+// Таблицы Кериkeion (то, что он сам выдаёт) под нашими таблицами — к той же паре карт, что на колесе.
+async function таблицыКерикеона(тело) {
+  try {
+    var т = Object.assign({}, тело, { view: "tables" });
+    var о = await fetch("/chart-wheel-zakaz", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(т) });
+    if (о.ok) { var j = await о.json(); document.getElementById("kt").innerHTML = j.tables || ""; return true; }
+  } catch (e) {}
+  document.getElementById("kt").innerHTML = "";
+  return false;
+}
+// ═══ КОЛЕСО ЗАКАЗА · добавлено 05.09.2026 (вечер) ═══
+// Транзиты и соляр рисуются Кериkeion'ом: внутри натал с домами (время есть)
+// или космограмма по солнечному часу (времени нет), снаружи — кольцо момента.
+function телоКолеса(заказ) {
+  var д = _полеЗначение("dt").split(/[.\-\/]+/), т = _полеЗначение("tm");
+  var тт = т.split(/[.:\s]+/), тр = trLL();
+  var тело = {
+    zakaz: заказ,
+    year: pInt(д[2]), month: pInt(д[1]), day: pInt(д[0]),
+    hour: pInt(тт[0]) || 0, minute: pInt(тт[1]) || 0, second: pInt(тт[2]) || 0,
+    vremya_izvestno: !!т,
+    timezone_str: (document.getElementById('pl').dataset.tz || gmtToTz(document.getElementById('tz').value)),
+    gmt: parseFloat(_полеЗначение("tz")) || 0,
+    latitude: parseFloat(_полеЗначение("la")), longitude: parseFloat(_полеЗначение("lo")),
+    tr_lat: тр.ok ? тр.la : null, tr_lon: тр.ok ? тр.lo : null,
+    theme: TH
+  };
+  if (заказ === "solyar") {
+    var год = _полеЗначение("godSol");
+    тело.god_solyara = год ? parseInt(год, 10) : null;
+  }
+  return тело;
+}
+
+async function колесоЗаказа(тело) {
+  var о = await fetch("/chart-wheel-zakaz", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(тело)
+  });
+  if (!о.ok) {
+    var е = ""; try { е = (await о.json()).detail || ""; } catch (x) { е = "HTTP " + о.status; }
+    throw new Error("колесо не построилось: " + е);
+  }
+  return await о.json();
+}
+
+function шапкаКолеса(j, заказ) {
+  var ш = [];
+  if (!j.vremya_izvestno) ш.push("время рождения не указано — космограмма по солнечному часу " + (j.solnechnyy_chas || "") + (j.solnce_na_ascendente === false ? " (полярная ночь: взят полдень)" : ""));
+  // момент показываем по часам места «Я сейчас» (поле GMT рядом с городом), UTC — в скобках
+  var _g = parseFloat(_полеЗначение("tgmt")) || 0, _m = /^(\d\d)\.(\d\d)\.(\d{4}) (\d\d):(\d\d):(\d\d)$/.exec(j.moment_utc || "");
+  var _мест = j.moment_utc;
+  if (_m) { var _d = new Date(Date.UTC(+_m[3], +_m[2] - 1, +_m[1], +_m[4], +_m[5], +_m[6]) + _g * 3600000); var _p = function (n) { return (n < 10 ? "0" : "") + n; };
+    _мест = _p(_d.getUTCDate()) + "." + _p(_d.getUTCMonth() + 1) + "." + _d.getUTCFullYear() + " " + _p(_d.getUTCHours()) + ":" + _p(_d.getUTCMinutes()) + ":" + _p(_d.getUTCSeconds()) + " " + (_полеЗначение("tcity") || "местное") + " (GMT" + (_g >= 0 ? "+" : "") + _g + ")"; }
+  if (заказ === "solyar") ш.push("соляр " + j.god + " · возвращение Солнца " + _мест + " · дома соляра на это место · расхождение " + j.rashozhdenie_sek + "″");
+  else ш.push("транзиты на " + _мест);
+  return ш.join(" · ");
+}
+
 async function raskladka(заказ) {
   var имя = _полеЗначение("nm");
   if (!имя) {
@@ -625,7 +715,24 @@ async function raskladka(заказ) {
     return;
   }
   document.getElementById("st").textContent = "Считаю…";
+  var шапкаКол = "";
   try {
+    // ── 1. колесо: внутри натал/космограмма, снаружи кольцо момента ──
+    setTimerOff();
+    var _oa = document.getElementById('liveASC'); if (_oa) _oa.remove();   // красные живые углы «сейчас» — не для карты заказа
+    document.getElementById('tl').innerHTML = '';
+    var кол = await колесоЗаказа(телоКолеса(заказ));
+    setWheel(кол.svg, false);
+    if (!кол.vremya_izvestno) спрятатьДомаНаКолесе();
+    таблицыКерикеона(телоКолеса(заказ));   // таблицы Кериkeion к этой паре карт, в #kt
+    шапкаКол = шапкаКолеса(кол, заказ);
+    document.getElementById("st").textContent = шапкаКол + " · раскладка…";
+  } catch (e) {
+    document.getElementById("st").textContent = "Ошибка: " + e.message;
+    return;
+  }
+  try {
+    // ── 2. раскладка текстом под колесом ──
     var о = await fetch("/api/raschet", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(тело)
@@ -641,7 +748,7 @@ async function raskladka(заказ) {
     }
     показатьРаскладку(д, заказ);
     document.getElementById("st").textContent =
-      (заказ === "solyar" ? "Соляр готов" : "Транзиты готовы") +
+      (заказ === "solyar" ? "Соляр готов" : "Транзиты готовы") + " · " + шапкаКол +
       (д.arhiv ? " · сохранено в архив" : "");
     обновитьСчётИстории();
   } catch (e) {
@@ -677,8 +784,18 @@ function показатьРаскладку(д, заказ) {
 async function копироватьРаскладку() {
   var п = document.getElementById("rasklPre");
   if (!п) return;
-  await navigator.clipboard.writeText(п.textContent);
-  document.getElementById("st").textContent = "Скопировано";
+  var т = п.textContent;
+  var готово = function () { document.getElementById("st").textContent = "Скопировано (" + т.length + " знаков)"; };
+  // 06.09: если буфер обмена закрыт (http, старый браузер) — запасной путь через выделение
+  var запас = function () {
+    try {
+      var а = document.createElement("textarea"); а.value = т; а.style.position = "fixed"; а.style.opacity = "0";
+      document.body.appendChild(а); а.select(); var ок = document.execCommand("copy"); document.body.removeChild(а);
+      if (ок) готово(); else document.getElementById("st").textContent = "Не удалось скопировать — выдели текст мышкой";
+    } catch (e) { document.getElementById("st").textContent = "Не удалось скопировать — выдели текст мышкой"; }
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(т).then(готово, запас);
+  else запас();
 }
 
 async function обновитьСчётИстории() {

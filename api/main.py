@@ -1220,6 +1220,7 @@ class KerykeionRequest(BaseModel):
     day: int
     hour: int = 12
     minute: int = 0
+    second: int = 0          # 06.09: секунды рождения доходят до колеса
     timezone_str: str = 'UTC'
     latitude: float = 0
     longitude: float = 0
@@ -2122,15 +2123,35 @@ async def asc_to_time(asc: float, year: int, month: int, day: int,
 
 
 def _make_kerykeion_subject(name, req):
-    """Создаёт kerykeion Subject из запроса."""
-    from kerykeion import AstrologicalSubject
-    return AstrologicalSubject(
-        name, req.year, req.month, req.day, req.hour, req.minute,
-        lng=req.longitude, lat=req.latitude,
-        tz_str=req.timezone_str,
-        city='calc', nation='XX',
-        online=False,
-    )
+    """Создаёт kerykeion Subject из запроса.
+
+    06.09: СЕКУНДЫ. Старый AstrologicalSubject берёт только час и минуту —
+    40 секунд рождения выбрасывались, и асцендент колеса уезжал на 6.8′
+    от асцендента наших таблиц (они секунды считают). Кериkeion 5 умеет
+    секунды через фабрику — берём её, если есть; на старом Кериkeion
+    округляем к ближайшей минуте (ошибка не больше 30 с вместо 60).
+    """
+    сек = int(getattr(req, 'second', 0) or 0)
+    try:
+        from kerykeion import AstrologicalSubjectFactory
+        return AstrologicalSubjectFactory.from_birth_data(
+            name, req.year, req.month, req.day, req.hour, req.minute,
+            lng=req.longitude, lat=req.latitude, tz_str=req.timezone_str,
+            city='calc', nation='XX', online=False, seconds=сек,
+        )
+    except ImportError:
+        from kerykeion import AstrologicalSubject
+        from datetime import datetime as _dt, timedelta as _td
+        т = _dt(req.year, req.month, req.day, req.hour, req.minute) + _td(seconds=сек)
+        if т.second >= 30:
+            т += _td(seconds=60 - т.second)
+        return AstrologicalSubject(
+            name, т.year, т.month, т.day, т.hour, т.minute,
+            lng=req.longitude, lat=req.latitude,
+            tz_str=req.timezone_str,
+            city='calc', nation='XX',
+            online=False,
+        )
 
 
 @app.post("/solar")
@@ -2280,7 +2301,7 @@ async def chart_wheel_natal():
 
 
 
-def _дорисовать_тж(svg, req, второй=None):
+def _дорисовать_тж(svg, req, второй=None, асцендент=None):
     """Ставит Точку Жизни на колесо.
 
     ⚠️ Его правило 05.09: ТЖ нужна ТОЛЬКО там, где есть прожитое время —
@@ -2295,7 +2316,9 @@ def _дорисовать_тж(svg, req, второй=None):
                                req.hour, req.minute, tzinfo=timezone.utc),
                       datetime.now(timezone.utc))
         г = т.get("градус") if isinstance(т, dict) else т
-        return дорисовать_на_колесе(svg, float(г))
+        if асцендент is None:
+            асцендент = _make_kerykeion_subject('tzh', req).first_house.abs_pos
+        return дорисовать_на_колесе(svg, float(г), асцендент=асцендент)
     except Exception:
         return svg
 
@@ -2342,6 +2365,169 @@ async def chart_wheel_transit(req: KerykeionRequest, theme: str = "dark-high-con
                 svg = _дорисовать_тж(svg, req)
                 return Response(content=svg, media_type="image/svg+xml")
         raise HTTPException(status_code=500, detail="SVG not generated")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# ============================================================
+# КОЛЕСО ЗАКАЗА · транзиты и соляр одной кнопкой (05.09.2026, вечер)
+#   внутри — натал с домами (время есть) или космограмма по солнечному
+#   часу (времени нет), снаружи — кольцо момента: «сейчас» для транзитов,
+#   возвращение Солнца для соляра. Сверху — Точка Жизни.
+#   Старые маршруты не тронуты: это надстройка над ними.
+# ============================================================
+
+class КолесоЗаказа(BaseModel):
+    zakaz: str = "tranzity"               # tranzity | solyar
+    year: int; month: int; day: int
+    hour: int = 0; minute: int = 0; second: int = 0
+    vremya_izvestno: bool = True          # False → космограмма по солнечному часу
+    timezone_str: Optional[str] = None
+    gmt: float = 0.0
+    latitude: float; longitude: float
+    tr_lat: Optional[float] = None        # место «сейчас» (кольцо)
+    tr_lon: Optional[float] = None
+    god_solyara: Optional[int] = None     # None → действующий год соляра
+    theme: str = "dark-high-contrast"
+    koltso: bool = True                   # False → только внутренняя карта, без кольца
+    tochka_zhizni: bool = True            # False → без Точки Жизни (натал)
+    view: str = "wheel"                   # wheel — колесо; tables — таблицы Кериkeion к той же паре карт
+    moment_utc: Optional[str] = None      # транзиты на заданный момент (ISO, UTC); None → сейчас
+
+
+def _действующий_год_соляра(month, day):
+    """Год последнего дня рождения: до дня рождения — прошлый год."""
+    сег = datetime.now(timezone.utc)
+    return сег.year if (сег.month, сег.day) >= (month, day) else сег.year - 1
+
+
+@app.post("/chart-wheel-zakaz")
+async def chart_wheel_zakaz(req: КолесоЗаказа):
+    from kerykeion import KerykeionChartSVG
+    from datetime import timedelta as _td
+    import os, tempfile
+
+    try:
+        _проверить_вход(req.latitude, req.longitude, req.gmt, req.year, "рождение")
+        зона_р = f"Etc/GMT{'-' if req.gmt >= 0 else '+'}{abs(int(req.gmt))}"
+
+        # ── внутренняя карта ──
+        if req.vremya_izvestno:
+            суб = KerykeionRequest(
+                year=req.year, month=req.month, day=req.day,
+                hour=req.hour, minute=req.minute, second=req.second,
+                timezone_str=req.timezone_str or зона_р,
+                latitude=req.latitude, longitude=req.longitude)
+            рождение_utc = datetime(req.year, req.month, req.day, req.hour, req.minute,
+                                    req.second, tzinfo=timezone.utc) - _td(hours=req.gmt)
+            солнечный_час, солнце_на_асц = "", None
+        else:
+            точно, разрыв = _солнечный_час(req.year, req.month, req.day,
+                                           req.latitude, req.longitude, req.gmt)
+            солнце_на_асц = разрыв <= ПОРОГ_СОЛНЕЧНОГО_ЧАСА
+            if not солнце_на_асц:
+                точно = datetime(req.year, req.month, req.day, 12, 0) - _td(hours=req.gmt)
+            мест = точно + _td(hours=req.gmt)
+            суб = KerykeionRequest(
+                year=мест.year, month=мест.month, day=мест.day,
+                hour=мест.hour, minute=мест.minute, second=мест.second,
+                timezone_str=зона_р, latitude=req.latitude, longitude=req.longitude)
+            рождение_utc = точно.replace(tzinfo=timezone.utc)
+            солнечный_час = мест.strftime("%H:%M:%S")
+        натал = _make_kerykeion_subject('natal', суб)
+
+        # ── момент кольца ──
+        ш = req.tr_lat if req.tr_lat is not None else req.latitude
+        д = req.tr_lon if req.tr_lon is not None else req.longitude
+        _проверить_вход(ш, д, 0, req.year, "место сейчас")
+        сведения = {}
+        if req.zakaz == "solyar":
+            from engine.situacia import момент_соляра
+            год = req.god_solyara or _действующий_год_соляра(req.month, req.day)
+            св = момент_соляра(рождение_utc, год)
+            момент = св["момент"]
+            сведения = {"god": год,
+                        "rashozhdenie_sek": св["расхождение_сек"],
+                        "moment_utc": момент.strftime("%d.%m.%Y %H:%M:%S")}
+            имя_кольца = 'Solar'
+        else:
+            момент = datetime.now(timezone.utc)
+            if req.moment_utc:
+                try:
+                    момент = datetime.fromisoformat(req.moment_utc.replace("Z", "+00:00"))
+                    момент = (момент.astimezone(timezone.utc) if момент.tzinfo else момент.replace(tzinfo=timezone.utc))
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"moment_utc не разобран: {req.moment_utc}")
+            сведения = {"moment_utc": момент.strftime("%d.%m.%Y %H:%M:%S")}
+            имя_кольца = 'Transit'
+        суб_к = KerykeionRequest(
+            year=момент.year, month=момент.month, day=момент.day,
+            hour=момент.hour, minute=момент.minute, second=момент.second,
+            timezone_str='UTC', latitude=ш, longitude=д)
+        кольцо = _make_kerykeion_subject(имя_кольца, суб_к)
+
+        # ── колесо ──
+        td = tempfile.gettempdir()
+        for f in os.listdir(td):
+            if f.endswith('.svg') and 'Transit' in f and 'Wheel' in f:
+                try: os.remove(os.path.join(td, f))
+                except Exception: pass
+        if req.koltso:
+            chart = KerykeionChartSVG(натал, chart_type='Transit', second_obj=кольцо,
+                                      theme=req.theme, chart_language='RU',
+                                      new_output_directory=td)
+        else:
+            for f in os.listdir(td):
+                if f.endswith('.svg') and f.startswith('natal') and 'Wheel' in f:
+                    try: os.remove(os.path.join(td, f))
+                    except Exception: pass
+            chart = KerykeionChartSVG(натал, chart_type='Natal', theme=req.theme,
+                                      chart_language='RU', new_output_directory=td)
+        if req.view == "tables":
+            # таблицы Кериkeion к этой же паре карт — тем же обрезом, что у синастрии
+            тип = 'Transit' if req.koltso else 'Natal'
+            for f in os.listdir(td):
+                if f.endswith('.svg') and f.startswith('natal') and 'Wheel' not in f and 'Grid' not in f:
+                    try: os.remove(os.path.join(td, f))
+                    except Exception: pass
+            chart.makeSVG()
+            for f in os.listdir(td):
+                if f.endswith('.svg') and f.startswith('natal') and 'Wheel' not in f and 'Grid' not in f and (тип + ' Chart') in f:
+                    with open(os.path.join(td, f), 'r', encoding='utf-8') as sf:
+                        html = _crop_svg_to_chart(sf.read(), cut_override=(595 if req.koltso else None))
+                    if not req.vremya_izvestno:
+                        html = _спрятать_дома_в_таблицах(html, True)
+                    return {"tables": html, "zakaz": req.zakaz, "vremya_izvestno": req.vremya_izvestno, **сведения}
+            raise HTTPException(status_code=500, detail="таблицы не построились")
+        chart.makeWheelOnlySVG()
+        svg = None
+        for f in os.listdir(td):
+            if f.endswith('.svg') and 'Wheel' in f and f.startswith('natal'):
+                if req.koltso and 'Transit' not in f: continue
+                if not req.koltso and 'Transit' in f: continue
+                with open(os.path.join(td, f), 'r', encoding='utf-8') as sf:
+                    svg = sf.read()
+                break
+        if not svg:
+            raise HTTPException(status_code=500, detail="колесо не построилось")
+        _v = svg.find('viewBox=')
+        if _v != -1:
+            _q = svg[_v + 8]
+            _vb = svg[_v + 9:svg.find(_q, _v + 9)].split()
+            if len(_vb) == 4:
+                svg = svg.replace("width='100%'", "width='" + str(int(float(_vb[2]))) + "'", 1)
+                svg = svg.replace("height='100%'", "height='" + str(int(float(_vb[3]))) + "'", 1)
+        if req.tochka_zhizni:
+            svg = _дорисовать_тж(svg, суб, асцендент=натал.first_house.abs_pos)
+
+        return {"svg": svg, "zakaz": req.zakaz,
+                "vremya_izvestno": req.vremya_izvestno,
+                "solnechnyy_chas": солнечный_час,
+                "solnce_na_ascendente": солнце_на_асц,
+                **сведения}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2555,7 +2741,109 @@ async def chart_svg_transit(req: KerykeionRequest, theme: str = "dark-high-contr
 class SynastryChartRequest(BaseModel):
     client: KerykeionRequest
     operator: KerykeionRequest
+    client_vremya: bool = True        # 06.09: False → космограмма по солнечному часу
+    operator_vremya: bool = True
 
+
+
+
+def _спрятать_дома_в_таблицах(html, внутри_без_времени, снаружи_без_времени=False):
+    """Таблицы Кериkeion без времени: убираем домов и углы того, чьё время неизвестно.
+    Сетки Кериkeion помечены: Main_Houses_Grid (внутренняя карта), Secondary_Houses_Grid
+    (внешняя), House_Comparison_Table (планеты кольца по домам внутренней карты);
+    строки Асц/МС/ДСЦ/IC — в сетках планет."""
+    import re as _re
+    def _гасить(узел):
+        nonlocal html
+        html = html.replace(f"<g kr:node='{узел}'", f"<g kr:node='{узел}' style='display:none'", 1)
+    if внутри_без_времени:
+        _гасить('Main_Houses_Grid'); _гасить('House_Comparison_Table')
+    if снаружи_без_времени:
+        _гасить('Secondary_Houses_Grid')
+    def _углы(сетка):
+        nonlocal html
+        а = html.find(f"<g kr:node='{сетка}'")
+        if а < 0: return
+        б = html.find("<g kr:node=", а + 10)
+        кусок = html[а:б]
+        кусок = _re.sub(r"<g transform='translate\(0,\d+\)'>(<text[^>]*>(?:Асц|МС|ДСЦ|IC|Asc|MC|DSC|Ic)</text>)",
+                        lambda м: м.group(0).replace("<g transform", "<g style='display:none' transform", 1), кусок)
+        html = html[:а] + кусок + html[б:]
+    if внутри_без_времени: _углы('Main_Planet_Grid')
+    if снаружи_без_времени: _углы('Secondary_Planet_Grid')
+    return html
+
+# ── 06.09 · синастрия без времени — помощники ─────────────────────────────
+def _смещение_часов(tz_str, год, месяц, день):
+    """Сдвиг пояса в часах на эту дату (Etc/GMT-6 → +6, Asia/Omsk → по базе зон)."""
+    import re as _re
+    м = _re.match(r"Etc/GMT([+-])(\d+)$", tz_str or "")
+    if м:
+        return -float(м.group(2)) if м.group(1) == "+" else float(м.group(2))
+    from datetime import datetime as _dt
+    try:                                   # pytz стоит в requirements — он первый
+        import pytz
+        return pytz.timezone(tz_str).utcoffset(_dt(год, месяц, день, 12)).total_seconds() / 3600.0
+    except Exception:
+        pass
+    try:
+        from zoneinfo import ZoneInfo
+        return _dt(год, месяц, день, 12, tzinfo=ZoneInfo(tz_str)).utcoffset().total_seconds() / 3600.0
+    except Exception:
+        return 0.0
+
+
+def _субъект_без_времени(имя, req):
+    """Космограмма: субъект Кериkeion на солнечный час дня рождения (Солнце = АС)."""
+    from datetime import timedelta as _td
+    сдвиг = _смещение_часов(req.timezone_str, req.year, req.month, req.day)
+    точно, разрыв = _солнечный_час(req.year, req.month, req.day, req.latitude, req.longitude, сдвиг)
+    if разрыв > ПОРОГ_СОЛНЕЧНОГО_ЧАСА:
+        точно = datetime(req.year, req.month, req.day, 12, 0) - _td(hours=сдвиг)
+    мест = точно + _td(hours=сдвиг)
+    зона = f"Etc/GMT{'-' if сдвиг >= 0 else '+'}{abs(int(round(сдвиг)))}"
+    суб = KerykeionRequest(year=мест.year, month=мест.month, day=мест.day,
+                           hour=мест.hour, minute=мест.minute, second=мест.second,
+                           timezone_str=зона, latitude=req.latitude, longitude=req.longitude)
+    return _make_kerykeion_subject(имя, суб), мест.strftime("%H:%M:%S")
+
+
+def _спрятать_дома_в_синастрии(svg, внутри_без_времени, снаружи_без_времени, куспиды_внутри, куспиды_снаружи):
+    """Гасит домовые слои того, у кого времени нет.
+    Куспиды узнаём по градусу (kr:absoluteposition), номера домов — по прозрачности
+    (.6 внутренняя карта, .4 внешняя), буквы As/Ds/Mc/Ic — внутренней, значки углов
+    во внешнем кольце — по классу transit-planet-name."""
+    import re as _re
+    def _близко(г, список):
+        return any(min(abs(г - к) % 360, 360 - abs(г - к) % 360) < 0.01 for к in список)
+    скрыть = []
+    if внутри_без_времени:   скрыть.append(куспиды_внутри)
+    if снаружи_без_времени:  скрыть.append(куспиды_снаружи)
+    def _куспид(м):
+        г = float(м.group(1))
+        if any(_близко(г, сп) for сп in скрыть):
+            return м.group(0).replace("<g kr:node='Cusp'", "<g kr:node='Cusp' style='display:none'", 1)
+        return м.group(0)
+    svg = _re.sub(r"<g kr:node='Cusp' kr:absoluteposition='([\d.]+)'[^>]*>", _куспид, svg)
+    def _номер(м):
+        блок = м.group(0)
+        if (внутри_без_времени and "fill-opacity: .6" in блок) or (снаружи_без_времени and "fill-opacity: .4" in блок):
+            return блок.replace("<g kr:node='HouseNumber'>", "<g kr:node='HouseNumber' style='display:none'>", 1)
+        return блок
+    svg = _re.sub(r"<g kr:node='HouseNumber'>.*?</g>", _номер, svg, flags=_re.S)
+    if внутри_без_времени:
+        def _буква(м):
+            тег = м.group(1)
+            if "style='" in тег:
+                тег = тег.replace("style='", "style='display:none;", 1)
+            else:
+                тег += " style='display:none'"
+            return тег + м.group(2)
+        svg = _re.sub(r"(<text[^>]*)(>\s*(?:As|Ds|Mc|Ic)\s*</text>)", _буква, svg)
+    if снаружи_без_времени:
+        svg = _re.sub(r"(?:<line class='transit-planet-line'[^>]*/>\s*)?(?:<g transform='translate\([^)]*\)'><text[^>]*>[^<]*</text></g>\s*)?<g class='transit-planet-name'[^>]*><g[^>]*><use [^>]*href='#(?:Ascendant|Medium_Coeli|Descendant|Imum_Coeli)' /></g></g>",
+                      lambda м: "<g style='display:none'>" + м.group(0) + "</g>", svg)
+    return svg
 
 @app.post("/chart-svg-synastry")
 async def chart_svg_synastry(req: SynastryChartRequest, theme: str = "dark-high-contrast", view: str = "full"):
@@ -2565,8 +2853,23 @@ async def chart_svg_synastry(req: SynastryChartRequest, theme: str = "dark-high-
     import os, tempfile
 
     try:
-        subject1 = _make_kerykeion_subject('оператор', req.client)
-        subject2 = _make_kerykeion_subject('клиент', req.operator)
+        # 06.09, его правило: у кого время есть — тот внутрь с домами и АС; у кого нет —
+        # космограмма по солнечному часу без домов; если время только у партнёра — он внутрь.
+        сч1 = сч2 = ""
+        if req.client_vremya:
+            subject1 = _make_kerykeion_subject('оператор', req.client)
+        else:
+            subject1, сч1 = _субъект_без_времени('оператор', req.client)
+        if req.operator_vremya:
+            subject2 = _make_kerykeion_subject('клиент', req.operator)
+        else:
+            subject2, сч2 = _субъект_без_времени('клиент', req.operator)
+        внутри = "client"
+        if (not req.client_vremya) and req.operator_vremya:
+            subject1, subject2 = subject2, subject1
+            внутри = "operator"
+        внутри_бв = not (req.client_vremya if внутри == "client" else req.operator_vremya)
+        снаружи_бв = not (req.operator_vremya if внутри == "client" else req.client_vremya)
         _td = tempfile.gettempdir()
         for _old in os.listdir(_td):
             if _old.endswith('.svg') and 'Synastry' in _old:
@@ -2598,13 +2901,23 @@ async def chart_svg_synastry(req: SynastryChartRequest, theme: str = "dark-high-
                             _h = str(int(float(_vb[3])))
                             svg = svg.replace("width='100%'", "width='" + _w + "'", 1)
                             svg = svg.replace("height='100%'", "height='" + _h + "'", 1)
-                return Response(content=svg, media_type="image/svg+xml")
+                    if внутри_бв or снаружи_бв:
+                        _к = lambda с: [getattr(с, h).abs_pos for h in ('first_house','second_house','third_house','fourth_house','fifth_house','sixth_house','seventh_house','eighth_house','ninth_house','tenth_house','eleventh_house','twelfth_house')]
+                        svg = _спрятать_дома_в_синастрии(svg, внутри_бв, снаружи_бв, _к(subject1), _к(subject2))
+                    return Response(content=svg, media_type="image/svg+xml",
+                                    headers={"X-Vnutri": внутри,
+                                             "X-Vnutri-Bez-Vremeni": "1" if внутри_бв else "0",
+                                             "X-Snaruzhi-Bez-Vremeni": "1" if снаружи_бв else "0",
+                                             "X-Solnechnyy-Chas": (сч1 + "|" + сч2)})
         else:
             chart.makeSVG()
             for f in os.listdir(_td):
                 if f.endswith('.svg') and 'Synastry' in f and 'Wheel' not in f and 'Grid' not in f:
                     with open(os.path.join(_td, f), 'r', encoding='utf-8') as sf:
-                        return Response(content=_crop_svg_to_chart(sf.read(), cut_override=595), media_type="text/html")
+                        html = _crop_svg_to_chart(sf.read(), cut_override=595)
+                    if внутри_бв or снаружи_бв:
+                        html = _спрятать_дома_в_таблицах(html, внутри_бв, снаружи_бв)
+                    return Response(content=html, media_type="text/html")
 
         raise HTTPException(status_code=500, detail="SVG not generated")
     except Exception as e:
