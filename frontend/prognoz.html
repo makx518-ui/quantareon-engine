@@ -79,6 +79,8 @@ white-space:nowrap;box-shadow:0 6px 22px rgba(0,0,0,.55)}
 
 /* прежние таблицы карты в прогнозе не нужны — их место занимает наше */
 #kt, #tl, #nd, #cd, #fc { display:none !important; }
+/* 06.09: на прогнозе Точку Жизни рисует свой слой (⊛); серверное солнышко с транзитного колеса — дубль, прячем */
+#wh .tochka-zhizni-layer { display:none !important; }
 /* 06.09: после расчёта дня таблицы и окна градусов открываются внизу (класс на body) */
 body.таблицы #kt, body.таблицы #nd, body.таблицы #cd, body.таблицы #fc { display:block !important; }
 .data > .st { display:none !important; }
