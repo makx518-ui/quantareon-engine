@@ -462,15 +462,15 @@ gt.setAttribute('fill',RED);gt.setAttribute('font-size','8');gt.setAttribute('fo
 gt.setAttribute('text-anchor','middle');gt.setAttribute('dominant-baseline','middle');
 gt.textContent=cd+'\u00b0'+String(cm).padStart(2,'0')+'\u2032';подсказка(gt,_тК);g.appendChild(gt);
 var БУКВЫ={0:'As',9:'Mc',6:'Ds',3:'Ic'};
-if(БУКВЫ[h]!==undefined){var bp=degToScreen(cusps[h],248);
+if(БУКВЫ[h]!==undefined){var bp=degToScreen(cusps[h],КОНТУР?254:248);
 var bt=document.createElementNS(NS,'text');bt.setAttribute('x',bp[0].toFixed(1));bt.setAttribute('y',bp[1].toFixed(1));
-if(КОНТУР){bt.setAttribute('fill','none');bt.setAttribute('font-size','11');bt.setAttribute('font-weight','600');bt.setAttribute('stroke',RED);bt.setAttribute('stroke-width','0.9');}else{bt.setAttribute('fill',RED);bt.setAttribute('font-size','18');bt.setAttribute('font-weight','600');
+if(КОНТУР){bt.setAttribute('fill',RED);bt.setAttribute('fill-opacity','0.55');bt.setAttribute('font-size','9');bt.setAttribute('font-weight','600');bt.setAttribute('stroke','none');}else{bt.setAttribute('fill',RED);bt.setAttribute('font-size','18');bt.setAttribute('font-weight','600');
 bt.setAttribute('stroke','#0a0c16');bt.setAttribute('stroke-width','2.5');bt.setAttribute('paint-order','stroke');}
 bt.setAttribute('text-anchor','middle');bt.setAttribute('dominant-baseline','middle');
 bt.textContent=БУКВЫ[h];подсказка(bt,_тК);g.appendChild(bt);}
 var mid=cusps[h]+(((cusps[(h+1)%12]-cusps[h])+360)%360)/2;var np=degToScreen(mid,178);
 var t=document.createElementNS(NS,'text');t.setAttribute('x',np[0].toFixed(1));t.setAttribute('y',np[1].toFixed(1));
-if(КОНТУР){t.setAttribute('fill','none');t.setAttribute('font-size','11');t.setAttribute('font-weight','700');t.setAttribute('stroke',RED);t.setAttribute('stroke-width','0.8');}else{t.setAttribute('fill',RED);t.setAttribute('font-size','13');t.setAttribute('font-weight','700');t.setAttribute('stroke','#0a0c16');t.setAttribute('stroke-width','3');t.setAttribute('paint-order','stroke');}t.setAttribute('opacity','0.95');
+if(КОНТУР){t.setAttribute('fill',RED);t.setAttribute('fill-opacity','0.5');t.setAttribute('font-size','9');t.setAttribute('font-weight','700');t.setAttribute('stroke','none');}else{t.setAttribute('fill',RED);t.setAttribute('font-size','13');t.setAttribute('font-weight','700');t.setAttribute('stroke','#0a0c16');t.setAttribute('stroke-width','3');t.setAttribute('paint-order','stroke');}t.setAttribute('opacity','0.95');
 t.setAttribute('text-anchor','middle');t.setAttribute('dominant-baseline','middle');t.textContent=String(h+1);подсказка(t,'<b>'+(h+1)+' дом сейчас</b> \u00b7 от '+тДМС(cusps[h])+' до '+тДМС(cusps[(h+1)%12]));g.appendChild(t);}}
 // Синастрия: угловые точки ПАРТНЁРА — ярко-белые, крупные, в кольце знаков (R=186,
 // туда же Кериткеон ставит символы знаков), чтобы не сливались с номерами домов.
@@ -550,7 +550,7 @@ live=false;
 var _e=chkI(gI());if(_e){showHorar();return}mode='natal';document.getElementById('st').textContent='Загрузка натала...';try{
 /* времени нет → космограмма по солнечному часу, Солнце на асценденте. Таблицы строятся на тот же час, чтобы сходились с колесом. */
 var _безВремени=!_полеЗначение('tm');var _gi=gI();
-if(_безВремени){var _т=телоКолеса('tranzity');_т.koltso=false;_т.tochka_zhizni=false;var _к=await колесоЗаказа(_т);setWheel(_к.svg,false);спрятатьДомаНаКолесе();var _сч=(_к.solnechnyy_chas||'12:00:00').split(':');_gi.hour=+_сч[0];_gi.minute=+_сч[1];_gi.second=+_сч[2];document.getElementById('st').textContent='время не указано — космограмма по солнечному часу '+_к.solnechnyy_chas;}
+if(_безВремени){var _т=телоКолеса('tranzity');_т.koltso=false;_т.tochka_zhizni=false;var _к=await колесоЗаказа(_т);if(_к.asc_vnutri!=null)natalASC=_к.asc_vnutri;setWheel(_к.svg,false);спрятатьДомаНаКолесе();var _сч=(_к.solnechnyy_chas||'12:00:00').split(':');_gi.hour=+_сч[0];_gi.minute=+_сч[1];_gi.second=+_сч[2];document.getElementById('st').textContent='время не указано — космограмма по солнечному часу '+_к.solnechnyy_chas;}
 else{var r=await fetch(QAPI+(live?'/chart-wheel-transit':'/chart-wheel-natal')+'?theme='+TH,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(gK())});if(r.ok){setWheel(await r.text(),live);}}
 var _тк=телоКолеса('tranzity');_тк.koltso=false;_тк.tochka_zhizni=false;таблицыКерикеона(_тк);var n=await fetch(QAPI+'/natal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_gi)});natal=await n.json();if(!natal.detail){buildTbl(natal,_безВремени);if(natal.planets&&natal.planets['Селена'])селенаНаКолесе(natal.planets['Селена'].abs_degree||0,null);if(natal.angles&&natal.angles.ASC)natalASC=natal.angles.ASC.abs_degree;}document.getElementById('st').textContent=_безВремени?('Натал построен · время не указано — космограмма по солнечному часу '+(_к.solnechnyy_chas||'')):'Натал построен'}catch(e){document.getElementById('st').textContent='Ошибка: '+e.message}}
 async function showTransit(){mode='transit';if(!natal){var r=await fetch(QAPI+'/natal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(gI())});natal=await r.json();if(!natal.detail)buildTbl(natal)}document.getElementById('st').textContent='Транзиты...';try{var w=await fetch(QAPI+'/chart-wheel-transit?theme='+TH,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(gK())});if(w.ok)setWheel(await w.text(),true);document.getElementById('kt').innerHTML='';await liveUp();document.getElementById('st').textContent='Натал + Транзиты LIVE'}catch(e){document.getElementById('st').textContent='Ошибка: '+e.message}}
@@ -590,10 +590,12 @@ window.onload=function(){
   /* 06.09, его слово: после перезагрузки данные рождения не остаются — браузер сам восстанавливает поля, чистим */
   try{['nm','dt','tm','cn','cr','cd','pl','tz','la','lo','godSol','pn','pd','pt','pcn','pcr','pcd','ppl','pz','py','px','pasc'].forEach(function(id){var e=document.getElementById(id);if(e&&e.tagName==='INPUT'){e.value='';e.setAttribute('autocomplete','off');}});}catch(e){}
   try{var sv=localStorage.getItem('qa_now');if(sv){var o=JSON.parse(sv);if(o.city)document.getElementById('tcity').value=o.city;if(o.lat)document.getElementById('tlat').value=o.lat;if(o.lon)document.getElementById('tlon').value=o.lon;if(o.gmt)document.getElementById('tgmt').value=o.gmt}}catch(e){}
-  doCalc();
+  /* 06.09, его слово: карты стоят сами по себе; бегущий АС — только по щелчку на часах. При загрузке таймер выключен, хорар строится один раз. */
+  timerOn=false;
   var l=document.getElementById('tlbl'),c=document.getElementById('tclk');
-  l.textContent='\u23f1 LIVE';l.className='ton';c.className='ton';
-  tick();ti=setInterval(tick,1000);li=setInterval(liveUp,60000);if(window._ascRAF)cancelAnimationFrame(window._ascRAF);(function _ascLoop(){if(mode!=='synastry'){var a=calcASClocal();if(a!=null)updateASConly(a)}window._ascRAF=requestAnimationFrame(_ascLoop);})();
+  l.textContent='\u23f1 OFF';l.className='toff';c.className='toff';
+  var n=new Date();document.getElementById('tclk').textContent=n.toLocaleTimeString('ru-RU',{hour12:false});document.getElementById('tdt').textContent=n.toLocaleDateString('ru-RU');
+  doCalc();
 };
 </script>
 <div id="qver" style="position:fixed;right:6px;bottom:6px;z-index:99999;
@@ -754,6 +756,7 @@ async function raskladka(заказ) {
     // ── 1. колесо: внутри натал/космограмма, снаружи кольцо момента ──
     mode = 'zakaz';   // таймер не трогаем: если бегущий АС включён — ляжет поверх новой карты сам
     var кол = await колесоЗаказа(телоКолеса(заказ));
+    if (кол.asc_vnutri != null) natalASC = кол.asc_vnutri;   // все наши слои считаются от разворота ЭТОГО колеса
     setWheel(кол.svg, false);
     if (!кол.vremya_izvestno) спрятатьДомаНаКолесе();
     селенаНаКолесе(кол.selena_natal, кол.selena_koltso, заказ === 'solyar' ? 'соляр' : 'сейчас');
