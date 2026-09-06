@@ -184,6 +184,7 @@ body.таблицы #kt, body.таблицы #nd, body.таблицы #cd, body.
   <label>Ш</label><input id="шир_р" placeholder="54.42985" style="width:64px">
   <label>Д</label><input id="долг_р" placeholder="70.34136" style="width:64px">
   <label>GMT</label><input id="gmt_р" placeholder="+6" style="width:34px">
+  <button class="b" onclick="очиститьЧеловека()" title="Очистить данные рождения и снять карту">✕</button>
   <span id="подсказки_р" style="color:#5a6080;font-size:10px"></span>
 </div>
 <div class="irow" id="окноДень">
@@ -531,7 +532,7 @@ function gP(){var d=(document.getElementById('pd').value||'').split(/[.\-\/]+/),
 function chkP(d){if(d.year==null||d.month==null||d.day==null)return'Впиши дату партнёра в формате ДД.ММ.ГГГГ';if(isNaN(d.latitude)||isNaN(d.longitude))return'У партнёра нет координат — нажми 🔍';return null}
 function togglePartner(){document.getElementById('prow').classList.toggle('show')}
 function toggleTheme(){TH=TH==='dark-high-contrast'?'light':'dark-high-contrast';document.getElementById('bthm').textContent=TH==='dark-high-contrast'?'🌙':'☀';document.body.classList.toggle('lt',TH==='light');if(mode==='synastry')showSynastry();else showNatal()}
-function toggleTimer(){timerOn=!timerOn;var l=document.getElementById('tlbl'),c=document.getElementById('tclk');if(timerOn){l.textContent='⏱ LIVE';l.className='ton';c.className='ton';tick();ti=setInterval(tick,1000);li=setInterval(liveUp,60000);if(window._ascRAF)cancelAnimationFrame(window._ascRAF);(function _ascLoop(){if(mode!=='synastry'&&mode!=='matrix'){var a=calcASClocal();if(a!=null)updateASConly(a)}window._ascRAF=requestAnimationFrame(_ascLoop);})();if(mode==='horar')showHorar();else showTransit()}else{l.textContent='⏱ OFF';l.className='toff';c.className='toff';if(mode==='horar'){if(ti)clearInterval(ti);if(li)clearInterval(li);if(window._ascRAF){cancelAnimationFrame(window._ascRAF);window._ascRAF=null;}document.getElementById('st').textContent='Хорар остановлен';return}if(ti)clearInterval(ti);if(li)clearInterval(li);if(window._ascRAF){cancelAnimationFrame(window._ascRAF);window._ascRAF=null;}document.getElementById('tl').innerHTML='';showNatal(false);}}
+function toggleTimer(){timerOn=!timerOn;var l=document.getElementById('tlbl'),c=document.getElementById('tclk');if(timerOn){l.textContent='⏱ LIVE';l.className='ton';c.className='ton';tick();ti=setInterval(tick,1000);li=setInterval(liveUp,60000);if(window._ascRAF)cancelAnimationFrame(window._ascRAF);(function _ascLoop(){if(mode!=='synastry'&&mode!=='matrix'){var a=calcASClocal();if(a!=null)updateASConly(a)}window._ascRAF=requestAnimationFrame(_ascLoop);})();if(mode==='horar')showHorar();else showTransit()}else{l.textContent='⏱ OFF';l.className='toff';c.className='toff';var _la=document.querySelector('#wh #liveASC');if(_la)_la.remove();/* 06.09: выключили — стрелка бегущего АС (и её красный наконечник) снимается целиком */if(mode==='horar'){if(ti)clearInterval(ti);if(li)clearInterval(li);if(window._ascRAF){cancelAnimationFrame(window._ascRAF);window._ascRAF=null;}document.getElementById('st').textContent='Хорар остановлен';return}if(ti)clearInterval(ti);if(li)clearInterval(li);if(window._ascRAF){cancelAnimationFrame(window._ascRAF);window._ascRAF=null;}document.getElementById('tl').innerHTML='';showNatal(false);}}
 function tick(){var n=new Date();document.getElementById('tclk').textContent=n.toLocaleTimeString('ru-RU',{hour12:false});document.getElementById('tdt').textContent=n.toLocaleDateString('ru-RU');transTable()}
 // ═══ ЖИВЫЕ ДОМА (куспиды от бегущего асцендента, счёт — сервер/Швейцарские эфемериды) ═══
 function findHouse(lon,cusps){if(!cusps||cusps.length<12)return null;lon=((lon%360)+360)%360;
@@ -1900,9 +1901,25 @@ async function таблицыВнизу(ч, шр, др, gmtР){
   }catch(e){ kt.innerHTML += '<div class="err">таблицы Кериkeion: ' + e.message + '</div>'; }
 }
 
+
+// ── 06.09, его слово: крестик у «Человека» — чистит данные рождения и снимает всё, что было посчитано ──
+function очиститьЧеловека(){
+  ["имя","дата_р","поиск_р","шир_р","долг_р","gmt_р"].forEach(id => { const e = $(id); if (e) e.value = ""; });
+  ["страна_р","город_р"].forEach(id => { const e = $(id); if (e) e.selectedIndex = 0; });
+  window.сетка = null; window.natal = null;
+  const св = document.getElementById("wh").querySelector("svg");
+  if (св) ["пятно","медленные","узлы","колесо","космограмма","selenaZakaz","domaKoltsa","liveHouses","liveASC","transitDeg"].forEach(id => { const g = св.querySelector("#" + id); if (g) g.remove(); });
+  ["полочка","очередь","шкала","kt","nd"].forEach(id => { const e = $(id); if (e) e.innerHTML = ""; });
+  const м = document.getElementById("medl"); if (м) м.remove();
+  document.body.classList.remove("таблицы");
+  try { showHorar(); } catch (e) {}
+  $("статус").textContent = "данные сняты · живое колесо";
+}
 // 5. При открытии — живой хорар, как на карте
 window.addEventListener("load", ()=>{
   setTimeout(()=>{
+    /* 06.09: браузер сам восстанавливает поля после F5 — данные рождения при открытии чистим */
+    ["имя","дата_р","поиск_р","шир_р","долг_р","gmt_р"].forEach(id => { const e = $(id); if (e) { e.value = ""; e.setAttribute("autocomplete","off"); } });
     подставитьМестоВКарту();
     try{ if (typeof showHorar === "function") showHorar(); }catch(e){}
     $("статус").textContent = "живое колесо · вбей данные и нажми «Рассчитать день»";
