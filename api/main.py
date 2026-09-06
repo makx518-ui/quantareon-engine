@@ -2521,6 +2521,14 @@ async def chart_wheel_zakaz(req: КолесоЗаказа):
         if req.tochka_zhizni:
             svg = _дорисовать_тж(svg, суб, асцендент=натал.first_house.abs_pos)
 
+        # Дома и углы кольца (транзитного момента / соляра) — страница рисует их своим красным слоем,
+        # как живые дома: Кериkeion кладёт их во внешнее кольцо слишком бледно
+        try:
+            сведения["kuspidy_koltsa"] = [round(getattr(кольцо, h).abs_pos, 4) for h in
+                ('first_house','second_house','third_house','fourth_house','fifth_house','sixth_house',
+                 'seventh_house','eighth_house','ninth_house','tenth_house','eleventh_house','twelfth_house')]
+        except Exception:
+            pass
         # Селена (Белая Луна) — Кериkeion её не рисует, страница дорисует сама: натальная и на момент кольца
         try:
             from engine.natal import _compute_selena as _сел
