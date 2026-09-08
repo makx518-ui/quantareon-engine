@@ -47,7 +47,7 @@ app.add_middleware(
 # ============================================================
 import os, secrets, time
 from fastapi import Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 PASSWORD = os.environ.get("QUANTAREON_PASSWORD", "")   # задаётся в настройках Render
@@ -292,6 +292,70 @@ def api_otdat_kartu(f: str = Query(...), skachat: int = Query(0)):
                         headers={"Content-Disposition":
                                  "attachment; filename*=UTF-8''" + _q(имя_файла)})
     return HTMLResponse(т)
+
+
+# ── 08.09 · ЧИТАТЕЛЬ В ФОНЕ ────────────────────────────────────
+# Cloudflare обрывает запрос на сотой секунде, а чтение идёт минуты.
+# Поэтому: маршрут отдаёт номер задачи сразу, работа идёт в фоне,
+# страница спрашивает готовность по номеру.
+ЗАДАЧИ_ЧИТАТЕЛЯ = {}
+
+
+def _прочитать_в_фоне(номер, тело):
+    from engine import chitatel as _ч
+    з = тело.get("zapros") or {}
+    зд = ЗАДАЧИ_ЧИТАТЕЛЯ[номер]
+    try:
+        зд["etap"] = "машина считает"
+        з2 = dict(з)
+        if тело.get("god_solyara"):
+            з2["god_solyara"] = тело["god_solyara"]
+        посчитано = расчёт(з2)
+        заказ = з.get("zakaz", "natal")
+        без_времени = not (з.get("vremya") or "").strip()
+        вид = "kosmogramma" if (заказ == "natal" and без_времени) else заказ
+        зд["etap"] = "читатель читает полочку"
+        итог = _ч.прочитать(
+            посчитано.get("sloy1", ""), посчитано.get("sloy2"), заказ=вид,
+            имя=з.get("imya") or "человек",
+            данные_рождения={"дата": з.get("data"), "время": з.get("vremya"), "место": з.get("mesto")},
+            полочка=посчитано.get("polochka_ii"))
+        зд["etap"] = "собираю карту"
+        ответ = {"razdely": итог["razdely"], "razbor": итог["razbor"]}
+        if тело.get("sobrat_kartu", True):
+            карта = карта_файлом(з, [(з_, т_) for з_, т_ in итог["razdely"]])
+            ответ.update({"fayl": карта.get("fayl"), "imya_fayla": карта.get("imya_fayla")})
+        зд.update({"gotovo": True, "itog": ответ, "etap": "готово"})
+    except Exception as e:
+        зд.update({"gotovo": True, "oshibka": str(e), "etap": "ошибка"})
+
+
+@app.post("/api/prochitat/zapustit")
+async def api_zapustit_chteniye(тело: dict):
+    """Запускает чтение в фоне. Отдаёт номер задачи сразу."""
+    з = тело.get("zapros") or {}
+    if not з.get("data"):
+        raise HTTPException(status_code=400, detail="нужна дата рождения")
+    import uuid, threading
+    from datetime import datetime as _dt
+    номер = uuid.uuid4().hex[:12]
+    ЗАДАЧИ_ЧИТАТЕЛЯ[номер] = {"gotovo": False, "etap": "поставлено в работу",
+                              "nachato": _dt.utcnow().isoformat()}
+    threading.Thread(target=_прочитать_в_фоне, args=(номер, тело), daemon=True).start()
+    return {"nomer": номер, "etap": "поставлено в работу"}
+
+
+@app.get("/api/prochitat/status")
+def api_status_chteniya(nomer: str = Query(...)):
+    """Готовность задачи по номеру."""
+    зд = ЗАДАЧИ_ЧИТАТЕЛЯ.get(nomer)
+    if зд is None:
+        raise HTTPException(status_code=404, detail="задача не найдена")
+    if not зд.get("gotovo"):
+        return {"gotovo": False, "etap": зд.get("etap", "")}
+    if зд.get("oshibka"):
+        return {"gotovo": True, "oshibka": зд["oshibka"]}
+    return {"gotovo": True, **зд["itog"]}
 
 
 @app.post("/api/prochitat")
