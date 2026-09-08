@@ -47,7 +47,7 @@ app.add_middleware(
 # ============================================================
 import os, secrets, time
 from fastapi import Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 PASSWORD = os.environ.get("QUANTAREON_PASSWORD", "")   # задаётся в настройках Render
@@ -265,13 +265,100 @@ def api_istoriya():
     return история()
 
 
+ВИДЫ_КАРТ = {"natal": "натальная карта", "kosmogramma": "космограмма",
+             "solyar": "карта года", "tranzity": "где ты сейчас",
+             "den": "прогноз на день", "sinastriya": "синастрия"}
+
+
 @app.get("/api/karta")
-def api_otdat_kartu(f: str = Query(...)):
-    """HTML карты клиента по относительному пути."""
+def api_otdat_kartu(f: str = Query(...), skachat: int = Query(0)):
+    """HTML карты клиента по относительному пути.
+    08.09: skachat=1 — отдать файлом; вид тот же, стили лежат внутри файла,
+    поэтому клиент открывает его где угодно и без интернета."""
     т = отдать(f)
     if т is None:
         raise HTTPException(status_code=404, detail="карта не найдена")
+    if skachat:
+        import re as _re
+        from urllib.parse import quote as _q
+        куски = f.split("/")
+        имя_файла = куски[-1]
+        m = _re.match(r"(\d{4})-(\d\d)-(\d\d)_\d\d-\d\d-\d\d_(\w+)\.html", имя_файла)
+        if m:
+            кто = куски[2] if len(куски) > 2 else "карта"
+            вид = ВИДЫ_КАРТ.get(m.group(4), "карта")
+            имя_файла = f"{кто} · {вид} · {m.group(3)}.{m.group(2)}.{m.group(1)}.html"
+        return Response(content=т, media_type="text/html; charset=utf-8",
+                        headers={"Content-Disposition":
+                                 "attachment; filename*=UTF-8''" + _q(имя_файла)})
     return HTMLResponse(т)
+
+
+@app.post("/api/prochitat")
+async def api_prochitat(тело: dict):
+    """08.09 · ЧИТАТЕЛЬ: машина считает, модель оживляет, карта ложится в архив.
+
+    тело: {"zapros": {imya, zakaz, data, vremya, shirota, dolgota, gmt, mesto, seychas:{...}},
+           "god_solyara": 2026, "sobrat_kartu": true}
+    Возвращает разделы, готовый html и путь в архиве.
+    """
+    з = тело.get("zapros") or {}
+    if not з.get("data"):
+        raise HTTPException(status_code=400, detail="нужна дата рождения")
+    from engine import chitatel as _ч
+    try:
+        # 1 · машина считает
+        з2 = dict(з)
+        if тело.get("god_solyara"):
+            з2["god_solyara"] = тело["god_solyara"]
+        посчитано = расчёт(з2)
+        заказ = з.get("zakaz", "natal")
+        без_времени = not (з.get("vremya") or "").strip()
+        вид = "kosmogramma" if (заказ == "natal" and без_времени) else заказ
+        # 2 · читатель оживляет
+        итог = _ч.прочитать(
+            посчитано.get("sloy1", ""), посчитано.get("sloy2"), заказ=вид,
+            имя=з.get("imya") or "человек",
+            данные_рождения={"дата": з.get("data"), "время": з.get("vremya"), "место": з.get("mesto")},
+            полочка=посчитано.get("polochka_ii"))
+        ответ = {"razdely": итог["razdely"], "razbor": итог["razbor"]}
+        # 3 · собрать карту и положить в архив
+        if тело.get("sobrat_kartu", True):
+            карта = карта_файлом(з, [(з_, т_) for з_, т_ in итог["razdely"]])
+            ответ.update({"fayl": карта.get("fayl"), "imya_fayla": карта.get("imya_fayla")})
+        return ответ
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"читатель: {e}")
+
+
+@app.post("/api/karta/sohranit")
+async def api_sohranit_kartu(тело: dict):
+    """08.09: правка карты прямо в браузере.
+    Прежняя версия кладётся рядом с меткой времени — вернуть можно всегда."""
+    путь = (тело.get("f") or "").strip()
+    html = тело.get("html") or ""
+    if not путь or "<html" not in html:
+        raise HTTPException(status_code=400, detail="нужен путь и html")
+    from engine import arhiv as _arhiv
+    старое = отдать(путь)
+    if старое is None:
+        raise HTTPException(status_code=404, detail="карта не найдена")
+    # панель правки в файл не сохраняется ни при каких условиях —
+    # клиент не должен получить возможность править свой гороскоп
+    import re as _re
+    html = _re.sub(r'<div class="pravka">.*?</div>\s*<script>.*?</script>', "", html, flags=_re.S)
+    html = _re.sub(r'<div class="pravka">.*?</div>', "", html, flags=_re.S)
+    html = html.replace(' contenteditable="true"', "").replace(' contenteditable="false"', "")
+    html = html.replace(' class="pravim"', "").replace('<body class="pravim">', "<body>")
+    from datetime import datetime as _dt
+    метка = _dt.utcnow().strftime("%Y%m%d-%H%M%S")
+    было = путь.replace(".html", f"__было-{метка}.html")
+    try:
+        _arhiv._положить(было, старое, "text/html; charset=utf-8")
+        _arhiv._положить(путь, html, "text/html; charset=utf-8")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"ok": True, "fayl": путь, "prezhnyaya": было}
 
 
 @app.get("/api/kuhnya")
@@ -285,10 +372,13 @@ def api_otdat_kuhnyu(f: str = Query(...)):
 
 @app.get("/istoriya/karta", response_class=HTMLResponse)
 def prosmotr_karty(f: str = Query(...)):
-    """Карта отдельной страницей."""
+    """Карта отдельной страницей — с панелью правки (её нет в файле клиента)."""
     т = отдать(f)
     if т is None:
         raise HTTPException(status_code=404, detail="карта не найдена")
+    if 'class="pravka"' not in т:
+        from engine.karta_html import ПАНЕЛЬ_ПРАВКИ
+        т = т.replace("</body>", ПАНЕЛЬ_ПРАВКИ + "\n</body>")
     return HTMLResponse(т)
 
 

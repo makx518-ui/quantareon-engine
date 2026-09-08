@@ -158,14 +158,20 @@ async function скачать(вид,файл,имя){
   // ⚠️ 05.09: ссылку надо ВСТАВИТЬ в страницу, иначе часть браузеров
   // не срабатывает на click(). И имя без пробелов — надёжнее.
   try{
-    const о = await fetch(`/api/${вид}?f=`+encodeURIComponent(файл));
+    // 08.09: карту берём с флагом skachat=1 — сервер сам даёт человеческое имя файла
+    const о = await fetch(`/api/${вид}?f=`+encodeURIComponent(файл)+(вид==="karta"?"&skachat=1":""));
     if(!о.ok){ всплыть("не удалось скачать: "+о.status); return; }
     const б = await о.blob();
     const урл = URL.createObjectURL(б);
     const с = document.createElement("a");
     с.href = урл;
-    с.download = (имя||"карта").replace(/[^\wа-яА-ЯёЁ-]+/g,"_") + "_" +
-                 (вид==="karta"?"karta.html":"mehanika.json");
+    // имя из заголовка сервера, если он его прислал; иначе — по-старому
+    let имяФайла = "";
+    const cd = о.headers.get("content-disposition") || "";
+    const м = cd.match(/filename\*=UTF-8''([^;]+)/);
+    if (м) { try { имяФайла = decodeURIComponent(м[1]); } catch(e) {} }
+    с.download = имяФайла || ((имя||"карта").replace(/[^\wа-яА-ЯёЁ-]+/g,"_") + "_" +
+                 (вид==="karta"?"karta.html":"mehanika.json"));
     с.style.display = "none";
     document.body.appendChild(с);
     с.click();
