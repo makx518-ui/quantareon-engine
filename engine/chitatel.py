@@ -35,7 +35,9 @@ import urllib.error
 ЭТАЛОНЫ = {"natal": "ETALON_NATAL_Vlad.md", "kosmogramma": "ETALON_NATAL_Vlad.md",
            "solyar": "ETALON_SOLYAR_Vlad_2026.md", "tranzity": "ETALON_SOLYAR_Vlad_2026.md"}
 
-МОДЕЛЬ = os.environ.get("READER_MODEL", "anthropic/claude-opus-4.8")
+# 08.09 · опыт: сравниваем Sonnet 4.6 с Opus 4.8 на одном промпте.
+# Строка меняется здесь или переменной READER_MODEL на Render, без правки кода.
+МОДЕЛЬ = os.environ.get("READER_MODEL", "anthropic/claude-sonnet-4.6")
 API = "https://openrouter.ai/api/v1/chat/completions"
 
 # Пределы ответа — по образцу его Dream Oracle (ASTRO_TOKENS), где они выверены
