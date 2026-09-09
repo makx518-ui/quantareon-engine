@@ -323,7 +323,9 @@ def _прочитать_в_фоне(номер, тело):
             данные_рождения={"дата": з.get("data"), "время": з.get("vremya"), "место": з.get("mesto")},
             полочка=посчитано.get("polochka_ii"),
             точки=посчитано.get("tochki"), куспиды=посчитано.get("kuspidy"),
-            углы=посчитано.get("ugly"))
+            углы=посчитано.get("ugly"), рождение=посчитано.get("rozhdenie"),
+            местное=посчитано.get("mestnoe"), место=з.get("mesto") or "",
+            пояс=з.get("gmt"))
         зд["etap"] = "собираю карту"
         ответ = {"razdely": итог["razdely"], "razbor": итог["razbor"]}
         if тело.get("sobrat_kartu", True):
@@ -392,7 +394,9 @@ async def api_prochitat(тело: dict):
             данные_рождения={"дата": з.get("data"), "время": з.get("vremya"), "место": з.get("mesto")},
             полочка=посчитано.get("polochka_ii"),
             точки=посчитано.get("tochki"), куспиды=посчитано.get("kuspidy"),
-            углы=посчитано.get("ugly"))
+            углы=посчитано.get("ugly"), рождение=посчитано.get("rozhdenie"),
+            местное=посчитано.get("mestnoe"), место=з.get("mesto") or "",
+            пояс=з.get("gmt"))
         ответ = {"razdely": итог["razdely"], "razbor": итог["razbor"]}
         # 3 · собрать карту и положить в архив
         if тело.get("sobrat_kartu", True):
