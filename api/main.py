@@ -315,11 +315,15 @@ def _прочитать_в_фоне(номер, тело):
         без_времени = not (з.get("vremya") or "").strip()
         вид = "kosmogramma" if (заказ == "natal" and без_времени) else заказ
         зд["etap"] = "читатель читает полочку"
+        # 09.09 · читателю нужны точки и куспиды: полочку собирает engine/most.py
+        # их же сценарием (engine/af/af_natal_scenario.py)
         итог = _ч.прочитать(
             посчитано.get("sloy1", ""), посчитано.get("sloy2"), заказ=вид,
             имя=з.get("imya") or "человек",
             данные_рождения={"дата": з.get("data"), "время": з.get("vremya"), "место": з.get("mesto")},
-            полочка=посчитано.get("polochka_ii"))
+            полочка=посчитано.get("polochka_ii"),
+            точки=посчитано.get("tochki"), куспиды=посчитано.get("kuspidy"),
+            углы=посчитано.get("ugly"))
         зд["etap"] = "собираю карту"
         ответ = {"razdely": итог["razdely"], "razbor": итог["razbor"]}
         if тело.get("sobrat_kartu", True):
@@ -380,11 +384,15 @@ async def api_prochitat(тело: dict):
         без_времени = not (з.get("vremya") or "").strip()
         вид = "kosmogramma" if (заказ == "natal" and без_времени) else заказ
         # 2 · читатель оживляет
+        # 09.09 · читателю нужны точки и куспиды: полочку собирает engine/most.py
+        # их же сценарием (engine/af/af_natal_scenario.py)
         итог = _ч.прочитать(
             посчитано.get("sloy1", ""), посчитано.get("sloy2"), заказ=вид,
             имя=з.get("imya") or "человек",
             данные_рождения={"дата": з.get("data"), "время": з.get("vremya"), "место": з.get("mesto")},
-            полочка=посчитано.get("polochka_ii"))
+            полочка=посчитано.get("polochka_ii"),
+            точки=посчитано.get("tochki"), куспиды=посчитано.get("kuspidy"),
+            углы=посчитано.get("ugly"))
         ответ = {"razdely": итог["razdely"], "razbor": итог["razbor"]}
         # 3 · собрать карту и положить в архив
         if тело.get("sobrat_kartu", True):
