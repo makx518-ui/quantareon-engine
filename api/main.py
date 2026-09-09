@@ -319,7 +319,7 @@ def _прочитать_в_фоне(номер, тело):
             посчитано.get("sloy1", ""), посчитано.get("sloy2"), заказ=вид,
             имя=з.get("imya") or "человек",
             данные_рождения={"дата": з.get("data"), "время": з.get("vremya"), "место": з.get("mesto")},
-            полочка=посчитано.get("polochka_ii"))
+            полочка=посчитано.get("polochka_ii"), выжимка=посчитано.get("vyzhimka"))
         зд["etap"] = "собираю карту"
         ответ = {"razdely": итог["razdely"], "razbor": итог["razbor"]}
         if тело.get("sobrat_kartu", True):
@@ -384,7 +384,7 @@ async def api_prochitat(тело: dict):
             посчитано.get("sloy1", ""), посчитано.get("sloy2"), заказ=вид,
             имя=з.get("imya") or "человек",
             данные_рождения={"дата": з.get("data"), "время": з.get("vremya"), "место": з.get("mesto")},
-            полочка=посчитано.get("polochka_ii"))
+            полочка=посчитано.get("polochka_ii"), выжимка=посчитано.get("vyzhimka"))
         ответ = {"razdely": итог["razdely"], "razbor": итог["razbor"]}
         # 3 · собрать карту и положить в архив
         if тело.get("sobrat_kartu", True):
