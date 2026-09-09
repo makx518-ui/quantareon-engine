@@ -90,7 +90,6 @@ def расчёт(запрос):
         "zakaz": запрос.get("zakaz"),
         "vremya_izvestno": итог["время_известно"],
         "polochka_ii": итог.get("полочка_ии", ""),
-        "vyzhimka": итог.get("vyzhimka", ""),
         "sloy1": итог.get("слой1", ""),
         "sloy2": итог.get("слой2", ""),
         "sloy3": итог.get("слой3", ""),
