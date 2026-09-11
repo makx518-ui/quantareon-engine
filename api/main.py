@@ -329,7 +329,11 @@ def _прочитать_в_фоне(номер, тело):
         зд["etap"] = "собираю карту"
         ответ = {"razdely": итог["razdely"], "razbor": итог["razbor"]}
         if тело.get("sobrat_kartu", True):
-            карта = карта_файлом(з, [(з_, т_) for з_, т_ in итог["razdely"]])
+            # 11.09: момент расчёта — чтобы кухня и карта легли одной записью
+            з_м = dict(з)
+            if (посчитано or {}).get("moment"):
+                з_м["moment"] = посчитано["moment"]
+            карта = карта_файлом(з_м, [(з_, т_) for з_, т_ in итог["razdely"]])
             ответ.update({"fayl": карта.get("fayl"), "imya_fayla": карта.get("imya_fayla")})
         зд.update({"gotovo": True, "itog": ответ, "etap": "готово"})
     except Exception as e:
@@ -400,7 +404,11 @@ async def api_prochitat(тело: dict):
         ответ = {"razdely": итог["razdely"], "razbor": итог["razbor"]}
         # 3 · собрать карту и положить в архив
         if тело.get("sobrat_kartu", True):
-            карта = карта_файлом(з, [(з_, т_) for з_, т_ in итог["razdely"]])
+            # 11.09: момент расчёта — чтобы кухня и карта легли одной записью
+            з_м = dict(з)
+            if (посчитано or {}).get("moment"):
+                з_м["moment"] = посчитано["moment"]
+            карта = карта_файлом(з_м, [(з_, т_) for з_, т_ in итог["razdely"]])
             ответ.update({"fayl": карта.get("fayl"), "imya_fayla": карта.get("imya_fayla")})
         return ответ
     except Exception as e:
