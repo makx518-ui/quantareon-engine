@@ -47,7 +47,7 @@ app.add_middleware(
 # ============================================================
 import os, secrets, time
 from fastapi import Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 PASSWORD = os.environ.get("QUANTAREON_PASSWORD", "")   # задаётся в настройках Render
@@ -123,11 +123,17 @@ _СЧЁТЧИК_БЕЗ_ПАРОЛЯ = ("/api/hit", "/stats", "/api/stats")
 #                   только «задано или нет».
 _ПОЧТА_БЕЗ_ПАРОЛЯ = ("/api/send-key", "/api/mail-health")
 
+# 🔭 Рендер дня — открытый адрес для главной страницы сайта.
+# ПОЧЕМУ ЭТО БЕЗОПАСНО: адрес принимает только момент и координаты и отдаёт
+# готовый текст суток. Ни дат рождения, ни чужих карт через него не посчитать,
+# сырых раскладов он наружу не отдаёт.
+_РЕНДЕР_БЕЗ_ПАРОЛЯ = ("/api/render-dnya",)
+
 
 @app.middleware("http")
 async def gate(request: Request, call_next):
     p = request.url.path
-    if p.startswith(_СЧЁТЧИК_БЕЗ_ПАРОЛЯ) or p.startswith(_ПОЧТА_БЕЗ_ПАРОЛЯ):
+    if p.startswith(_СЧЁТЧИК_БЕЗ_ПАРОЛЯ) or p.startswith(_ПОЧТА_БЕЗ_ПАРОЛЯ) or p.startswith(_РЕНДЕР_БЕЗ_ПАРОЛЯ):
         return await call_next(request)
     if p.startswith("/login") or p.startswith("/health") or p.startswith("/chat") or p.startswith("/transcribe") or p.startswith("/tts") or p.startswith("/quantareon-chat.js") or p.startswith("/ws/voice") or p.startswith("/api/greeting") or p.startswith("/api/voice-health") or p.startswith("/api/voice-model") or p.startswith("/api/voice-image-mode"):
         return await call_next(request)
@@ -3316,7 +3322,90 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 
+# ============================================================
+# 🔭 РЕНДЕР ДНЯ — текст суток по секунде захода на сайт
+# Открыт без пароля: см. _РЕНДЕР_БЕЗ_ПАРОЛЯ выше.
+# ============================================================
+@app.post("/api/render-dnya")
+async def render_dnya_api(request: Request):
+    """Принимает момент и место, отдаёт готовый текст рендера дня.
+
+    Вход:  {"lat": 56.85, "lon": 53.23, "tz": 4, "iso": "2026-09-12T02:41:38Z"}
+           iso необязателен — без него берётся текущая секунда.
+    Выход: {"ok": true, "text": "...", "hours": "...", "at": "..."}
+    """
+    from datetime import datetime, timezone
+    import swisseph as swe
+    from engine import kosmogramma as K
+    from engine import yadro_dnya as Я
+    from engine import render_dnya as Р
+    from engine.natal import calculate_natal
+
+    try:
+        з = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "reason": "bad_request"}, status_code=400)
+
+    try:
+        ш = round(float(з.get("lat")), 2)
+        д = round(float(з.get("lon")), 2)
+    except (TypeError, ValueError):
+        return JSONResponse({"ok": False, "reason": "bad_coords"}, status_code=400)
+    if abs(ш) > 90 or abs(д) > 180:
+        return JSONResponse({"ok": False, "reason": "bad_coords"}, status_code=400)
+
+    пояс = з.get("tz")
+    try:
+        пояс = int(пояс) if пояс is not None else 0
+    except (TypeError, ValueError):
+        пояс = 0
+    if abs(пояс) > 14:
+        пояс = 0
+
+    iso = з.get("iso")
+    if iso:
+        try:
+            момент = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(timezone.utc)
+        except Exception:
+            return JSONResponse({"ok": False, "reason": "bad_time"}, status_code=400)
+    else:
+        момент = datetime.now(timezone.utc)
+
+    # ⚠️ другие модули движка переставляют путь к эфемеридам на свой, и тогда
+    # Хирон молча выпадает из расчёта. Ставим свой путь перед каждым разбором.
+    _эфе = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "data", "ephe")
+    if os.path.isdir(_эфе):
+        swe.set_ephe_path(_эфе)
+
+    try:
+        н = calculate_natal(year=момент.year, month=момент.month, day=момент.day,
+                            hour=момент.hour, minute=момент.minute, second=момент.second,
+                            timezone=0, latitude=ш, longitude=д)
+        точки = {и: K.точка(и, п["abs_degree"], п.get("retrograde", False))
+                 for и, п in н["planets"].items()}
+        jd = swe.julday(момент.year, момент.month, момент.day,
+                        момент.hour + момент.minute / 60 + момент.second / 3600)
+        система = b'P' if abs(ш) <= 66.5 else b'R'
+        ку, _ = swe.houses(jd, ш, д, система)
+        куспиды = list(ку)
+        аспекты = K.аспекты_космограммы(точки)
+
+        ядро = Я.собрать_ядро(точки, куспиды, аспекты)
+        текст = Р.собрать(ядро, точки, куспиды)
+        часы = Р.часы_текстом(Р.часы_дня(ядро, точки, куспиды, момент, ш, д, пояс))
+    except Exception as e:
+        return JSONResponse({"ok": False, "reason": "engine",
+                             "detail": str(e)[:200]}, status_code=500)
+
+    return JSONResponse({
+        "ok": True,
+        "text": текст,
+        "hours": часы,
+        "at": (момент.isoformat().replace("+00:00", "Z")),
+        "lat": ш, "lon": д,
+    })
+
+
 # статика — в самом конце, чтоб не перебивала эндпоинты
 app.mount("/", StaticFiles(directory=str(FRONT), html=True), name="front")
-
-
