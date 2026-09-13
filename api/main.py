@@ -3401,6 +3401,7 @@ async def render_dnya_api(request: Request):
         # теми же файлами, что стоят в приложении Luck Forecast.
         from engine import stroki_dnya as СД
         строки = СД.четыре_строки(куспиды)
+        строки.update(СД.светила(jd, куспиды))
     except Exception as e:
         return JSONResponse({"ok": False, "reason": "engine",
                              "detail": str(e)[:200]}, status_code=500)
@@ -3415,6 +3416,8 @@ async def render_dnya_api(request: Request):
         "soyuzy": строки["soyuzy"],
         "cel": строки["cel"],
         "opora": строки["opora"],
+        "solnce": строки.get("solnce", ""),
+        "luna_svetilo": строки.get("luna", ""),
         # остальное страница считает сама теми же файлами, что в приложении:
         # лунный день, знак И-Цзин и часы мухурты
         "at": (момент.isoformat().replace("+00:00", "Z")),
