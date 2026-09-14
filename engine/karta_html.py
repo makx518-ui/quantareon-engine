@@ -14,7 +14,7 @@ from datetime import datetime, timezone, timedelta
 
 ЗНАЧОК_ЗАКАЗА = {
     "natal": "✦", "kosmogramma": "✦", "tranzity": "🧭",
-    "solyar": "☀️", "den": "🌙", "sinastriya": "💞",
+    "solyar": "☀️", "den": "🌙", "sinastriya": "💞", "karta_dnya": "🕐",
 }
 
 ЗАГОЛОВКИ = {
@@ -24,6 +24,8 @@ from datetime import datetime, timezone, timedelta
     "solyar": ("КАРТА ГОДА", "прогноз от дня рождения до дня рождения"),
     "den": ("ПРОГНОЗ НА ДЕНЬ", "как разворачиваются эти сутки"),
     "sinastriya": ("СИНАСТРИЯ", "две карты одна на другую"),
+    # 14.09 · карта дня — полный натал на секунду входа, читается как сутки
+    "karta_dnya": ("КАРТА ДНЯ", "что развернулось для тебя в секунду входа"),
 }
 
 СТИЛЬ = """

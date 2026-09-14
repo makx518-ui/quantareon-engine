@@ -59,6 +59,25 @@ import urllib.error
 МОДЕЛЬ = os.environ.get("READER_MODEL", "anthropic/claude-sonnet-4.6")
 API = "https://openrouter.ai/api/v1/chat/completions"
 
+# ── 14.09 · КТО ЧИТАЕТ. Правда лежит здесь, в файле.
+# Его решение 14.09: Gemini НАПРЯМУЮ ключом Google (GEMINI_API_KEY на Render),
+# без OpenRouter. Первой пробуем Flash-Lite 3.5 — 0.30/2.50 за миллион,
+# один вызов с полной полочкой ≈ 3 цента против 29 на Sonnet.
+# Вернуться к Sonnet без правки кода: CHITATEL=openrouter в окружении Render.
+ЧИТАТЕЛЬ = os.environ.get("CHITATEL", "gemini").strip().lower()   # gemini | openrouter
+# Его решение 14.09 после трёх карт Лёхи рядом: ДВЕ модели.
+#   ПЛАТНАЯ — полная развёртка (натал, соляр, транзиты, синастрия): 3.6 Flash,
+#             уровень Sonnet, ~15 центов за натал.
+#   БЕСПЛАТНАЯ — карта дня при входе на сайт: Flash-Lite, ~1 цент, одна страница.
+# Цены — $ за миллион токенов; мысли модели считаются как выход.
+# ⚠️ Google удваивает цену 3.6 Flash с 01.01.2027 — тогда поправить числа здесь.
+GEMINI_МОДЕЛИ = {
+    "платная":    {"модель": "gemini-3.6-flash",      "вход": 0.75, "выход": 3.75, "размышление": "medium"},
+    "бесплатная": {"модель": "gemini-3.5-flash-lite", "вход": 0.30, "выход": 2.50, "размышление": "medium"},
+}
+GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models/{модель}:generateContent"
+_ПОТРАЧЕНО = {"$": 0.0, "вызовов": 0}         # сумма с запуска сервера — для лога
+
 # Пределы ответа — по образцу его Dream Oracle (ASTRO_TOKENS), где они выверены
 # на живых заказах. Раньше стояло 16000 на всё подряд — модель упиралась в потолок
 # и сжимала текст; отсюда прогон бледнее эталона.
@@ -78,8 +97,61 @@ def _файл(имя):
     return п.read_text(encoding="utf-8") if п.exists() else ""
 
 
-def _спросить(система, сообщения, максимум=25000, температура=ТЕМПЕРАТУРА):
-    """Один вызов модели через OpenRouter. Ключ — из окружения, не из кода."""
+def _спросить_gemini(система, сообщения, максимум, бесплатно=False):
+    """Один вызов Gemini напрямую. Ключ — из окружения, не из кода.
+    В лог: модель, вход, выход, мысли, секунды, цена, сумма с запуска."""
+    import time as _t
+    м = GEMINI_МОДЕЛИ["бесплатная" if бесплатно else "платная"]
+    GEMINI_МОДЕЛЬ, GEMINI_РАЗМЫШЛЕНИЕ = м["модель"], м["размышление"]
+    GEMINI_ЦЕНА_ВХОД, GEMINI_ЦЕНА_ВЫХОД = м["вход"], м["выход"]
+    ключ = os.environ.get("GEMINI_API_KEY", "")
+    if not ключ:
+        raise RuntimeError("нет GEMINI_API_KEY в окружении — пропиши на Render")
+    # у Gemini роль ответчика зовётся "model", а не "assistant"
+    contents = [{"role": ("model" if m["role"] == "assistant" else "user"),
+                 "parts": [{"text": m["content"]}]} for m in сообщения]
+    # temperature у Gemini 3.x объявлена устаревшей — не шлём, чтобы не ловить 400
+    тело = json.dumps({
+        "systemInstruction": {"parts": [{"text": система}]},
+        "contents": contents,
+        "generationConfig": {"maxOutputTokens": максимум,
+                             "thinkingConfig": {"thinkingLevel": GEMINI_РАЗМЫШЛЕНИЕ}},
+    }, ensure_ascii=False).encode("utf-8")
+    запрос = urllib.request.Request(
+        GEMINI_API.format(модель=GEMINI_МОДЕЛЬ), data=тело,
+        headers={"Content-Type": "application/json", "x-goog-api-key": ключ})
+    начало = _t.time()
+    try:
+        with urllib.request.urlopen(запрос, timeout=900) as о:
+            ответ = json.loads(о.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        подробно = e.read().decode("utf-8", "ignore")[:400]
+        raise RuntimeError(f"Gemini {e.code}: {подробно}")
+    сек = _t.time() - начало
+    кандидат = (ответ.get("candidates") or [{}])[0]
+    части = ((кандидат.get("content") or {}).get("parts") or [])
+    # мысли модели приходят частями с пометкой thought — клиенту их не показываем
+    текст = "".join(ч.get("text", "") for ч in части if not ч.get("thought")).strip()
+    у = ответ.get("usageMetadata") or {}
+    вход = у.get("promptTokenCount", 0)
+    выход = у.get("candidatesTokenCount", 0)
+    мысли = у.get("thoughtsTokenCount", 0)
+    цена = вход * GEMINI_ЦЕНА_ВХОД / 1e6 + (выход + мысли) * GEMINI_ЦЕНА_ВЫХОД / 1e6
+    _ПОТРАЧЕНО["$"] += цена
+    _ПОТРАЧЕНО["вызовов"] += 1
+    print(f"GEMINI {GEMINI_МОДЕЛЬ} · вход {вход} · выход {выход} · мысли {мысли} · "
+          f"{сек:.0f} с · ${цена:.4f} · с запуска ${_ПОТРАЧЕНО['$']:.4f} "
+          f"за {_ПОТРАЧЕНО['вызовов']} выз. · {кандидат.get('finishReason', '')}")
+    if not текст:
+        raise RuntimeError(f"Gemini вернул пусто: {str(ответ)[:300]}")
+    return текст
+
+
+def _спросить(система, сообщения, максимум=25000, температура=ТЕМПЕРАТУРА, бесплатно=False):
+    """Один вызов модели. 14.09: развилка — Gemini напрямую или OpenRouter.
+    бесплатно=True — карта дня, модель Lite; иначе платная модель."""
+    if ЧИТАТЕЛЬ == "gemini":
+        return _спросить_gemini(система, сообщения, максимум, бесплатно=бесплатно)
     ключ = os.environ.get("OPENROUTER_API_KEY", "")
     if not ключ:
         raise RuntimeError("нет OPENROUTER_API_KEY в окружении — пропиши на Render")
@@ -333,6 +405,8 @@ def прочитать(слой1, слой2=None, заказ="natal", имя="ч
                     "Северный узел называй полным именем: «кармическая цель — Северный "
                     "узел» или просто «Северный узел». Не пиши «планета стоит на цели» — "
                     "человек прочтёт это как MC и решит, что речь о карьере.\n"
+                    "ОРБЫ НЕ ПИШИ НИКОГДА — ни «орб 1.9°», ни «трин 1.91°»: орб — кухня. "
+                    "Аспект называй словом и планетами, без чисел расстояния.\n"
                     "СЛОВА ПРО РАССТОЯНИЕ: «вплотную», «впритык», «рядом» — только при "
                     "СОЕДИНЕНИИ. При ОППОЗИЦИИ говори «напротив, через всю карту»; "
                     "при квадрате — «под прямым углом»; при трине и секстиле — «в ладу», "
