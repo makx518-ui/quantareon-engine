@@ -127,7 +127,10 @@ _ПОЧТА_БЕЗ_ПАРОЛЯ = ("/api/send-key", "/api/mail-health")
 # ПОЧЕМУ ЭТО БЕЗОПАСНО: адрес принимает только момент и координаты и отдаёт
 # готовый текст суток. Ни дат рождения, ни чужих карт через него не посчитать,
 # сырых раскладов он наружу не отдаёт.
-_РЕНДЕР_БЕЗ_ПАРОЛЯ = ("/api/render-dnya",)
+_РЕНДЕР_БЕЗ_ПАРОЛЯ = ("/api/render-dnya",
+                      # 14.09 · карта дня: те же входные данные (момент, координаты),
+                      # наружу — только готовый файл по номеру задачи
+                      "/api/karta-dnya/zapustit", "/api/karta-dnya/status", "/api/karta-dnya/fayl")
 
 
 @app.middleware("http")
@@ -273,7 +276,8 @@ def api_istoriya():
 
 ВИДЫ_КАРТ = {"natal": "натальная карта", "kosmogramma": "космограмма",
              "solyar": "карта года", "tranzity": "где ты сейчас",
-             "den": "прогноз на день", "sinastriya": "синастрия"}
+             "den": "прогноз на день", "sinastriya": "синастрия",
+             "karta_dnya": "карта дня"}
 
 
 @app.get("/api/karta")
@@ -3326,6 +3330,110 @@ if __name__ == "__main__":
 # 🔭 РЕНДЕР ДНЯ — текст суток по секунде захода на сайт
 # Открыт без пароля: см. _РЕНДЕР_БЕЗ_ПАРОЛЯ выше.
 # ============================================================
+# ============================================================
+# 🌅 КАРТА ДНЯ (14.09.2026) — его находка: полный натал на секунду входа,
+# читается как сутки. Бесплатно, модель Lite, один раз в сутки (сверка по
+# браузеру — на странице). Отдаётся готовым файлом.
+# Даёт: POST /api/karta-dnya/zapustit → {"nomer"}; GET /api/karta-dnya/status?nomer=
+#       GET /api/karta-dnya/fayl?nomer= — сам файл на скачивание.
+# ПОЧЕМУ БЕЗ ПАРОЛЯ: принимает только координаты и момент, причём момент
+# зажат к «сейчас» (±10 минут) — чужой натал по дате рождения через него не
+# посчитать; файл отдаётся только по номеру своей задачи, история наружу не видна.
+# ============================================================
+ЗАДАЧИ_КАРТЫ_ДНЯ = {}
+
+
+def _карта_дня_в_фоне(номер, з):
+    from engine import karta_dnya as КД
+    зд = ЗАДАЧИ_КАРТЫ_ДНЯ[номер]
+    try:
+        итог = КД.собрать_карту(з["момент"], з["ш"], з["д"], з["пояс"], место=з["место"],
+                                мухурта=з["мухурта"], ичзин=з["ичзин"],
+                                этап=lambda т: зд.__setitem__("etap", т))
+        зд.update({"gotovo": True, "html": итог["html_stranicy"], "fayl": итог["fayl"],
+                   "razdely": итог["razdely"],
+                   "imya_fayla": итог["imya_fayla"], "etap": "готово"})
+    except Exception as e:
+        зд.update({"gotovo": True, "oshibka": str(e)[:300], "etap": "ошибка"})
+
+
+@app.post("/api/karta-dnya/zapustit")
+async def karta_dnya_zapustit(request: Request):
+    """Вход: {"lat", "lon", "tz", "iso", "mesto", "muhurta", "iching"} — как у рендера дня,
+    плюс два текста от страницы. Отдаёт номер задачи сразу; чтение идёт в фоне,
+    потому что Cloudflare обрывает запрос на сотой секунде."""
+    from datetime import datetime, timezone
+    import uuid, threading
+    try:
+        з = await request.json()
+        ш = round(float(з.get("lat")), 2)
+        д = round(float(з.get("lon")), 2)
+    except Exception:
+        return JSONResponse({"ok": False, "reason": "bad_request"}, status_code=400)
+    if abs(ш) > 90 or abs(д) > 180:
+        return JSONResponse({"ok": False, "reason": "bad_coords"}, status_code=400)
+    try:
+        пояс = int(з.get("tz") or 0)
+    except (TypeError, ValueError):
+        пояс = 0
+    if abs(пояс) > 14:
+        пояс = 0
+    iso = з.get("iso")
+    try:
+        момент = (datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(timezone.utc)
+                  if iso else datetime.now(timezone.utc))
+    except Exception:
+        return JSONResponse({"ok": False, "reason": "bad_time"}, status_code=400)
+    # ⚠️ страж границ: адрес открытый. Момент — только «сейчас» (±10 минут на часы
+    # браузера), иначе через него можно бесплатно читать чужие наталы по любой дате.
+    сейчас = datetime.now(timezone.utc)
+    if abs((момент - сейчас).total_seconds()) > 600:
+        момент = сейчас
+    # чистка: готовые задачи старше 10 минут выбрасываем, иначе память растёт вечно
+    for к in [к for к, т in ЗАДАЧИ_КАРТЫ_ДНЯ.items()
+              if т.get("gotovo") and сейчас.timestamp() - т.get("когда", 0) > 600]:
+        ЗАДАЧИ_КАРТЫ_ДНЯ.pop(к, None)
+    # тексты от страницы — обрезаем, чтобы через открытый адрес не залили роман
+    данные = {"момент": момент, "ш": ш, "д": д, "пояс": пояс,
+              "место": str(з.get("mesto") or "")[:80],
+              "мухурта": str(з.get("muhurta") or "")[:600],
+              "ичзин": str(з.get("iching") or "")[:1500]}
+    # не больше трёх карт дня одновременно — открытый адрес, деньги на каждую
+    if sum(1 for т in ЗАДАЧИ_КАРТЫ_ДНЯ.values() if not т.get("gotovo")) >= 3:
+        return JSONResponse({"ok": False, "reason": "busy"}, status_code=429)
+    номер = uuid.uuid4().hex[:12]
+    ЗАДАЧИ_КАРТЫ_ДНЯ[номер] = {"gotovo": False, "etap": "поставлено в работу",
+                              "когда": сейчас.timestamp()}
+    threading.Thread(target=_карта_дня_в_фоне, args=(номер, данные), daemon=True).start()
+    return {"ok": True, "nomer": номер}
+
+
+@app.get("/api/karta-dnya/status")
+def karta_dnya_status(nomer: str = Query(...)):
+    зд = ЗАДАЧИ_КАРТЫ_ДНЯ.get(nomer)
+    if зд is None:
+        raise HTTPException(status_code=404, detail="задача не найдена")
+    if not зд.get("gotovo"):
+        return {"gotovo": False, "etap": зд.get("etap", "")}
+    if зд.get("oshibka"):
+        return {"gotovo": True, "oshibka": зд["oshibka"]}
+    # его решение 14.09 (вечер): карта целиком, в своём оформлении, встаёт под
+    # колесом на главной. Отдаём готовый HTML; копия лежит в архиве.
+    return {"gotovo": True, "imya_fayla": зд.get("imya_fayla"), "html": зд.get("html", "")}
+
+
+@app.get("/api/karta-dnya/fayl")
+def karta_dnya_fayl(nomer: str = Query(...)):
+    """Файл по номеру своей задачи — скачиванием, стили внутри."""
+    from urllib.parse import quote as _q
+    зд = ЗАДАЧИ_КАРТЫ_ДНЯ.get(nomer)
+    if not зд or not зд.get("gotovo") or not зд.get("html"):
+        raise HTTPException(status_code=404, detail="карта не готова")
+    return Response(content=зд["html"], media_type="text/html; charset=utf-8",
+                    headers={"Content-Disposition":
+                             "attachment; filename*=UTF-8''" + _q(зд["imya_fayla"])})
+
+
 @app.post("/api/render-dnya")
 async def render_dnya_api(request: Request):
     """Принимает момент и место, отдаёт готовый текст рендера дня.
