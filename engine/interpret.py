@@ -18,7 +18,24 @@ from typing import Optional
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# Модели
+# ═══════════════════════════════════════════════════════════════════
+#  GEMINI — главный движок чтения с 11.09.2026
+# ═══════════════════════════════════════════════════════════════════
+#  Причина: полочка выросла до ~70 тысяч токенов, и каждый прогон на
+#  Sonnet стоил ~28 центов. Gemini Flash берёт 10 центов за миллион
+#  входа вместо трёх долларов — тот же прогон меньше цента.
+#  Разница тридцатикратная, а на отладке промпта прогонов сотни.
+#
+#  Переключение обратно: ЧИТАТЕЛЬ=openrouter в переменных окружения.
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+
+# кто читает: gemini (по умолчанию) или openrouter
+ЧИТАТЕЛЬ = os.getenv("CHITATEL", "gemini").strip().lower()
+
+# Модели OpenRouter — остаются запасными
 MODEL_MAIN = os.getenv("QUANTARION_MODEL", "anthropic/claude-sonnet-4-6")
 MODEL_DEEP = os.getenv("QUANTARION_MODEL_DEEP", "anthropic/claude-opus-4-8")
 
@@ -78,7 +95,7 @@ async def interpret_natal(markers_text: str, model: str = None) -> str:
     Returns:
         Текст трактовки
     """
-    return await _call_openrouter(
+    return await _спросить(
         system_prompt=SYSTEM_PROMPT_NATAL,
         user_prompt=markers_text,
         model=model or MODEL_MAIN,
@@ -103,7 +120,7 @@ async def interpret_dynamic(
         Текст трактовки
     """
     combined = f"НАТАЛЬНАЯ КАРТА:\n{natal_text}\n\nДИНАМИКА:\n{dynamic_text}"
-    return await _call_openrouter(
+    return await _спросить(
         system_prompt=SYSTEM_PROMPT_DYNAMIC,
         user_prompt=combined,
         model=model or MODEL_MAIN,
@@ -116,7 +133,7 @@ async def interpret_deep(markers_text: str) -> str:
     Глубокая трактовка через Opus — сценарий души.
     Дороже, медленнее, но глубже.
     """
-    return await _call_openrouter(
+    return await _спросить(
         system_prompt=SYSTEM_PROMPT_NATAL,
         user_prompt=markers_text,
         model=MODEL_DEEP,
@@ -127,6 +144,59 @@ async def interpret_deep(markers_text: str) -> str:
 # ============================================================
 # OPENROUTER API
 # ============================================================
+
+
+async def _call_gemini(
+    system_prompt: str,
+    user_prompt: str,
+    model: str = None,
+    max_tokens: int = 4000,
+    temperature: float = 0.7,
+) -> str:
+    """Запрос к Gemini. Считает цену прогона и пишет её в лог."""
+    if not GEMINI_API_KEY:
+        return "[ОШИБКА] GEMINI_API_KEY не установлен."
+
+    модель = model or GEMINI_MODEL
+    url = f"{GEMINI_BASE}/{модель}:generateContent"
+    payload = {
+        "systemInstruction": {"parts": [{"text": system_prompt}]},
+        "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+        "generationConfig": {
+            "maxOutputTokens": max_tokens,
+            "temperature": temperature,
+        },
+    }
+    try:
+        async with httpx.AsyncClient(timeout=300) as client:
+            r = await client.post(url, json=payload,
+                                  headers={"x-goog-api-key": GEMINI_API_KEY,
+                                           "Content-Type": "application/json"})
+            r.raise_for_status()
+            д = r.json()
+            # ── сколько стоил прогон ──
+            у = д.get("usageMetadata", {}) or {}
+            вход = у.get("promptTokenCount", 0)
+            выход = у.get("candidatesTokenCount", 0)
+            цена = вход * 0.10 / 1_000_000 + выход * 0.40 / 1_000_000
+            print(f"[Gemini] {модель} · вход {вход} · выход {выход} "
+                  f"· ~${цена:.4f}", flush=True)
+            части = д["candidates"][0]["content"]["parts"]
+            return "".join(ч.get("text", "") for ч in части)
+    except httpx.HTTPStatusError as e:
+        return f"[ОШИБКА Gemini] {e.response.status_code}: {e.response.text[:300]}"
+    except Exception as e:
+        return f"[ОШИБКА] {str(e)}"
+
+
+async def _спросить(system_prompt, user_prompt, model=None,
+                    max_tokens=4000, temperature=0.7):
+    """Развилка: Gemini или OpenRouter. Меняется переменной CHITATEL."""
+    if ЧИТАТЕЛЬ == "gemini":
+        return await _call_gemini(system_prompt, user_prompt, None,
+                                  max_tokens, temperature)
+    return await _call_openrouter(system_prompt, user_prompt,
+                                  model or MODEL_MAIN, max_tokens, temperature)
 
 
 async def _call_openrouter(
