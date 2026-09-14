@@ -37,20 +37,26 @@
     { id: "s2-part-two-the-unfolding", num: "2", label: "Part II" },
     { id: "s3-part-three-the-way-out", num: "3", label: "Part III" },
   ];
+  // Якоря третьего эссе «Астрофрактальная астрология» (14.09) — частей нет,
+  // всё эссе считается одной частью; якорь — заголовок пролога
+  var PARTS_AF = [
+    { id: "s0-пролог-секунда-а-не-минута-рождения", num: "1", label: "Эссе" },
+  ];
 
   // Определяем страницу по наличию якорей
-  var isYC   = !!document.getElementById(PARTS_YC[0].id);
-  var isYCEN = !isYC && !!document.getElementById(PARTS_YC_EN[0].id);
-  var isRU = !isYC && !isYCEN && !!document.getElementById(PARTS_RU[0].id);
-  var isEN = !isYC && !isYCEN && !isRU && !!document.getElementById(PARTS_EN[0].id);
-  if (!isRU && !isEN && !isYC && !isYCEN) return; // не страница эссе — виджет не нужен
-  var PARTS = isYC ? PARTS_YC : (isYCEN ? PARTS_YC_EN : (isRU ? PARTS_RU : PARTS_EN));
+  var isAF   = !!document.getElementById(PARTS_AF[0].id);
+  var isYC   = !isAF && !!document.getElementById(PARTS_YC[0].id);
+  var isYCEN = !isAF && !isYC && !!document.getElementById(PARTS_YC_EN[0].id);
+  var isRU = !isAF && !isYC && !isYCEN && !!document.getElementById(PARTS_RU[0].id);
+  var isEN = !isAF && !isYC && !isYCEN && !isRU && !!document.getElementById(PARTS_EN[0].id);
+  if (!isRU && !isEN && !isYC && !isYCEN && !isAF) return; // не страница эссе — виджет не нужен
+  var PARTS = isAF ? PARTS_AF : (isYC ? PARTS_YC : (isYCEN ? PARTS_YC_EN : (isRU ? PARTS_RU : PARTS_EN)));
   // Какое эссе обсуждаем: сервер по этому полю берёт нужные знания
-  var ESSAY = (isYC || isYCEN) ? "young-code" : "light-and-code";
-  // Язык страницы. ВАЖНО: «Молодой код» русский, но isRU у него ложно —
+  var ESSAY = isAF ? "astro-fractal" : ((isYC || isYCEN) ? "young-code" : "light-and-code");
+  // Язык страницы. ВАЖНО: «Молодой код» и третье эссе русские, но isRU у них ложно —
   // поэтому везде, где нужен ЯЗЫК (озвучка, распознавание, голосовая связь),
   // берём эту переменную, а не isRU.
-  var LANG = (isRU || isYC) ? "ru" : "en";
+  var LANG = (isRU || isYC || isAF) ? "ru" : "en";
 
   var T = (LANG === "ru") ? {
     fabFull: "Обсудить с Квантареоном",

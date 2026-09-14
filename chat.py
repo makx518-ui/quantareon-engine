@@ -49,9 +49,12 @@ def _read(name: str) -> str:
 # ── Два эссе. Имена файлов различаются приставкой. ──
 # "light-and-code" — первое эссе: core.txt, summaries.txt, part1..3.txt
 # "young-code"     — второе эссе: yc-core.txt, yc-summaries.txt, yc-part1..3.txt
+# "astro-fractal"  — третье эссе «Астрофрактальная астрология» (14.09): af-core.txt,
+#                    af-summaries.txt, af-part1.txt — частей у него нет, всё эссе = часть 1
 _ESSAYS = {
     "light-and-code": {"core": "core.txt", "sum": "summaries.txt", "part": "part{n}.txt"},
     "young-code": {"core": "yc-core.txt", "sum": "yc-summaries.txt", "part": "yc-part{n}.txt"},
+    "astro-fractal": {"core": "af-core.txt", "sum": "af-summaries.txt", "part": "af-part{n}.txt"},
 }
 _DEFAULT_ESSAY = "light-and-code"
 
@@ -219,7 +222,7 @@ async def chat_with_quantareon(
 
     Args:
         question: вопрос/реплика читателя
-        essay: "light-and-code" | "young-code" | None — какое эссе обсуждают
+        essay: "light-and-code" | "young-code" | "astro-fractal" | None — какое эссе обсуждают
         part: "1" | "2" | "3" | None — какую часть обсуждают
         history: [{"role": "user"/"assistant", "content": "..."}, ...]
         include_full: подложить полный текст части (дороже по токенам)
