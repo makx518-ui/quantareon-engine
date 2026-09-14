@@ -15,10 +15,28 @@ _EPHE_PATHS = [
     '/usr/share/swisseph',
     str(Path(__file__).parent.parent / 'data' / 'ephe'),
 ]
+# ⚠️ 11.09: раньше проверялось только СУЩЕСТВОВАНИЕ папки. На Render
+# библиотека создаёт /usr/local/share/swisseph пустой — цикл брал её,
+# обрывался и до data/ephe не доходил. Хирон молча выпадал из карты.
+# Теперь ищем сам файл астероидов, а не папку.
+_ФАЙЛ_АСТЕРОИДОВ = 'seas_18.se1'
+_путь_найден = None
 for _p in _EPHE_PATHS:
-    if Path(_p).exists():
+    if (Path(_p) / _ФАЙЛ_АСТЕРОИДОВ).exists():
         swe.set_ephe_path(_p)
+        _путь_найден = _p
         break
+# ⚠️ god_lenta.py просит имя EPHE_PATH — отдаём найденный путь
+EPHE_PATH = _путь_найден or ''
+
+if _путь_найден is None:
+    # файла нет нигде — берём первую существующую папку, чтобы
+    # хотя бы планеты считались, но Хирона предупредим
+    for _p in _EPHE_PATHS:
+        if Path(_p).exists():
+            swe.set_ephe_path(_p)
+            EPHE_PATH = _p
+            break
 
 # ============================================================
 # КОНСТАНТЫ
