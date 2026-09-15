@@ -3349,7 +3349,8 @@ def _карта_дня_в_фоне(номер, з):
     try:
         итог = КД.собрать_карту(з["момент"], з["ш"], з["д"], з["пояс"], место=з["место"],
                                 мухурта=з["мухурта"], ичзин=з["ичзин"],
-                                этап=lambda т: зд.__setitem__("etap", т))
+                                этап=lambda т: зд.__setitem__("etap", т),
+                                lang=з.get("lang", "ru"))
         зд.update({"gotovo": True, "html": итог["html_stranicy"], "fayl": итог["fayl"],
                    "razdely": итог["razdely"],
                    "imya_fayla": итог["imya_fayla"], "etap": "готово"})
@@ -3359,7 +3360,8 @@ def _карта_дня_в_фоне(номер, з):
 
 @app.post("/api/karta-dnya/zapustit")
 async def karta_dnya_zapustit(request: Request):
-    """Вход: {"lat", "lon", "tz", "iso", "mesto", "muhurta", "iching"} — как у рендера дня,
+    """Вход: {"lat", "lon", "tz", "iso", "mesto", "muhurta", "iching", "lang"} — как у рендера дня,
+    lang: "ru" (по умолчанию) или "en" — 15.09, английская главная;
     плюс два текста от страницы. Отдаёт номер задачи сразу; чтение идёт в фоне,
     потому что Cloudflare обрывает запрос на сотой секунде."""
     from datetime import datetime, timezone
@@ -3397,7 +3399,8 @@ async def karta_dnya_zapustit(request: Request):
     данные = {"момент": момент, "ш": ш, "д": д, "пояс": пояс,
               "место": str(з.get("mesto") or "")[:80],
               "мухурта": str(з.get("muhurta") or "")[:600],
-              "ичзин": str(з.get("iching") or "")[:1500]}
+              "ичзин": str(з.get("iching") or "")[:1500],
+              "lang": "en" if str(з.get("lang") or "ru").lower().startswith("en") else "ru"}
     # не больше трёх карт дня одновременно — открытый адрес, деньги на каждую
     if sum(1 for т in ЗАДАЧИ_КАРТЫ_ДНЯ.values() if not т.get("gotovo")) >= 3:
         return JSONResponse({"ok": False, "reason": "busy"}, status_code=429)

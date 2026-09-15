@@ -27,6 +27,16 @@ from datetime import datetime, timezone, timedelta
     # 14.09 · карта дня — полный натал на секунду входа, читается как сутки
     "karta_dnya": ("КАРТА ДНЯ", "что развернулось для тебя в секунду входа"),
 }
+# 15.09 · английская карта дня — заголовки и подписи обёртки
+ЗАГОЛОВКИ_EN = {
+    "karta_dnya": ("CHART OF THE DAY", "what unfolded for you at the second you entered"),
+}
+ПОДПИСИ = {
+    "ru": {"составлен": "разбор составлен", "без_времени": "Время рождения не указано — карта прочитана от Солнца.",
+           "подпись": "Астрофрактальная астрология · Квантареон", "наверх": "К списку разделов"},
+    "en": {"составлен": "reading composed", "без_времени": "Birth time not given — the chart is read from the Sun.",
+           "подпись": "Astrofractal Astrology · Quantareon", "наверх": "Back to the list of sections"},
+}
 
 СТИЛЬ = """
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -171,6 +181,9 @@ body.pravim .razdel p:focus, body.pravim .razdel h2:focus, body.pravim .vrez:foc
     # 14.09 · карта дня — стоят ПЕРВЫМИ, чтобы победить общие ключи; на другие карты не влияют
     "зачин": "🌅", "сценарий дня": "🎭", "нерв дня": "⚡", "итог дня": "🔆",
     "удачные часы": "💰", "символ дня": "☯",
+    # 15.09 · те же разделы по-английски
+    "opening": "🌅", "scenario of the day": "🎭", "nerve of the day": "⚡", "summary of the day": "🔆",
+    "lucky hours": "💰", "symbol of the day": "☯", "word from quantareon": "✦",
     "что это за год": "🌟", "суть": "🌟", "кто ты": "🌟", "кто пришёл": "🌟",
     "где ты": "🧭", "дуга": "🧭", "герой": "☀️", "судьба": "🔮", "кармик": "🔮",
     "вызрело": "🌱", "разворачивается": "📅", "акт": "📅", "главное событие": "⚡",
@@ -242,7 +255,7 @@ body.pravim .razdel p:focus, body.pravim .razdel h2:focus, body.pravim .vrez:foc
 })();
 </script>"""
 
-СКРИПТ = """<a href="#top" class="naverh" title="К списку разделов">&#8593;</a>
+СКРИПТ = """<a href="#top" class="naverh" title="__НАВЕРХ__">&#8593;</a>
 <script>
 (function () {
   var knopka = document.querySelector('.naverh');
@@ -301,7 +314,7 @@ def _абзацы(текст):
 
 def карта_клиенту(трактовка_по_разделам, имя, заказ="natal",
                   данные_рождения=None, без_времени=False,
-                  момент=None, пояс_часов=0, правка=False):
+                  момент=None, пояс_часов=0, правка=False, lang="ru"):
     """Собирает HTML-файл для клиента.
 
     трактовка_по_разделам: [(заголовок, текст), ...] — то, что написал читатель.
@@ -309,7 +322,11 @@ def карта_клиенту(трактовка_по_разделам, имя, 
     """
     момент = момент or datetime.now(timezone.utc)
     местное = момент + timedelta(hours=пояс_часов)
+    lang = (lang or "ru").lower()[:2]
     заг, под = ЗАГОЛОВКИ.get(заказ, ЗАГОЛОВКИ["natal"])
+    if lang == "en" and заказ in ЗАГОЛОВКИ_EN:
+        заг, под = ЗАГОЛОВКИ_EN[заказ]
+    подписи = ПОДПИСИ.get(lang, ПОДПИСИ["ru"])
 
     строки_кто = []
     if данные_рождения:
@@ -325,8 +342,7 @@ def карта_клиенту(трактовка_по_разделам, имя, 
     else:
         строки_кто.append(f"<b>{_html.escape(имя)}</b>")
 
-    оговорка = ('<div class="ogovorka">Время рождения не указано — '
-                'карта прочитана от Солнца.</div>') if без_времени else ""
+    оговорка = (f'<div class="ogovorka">{подписи["без_времени"]}</div>') if без_времени else ""
 
     # разделы с якорями и значками + навигатор поверх, как на странице соляра
     куски, ссылки = [], []
@@ -344,7 +360,7 @@ def карта_клиенту(трактовка_по_разделам, имя, 
         f'animation-delay:{(i % 7) * 0.4:.1f}s"></div>' for i in range(60))
 
     return f"""<!DOCTYPE html>
-<html lang="ru">
+<html lang="{lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -369,11 +385,11 @@ def карта_клиенту(трактовка_по_разделам, имя, 
 {разделы}
 
   <footer class="konec">
-    <div class="podpis">Астрофрактальная астрология · Квантареон</div>
-    <div class="data">разбор составлен {местное.strftime('%d.%m.%Y')} · <a href="https://quantareon.com" style="color:#7f87a6">quantareon.com</a></div>
+    <div class="podpis">{подписи["подпись"]}</div>
+    <div class="data">{подписи["составлен"]} {местное.strftime('%d.%m.%Y')} · <a href="https://quantareon.com" style="color:#7f87a6">quantareon.com</a></div>
   </footer>
 
 </div>
-{СКРИПТ}{ПАНЕЛЬ_ПРАВКИ if правка else ''}
+{СКРИПТ.replace('__НАВЕРХ__', подписи['наверх'])}{ПАНЕЛЬ_ПРАВКИ if правка else ''}
 </body>
 </html>"""
