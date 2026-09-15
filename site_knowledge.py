@@ -87,6 +87,8 @@ TOPICS: Dict[str, Dict] = {
             "натальн", "транзит", "прогресс", "синастри", "хорар",
             "планет", "градус", "азбук", "зодиак", "аспект",
             "подкаст", "собеседник по книге",
+            # 15.09 · «расскажи про мухурту» тему не находил
+            "мухурт", "muhurta",
             "astro", "time machine", "astrolog", "horoscope", "natal", "transit",
             "progression", "synastry", "horary", "degree", "zodiac",
         ],
