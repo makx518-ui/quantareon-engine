@@ -42,17 +42,22 @@
   var PARTS_AF = [
     { id: "s0-пролог-секунда-а-не-минута-рождения", num: "1", label: "Эссе" },
   ];
+  // 15.09 · английская страница третьего эссе (astro-fractal.html)
+  var PARTS_AF_EN = [
+    { id: "s0-prologue-the-second-not-the-minute-of-birth", num: "1", label: "Essay" },
+  ];
 
   // Определяем страницу по наличию якорей
   var isAF   = !!document.getElementById(PARTS_AF[0].id);
-  var isYC   = !isAF && !!document.getElementById(PARTS_YC[0].id);
-  var isYCEN = !isAF && !isYC && !!document.getElementById(PARTS_YC_EN[0].id);
-  var isRU = !isAF && !isYC && !isYCEN && !!document.getElementById(PARTS_RU[0].id);
-  var isEN = !isAF && !isYC && !isYCEN && !isRU && !!document.getElementById(PARTS_EN[0].id);
-  if (!isRU && !isEN && !isYC && !isYCEN && !isAF) return; // не страница эссе — виджет не нужен
-  var PARTS = isAF ? PARTS_AF : (isYC ? PARTS_YC : (isYCEN ? PARTS_YC_EN : (isRU ? PARTS_RU : PARTS_EN)));
+  var isAFEN = !isAF && !!document.getElementById(PARTS_AF_EN[0].id);
+  var isYC   = !isAF && !isAFEN && !!document.getElementById(PARTS_YC[0].id);
+  var isYCEN = !isAF && !isAFEN && !isYC && !!document.getElementById(PARTS_YC_EN[0].id);
+  var isRU = !isAF && !isAFEN && !isYC && !isYCEN && !!document.getElementById(PARTS_RU[0].id);
+  var isEN = !isAF && !isAFEN && !isYC && !isYCEN && !isRU && !!document.getElementById(PARTS_EN[0].id);
+  if (!isRU && !isEN && !isYC && !isYCEN && !isAF && !isAFEN) return; // не страница эссе — виджет не нужен
+  var PARTS = isAF ? PARTS_AF : (isAFEN ? PARTS_AF_EN : (isYC ? PARTS_YC : (isYCEN ? PARTS_YC_EN : (isRU ? PARTS_RU : PARTS_EN))));
   // Какое эссе обсуждаем: сервер по этому полю берёт нужные знания
-  var ESSAY = isAF ? "astro-fractal" : ((isYC || isYCEN) ? "young-code" : "light-and-code");
+  var ESSAY = (isAF || isAFEN) ? "astro-fractal" : ((isYC || isYCEN) ? "young-code" : "light-and-code");
   // Язык страницы. ВАЖНО: «Молодой код» и третье эссе русские, но isRU у них ложно —
   // поэтому везде, где нужен ЯЗЫК (озвучка, распознавание, голосовая связь),
   // берём эту переменную, а не isRU.
