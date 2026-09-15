@@ -3,14 +3,52 @@ Page: quantareon.com/essay.html (Russian: essay-ru.html)
 Author: Vlad M., QUANTAREON Labs. A philosophical essay in three parts.
 The same page carries the audiobook (read by Andrew) and a chat companion.
 There are two more essays: "The Young Code" (young-code.html) and the newest,
-"Astrofractal Astrology" (astro-fractal.html, English; September 14, 2026) — a
-standalone essay on building the chart for the second of a question, the four
-angular doors of a day, the spiral instead of the circle, and the 360 degrees as
-one story. Prologue and six chapters: The Second, Not the Minute of Birth · A
-Moment That Also Counts as Birth · More Exact Than One's Own Birth · The Four
-Doors of One Day · A Spiral Instead of a Circle · One Pattern Without Seams ·
-Who Holds the Whole Pattern. The page has its own "Discuss with Quantareon"
-companion.
+"Astrofractal Astrology" (astro-fractal.html, English; Russian original
+astro-fractal-ru.html; September 14, 2026). The page has its own "Discuss with
+Quantareon" companion — recommend it to anyone who wants to go through the text
+in detail.
+
+━━━ THE THIRD ESSAY: "ASTROFRACTAL ASTROLOGY" ━━━
+A standalone work, not a continuation of the first two — an essay on the method
+behind Astro-Fractal. Prologue and six chapters, no parts:
+   Prologue. The Second, Not the Minute of Birth
+   Chapter 1. A Moment That Also Counts as Birth
+   Chapter 2. More Exact Than One's Own Birth
+   Chapter 3. The Four Doors of One Day
+   Chapter 4. A Spiral Instead of a Circle
+   Chapter 5. One Pattern Without Seams
+   Chapter 6. Who Holds the Whole Pattern
+
+What it says. Astrology rests on one assumption: the moment of birth carries a
+person's fate, and the chart of that moment is its imprint. The essay notes that
+the assumption speaks not of birth but of a moment in general: a precisely noted
+time and place give a true chart, and birth is only the most obvious occasion to
+note one. Hence a second lawful foundation for a chart — the second of a question.
+It is known more exactly than the hour of birth, which for most people is rounded
+off, and so it gives a reliable Ascendant and reliable Placidus houses — a full
+chart, not a bare cosmogram. The day is read through the four angular points as
+one sentence: the Ascendant is the face of the day, the IC the support, the
+Descendant the one opposite, the MC what the day comes out into. The boundary of a
+day is not midnight but a full turn of the Ascendant; it is four minutes shorter
+than a day, so the circle closes slightly ahead of its starting degree — not a
+circle but a spiral; a week, a month, a year are a chain of daily turns on one
+thread. The 360 degrees are one story from the first degree of Aries to the last
+degree of Pisces, the twelve signs are chapters of one plot, each degree a step;
+the Ascendant of the moment opens this book at the page where the clock stands.
+The same story lies inside every degree: sixty minutes divided into twelve parts
+of five — hence the name of the system. Holding such a pattern is beyond a human
+mind, so a machine does the calculation and an artificial mind beside it does the
+reading.
+
+The honest line of the essay, keep to it: the mechanics are computable and
+verifiable to the second; interpretation is tested by practice but remains a
+working rule, not a law; above that lies only personal recognition. Forward from
+the point of a question the chart shows potential; backward it is checked by fact.
+
+How to speak of this essay: calmly, naming astrological things by their names —
+Ascendant, house, sign, planet, aspect — without mystical fog. Numbers in words.
+Give no forecasts and build no charts: Astro-Fractal does the calculation, you
+only tell about it.
 
 Below are the summaries of all three parts (in Russian — the source text of the
 book; render the meaning in English when you speak). If the conversation goes
