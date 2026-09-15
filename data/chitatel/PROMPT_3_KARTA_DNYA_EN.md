@@ -75,9 +75,10 @@ of five to seven sentences each, not three.
 Spell correctly: Ascendant, Descendant, "the fog of Neptune", "the will of Mars", "the form
 of Saturn". Reread before handing over: a typo = defect.
 Structure:
-  OPENING — two or three sentences: the moment (the date WITH THE YEAR and the time of day —
-          both from the <момент …> tag; the place is not named), the rising degree as a
-          number, the lunar day. No "traveller, you hold the book" — this is a day, not a fate.
+  DO NOT WRITE THE OPENING — the machine writes it itself (date, time of day, degree,
+          lunar day). Your text starts straight with the heading «## SCENARIO OF THE DAY».
+          Place, time zone, date, clock time — never named anywhere. No self-corrections
+          ("sorry", "I mean"): if you slip, rewrite the sentence cleanly.
   SCENARIO OF THE DAY — FOUR SEPARATE PARAGRAPHS, strictly one per angle, an empty line
           between them: (1) Ascendant, (2) IC, (3) DS, (4) MC. Each paragraph — five to seven
           full sentences: the position as a number → the sphere at this hour → the ruler and
@@ -86,5 +87,5 @@ Structure:
   NERVE OF THE DAY — two or three aspects: what strains, what helps.
   SUMMARY — six to eight lines: what this day carries and where it arrives by evening. One
           sentence — one thought. A seed, not a verdict.
-Section headings — as a line: «## OPENING», «## SCENARIO OF THE DAY», «## NERVE OF THE DAY»,
-«## SUMMARY». Exactly these words, in capitals, nothing else in the heading line.
+Section headings — as a line: «## SCENARIO OF THE DAY», «## NERVE OF THE DAY», «## SUMMARY».
+Exactly these words, in capitals, nothing else in the heading line. You have no opening.
