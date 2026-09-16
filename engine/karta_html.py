@@ -184,6 +184,9 @@ body.pravim .razdel p:focus, body.pravim .razdel h2:focus, body.pravim .vrez:foc
     # 15.09 · те же разделы по-английски
     "opening": "🌅", "scenario of the day": "🎭", "nerve of the day": "⚡", "summary of the day": "🔆",
     "lucky hours": "💰", "symbol of the day": "☯", "word from quantareon": "✦",
+    # 16.09 · главы полного разбора дня
+    "ядро дня": "☀️", "кармический вектор": "🎯", "планетарный узор": "🪐", "тема дня": "🌟", "резюме дня": "🔮",
+    "core of the day": "☀️", "karmic vector": "🎯", "planetary pattern": "🪐", "theme of the day": "🌟",
     "что это за год": "🌟", "суть": "🌟", "кто ты": "🌟", "кто пришёл": "🌟",
     "где ты": "🧭", "дуга": "🧭", "герой": "☀️", "судьба": "🔮", "кармик": "🔮",
     "вызрело": "🌱", "разворачивается": "📅", "акт": "📅", "главное событие": "⚡",

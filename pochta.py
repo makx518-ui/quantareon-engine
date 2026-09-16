@@ -265,3 +265,74 @@ quantareon.com/luck"""
 </table>
 </td></tr></table>
 </body></html>"""
+
+
+# ============================================================
+# 16.09 · ПИСЬМА КНИГИ ДНЕЙ: ключ покупателю и файл страницы.
+# Тот же путь: Brevo, запасной — Gmail. Зовётся из фона движка (нить), поэтому синхронно.
+# ============================================================
+import base64 as _b64
+from email.mime.application import MIMEApplication as _MIMEApp
+
+
+def _brevo_sync(тело):
+    if not BREVO_KEY:
+        return False
+    import httpx
+    try:
+        о = httpx.post("https://api.brevo.com/v3/smtp/email", json=тело, timeout=30,
+                       headers={"api-key": BREVO_KEY, "content-type": "application/json", "accept": "application/json"})
+        if о.status_code in (200, 201, 202):
+            return True
+        логи.error("POCHTA/книга: Brevo отказал %s %s", о.status_code, о.text[:200])
+    except Exception as e:
+        логи.error("POCHTA/книга: Brevo %s", e)
+    return False
+
+
+def отправить_текст(куда, тема, текст, html=None):
+    """Простое письмо (ключ книги). True — ушло."""
+    if not ВИД_ПОЧТЫ.match(куда or ""):
+        return False
+    html = html or "<pre style='font-family:serif;font-size:16px;white-space:pre-wrap'>" + текст + "</pre>"
+    if _brevo_sync({"sender": {"name": ОТ_ИМЯ, "email": ОТ_АДРЕС}, "to": [{"email": куда}],
+                    "subject": тема, "htmlContent": html, "textContent": текст}):
+        return True
+    try:
+        п = MIMEMultipart("alternative"); п["Subject"] = тема; п["From"] = f"{ОТ_ИМЯ} <{ОТ_АДРЕС}>"; п["To"] = куда
+        п.attach(MIMEText(текст, "plain", "utf-8")); п.attach(MIMEText(html, "html", "utf-8"))
+        _smtp_send(п); return True
+    except Exception as e:
+        логи.error("POCHTA/книга: smtp %s", e); return False
+
+
+def отправить_файл(куда, тема, текст, имя_файла, содержимое):
+    """Письмо с вложением (страница книги, HTML). содержимое — str или bytes. True — ушло."""
+    if not ВИД_ПОЧТЫ.match(куда or ""):
+        return False
+    байты = содержимое.encode("utf-8") if isinstance(содержимое, str) else содержимое
+    html = "<pre style='font-family:serif;font-size:16px;white-space:pre-wrap'>" + текст + "</pre>"
+    if _brevo_sync({"sender": {"name": ОТ_ИМЯ, "email": ОТ_АДРЕС}, "to": [{"email": куда}],
+                    "subject": тема, "htmlContent": html, "textContent": текст,
+                    "attachment": [{"name": имя_файла, "content": _b64.b64encode(байты).decode("ascii")}]}):
+        return True
+    try:
+        п = MIMEMultipart("mixed"); п["Subject"] = тема; п["From"] = f"{ОТ_ИМЯ} <{ОТ_АДРЕС}>"; п["To"] = куда
+        п.attach(MIMEText(текст, "plain", "utf-8"))
+        в = _MIMEApp(байты, Name=имя_файла); в["Content-Disposition"] = f'attachment; filename="{имя_файла}"'; п.attach(в)
+        _smtp_send(п); return True
+    except Exception as e:
+        логи.error("POCHTA/книга: smtp %s", e); return False
+
+
+def _smtp_send(письмо):
+    защита = ssl.create_default_context()
+    if ПОРТ == 465:
+        связь = smtplib.SMTP_SSL(СЕРВЕР, ПОРТ, context=защита, timeout=25)
+    else:
+        связь = smtplib.SMTP(СЕРВЕР, ПОРТ, timeout=25); связь.starttls(context=защита)
+    try:
+        связь.login(ЯЩИК, ПАРОЛЬ); связь.send_message(письмо)
+    finally:
+        try: связь.quit()
+        except Exception: pass

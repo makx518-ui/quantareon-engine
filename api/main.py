@@ -130,7 +130,9 @@ _ПОЧТА_БЕЗ_ПАРОЛЯ = ("/api/send-key", "/api/mail-health")
 _РЕНДЕР_БЕЗ_ПАРОЛЯ = ("/api/render-dnya",
                       # 14.09 · карта дня: те же входные данные (момент, координаты),
                       # наружу — только готовый файл по номеру задачи
-                      "/api/karta-dnya/zapustit", "/api/karta-dnya/status", "/api/karta-dnya/fayl")
+                      "/api/karta-dnya/zapustit", "/api/karta-dnya/status", "/api/karta-dnya/fayl",
+                      # 16.09 · книга дней: всё по ключу покупателя, выдача ключа — под хозяйским паролем внутри
+                      "/api/kniga/")
 
 
 @app.middleware("http")
@@ -3341,6 +3343,14 @@ if __name__ == "__main__":
 # посчитать; файл отдаётся только по номеру своей задачи, история наружу не видна.
 # ============================================================
 ЗАДАЧИ_КАРТЫ_ДНЯ = {}
+# 16.09 · книга дней (ключи, страницы, сшивание) — свой модуль, общий словарь задач
+try:
+    import kniga_api as _kniga
+    _kniga.ЗАДАЧИ = ЗАДАЧИ_КАРТЫ_ДНЯ
+    app.include_router(_kniga.роутер)
+    print("📖 Книга дней: подключена")
+except Exception as _e:
+    print(f"⚠️ Книга дней не подключилась: {type(_e).__name__}: {_e}")
 
 
 def _карта_дня_в_фоне(номер, з):
@@ -3403,6 +3413,10 @@ async def karta_dnya_zapustit(request: Request):
               "lang": "en" if str(з.get("lang") or "ru").lower().startswith("en") else "ru",
               # 16.09 · режим: "витрина" (бесплатная главная, только итог) или "полный" (платный разбор)
               "rezhim": "полный" if str(з.get("rezhim") or "").lower() in ("полный", "full") else "витрина"}
+    # 16.09 · ЗАМОК на платный режим: пока нет ключей покупателей, полный разбор пускаем только
+    # с хозяйским паролем (поле "klyuch"). Без него открытый адрес отдал бы платный текст даром.
+    if данные["rezhim"] == "полный" and (not PASSWORD or str(з.get("klyuch") or "") != PASSWORD):
+        return JSONResponse({"ok": False, "reason": "locked"}, status_code=403)
     # не больше трёх карт дня одновременно — открытый адрес, деньги на каждую
     if sum(1 for т in ЗАДАЧИ_КАРТЫ_ДНЯ.values() if not т.get("gotovo")) >= 3:
         return JSONResponse({"ok": False, "reason": "busy"}, status_code=429)
