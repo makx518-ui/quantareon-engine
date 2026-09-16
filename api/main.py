@@ -131,8 +131,9 @@ _РЕНДЕР_БЕЗ_ПАРОЛЯ = ("/api/render-dnya",
                       # 14.09 · карта дня: те же входные данные (момент, координаты),
                       # наружу — только готовый файл по номеру задачи
                       "/api/karta-dnya/zapustit", "/api/karta-dnya/status", "/api/karta-dnya/fayl",
-                      # 16.09 · книга дней: всё по ключу покупателя, выдача ключа — под хозяйским паролем внутри
-                      "/api/kniga/")
+                      # 16.09 · книга дней: по ключу покупателя. Открыты только эти три; выдача
+                      # проверяет хозяйский пароль внутри, удаление — только из кабинета (за паролем).
+                      "/api/kniga/stranica", "/api/kniga/status", "/api/kniga/fayl", "/api/kniga/vydat")
 
 
 @app.middleware("http")
@@ -268,6 +269,13 @@ def stranica_istorii():
     return FileResponse(FRONT / "istoriya.html", headers={
         "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
     })
+
+
+@app.get("/knigi", response_class=HTMLResponse)
+def stranica_knig():
+    """16.09 · его страница: две вкладки — «Клиенты» (кто купил, почта, страницы, корзинка)
+    и «Мой кабинет» (выдать ключ, построить разбор для опыта). За паролем движка, как история."""
+    return FileResponse(FRONT / "knigi.html", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/istoriya")
@@ -3429,7 +3437,8 @@ async def karta_dnya_zapustit(request: Request):
     if данные["rezhim"] == "витрина":
         try:
             from engine import kniga as _K
-            витрина = _K.запомнить_витрину(момент.isoformat(), ш, д, пояс, данные["lang"])
+            витрина = _K.запомнить_витрину(момент.isoformat(), ш, д, пояс, данные["lang"],
+                                           данные["мухурта"], данные["ичзин"])
         except Exception as e:
             print(f"витрина: секунда не запомнилась: {e}")
     return {"ok": True, "nomer": номер, "vitrina": витрина}

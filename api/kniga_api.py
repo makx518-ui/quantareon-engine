@@ -58,6 +58,26 @@ async def vydat(request: Request):
     return {"ok": True, "klyuch": зап["ключ"], "tarif": зап["тариф"], "dney": зап["дней"], "pismo": ушло}
 
 
+@роутер.post("/api/kniga/udalit")
+async def udalit(request: Request):
+    """16.09 · корзинка на странице покупателей: убрать книгу со всеми её страницами.
+    Только из кабинета — адрес закрыт паролем движка (в списке открытых его нет)."""
+    from engine import kniga as K, arhiv as A
+    try:
+        з = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "reason": "bad_request"}, status_code=400)
+    ключ = _ключ(з)
+    if not K.ВИД_КЛЮЧА.match(ключ):
+        return JSONResponse({"ok": False, "reason": "bad_key"}, status_code=400)
+    убрано = 0
+    for путь in A.перечислить(f"{A.АРХИВ}/{ключ}/"):
+        if A._убрать(путь):
+            убрано += 1
+    A._убрать(K._путь(ключ))
+    return {"ok": True, "udaleno": убрано}
+
+
 @роутер.get("/api/kniga/status")
 async def status(klyuch: str = ""):
     from engine import kniga as K
@@ -131,7 +151,8 @@ async def stranica(request: Request):
         # устройства), потом из того, что прислала страница (память браузера, как раньше).
         в = K.взять_витрину(з.get("vitrina")) if з.get("vitrina") else None
         if в:
-            зап = K.открыть_корень(зап, в["момент"], в["lat"], в["lon"], в["tz"])
+            зап = K.открыть_корень(зап, в["момент"], в["lat"], в["lon"], в["tz"],
+                                   в.get("мухурта", ""), в.get("ичзин", ""))
         if not зап.get("корень") and (з.get("lat") is None or з.get("lon") is None):
             return JSONResponse({"ok": False, "reason": "no_place"}, status_code=400)
         if not зап.get("корень"):
@@ -166,10 +187,13 @@ async def stranica(request: Request):
     номер = uuid.uuid4().hex[:12]
     ЗАДАЧИ[номер] = {"gotovo": False, "etap": "поставлено в работу", "когда": сейчас.timestamp(),
                      "kniga": (ст["klyuch"], n)}
+    # 16.09 · часы и символ дня: что прислала страница (она считает их на сегодня для места
+    # корня), иначе — то, что запомнила витрина первого дня
+    мухурта = str(з.get("muhurta") or "")[:600] or (к.get("мухурта", "") if n == 1 else "")
+    ичзин = str(з.get("iching") or "")[:1500] or (к.get("ичзин", "") if n == 1 else "")
     threading.Thread(target=_страница_в_фоне,
                      args=(номер, ст["klyuch"], n, к["момент"], к["lat"], к["lon"], к["tz"],
-                           str(з.get("muhurta") or "")[:600], str(з.get("iching") or "")[:1500],
-                           зап.get("lang") or "ru"), daemon=True).start()
+                           мухурта, ичзин, зап.get("lang") or "ru"), daemon=True).start()
     return {"ok": True, "nomer": номер, "n": n}
 
 

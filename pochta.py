@@ -275,6 +275,11 @@ import base64 as _b64
 from email.mime.application import MIMEApplication as _MIMEApp
 
 
+# 16.09 · его правка: письма Квантареона (ключи и страницы книги) подписываются «Квантареон»,
+# письма Luck Forecast — как были. Один ящик, разные имена отправителя.
+ОТ_ИМЯ_КНИГИ = os.getenv("MAIL_FROM_NAME_KNIGA", "Квантареон")
+
+
 def _brevo_sync(тело):
     if not BREVO_KEY:
         return False
@@ -295,11 +300,11 @@ def отправить_текст(куда, тема, текст, html=None):
     if not ВИД_ПОЧТЫ.match(куда or ""):
         return False
     html = html or "<pre style='font-family:serif;font-size:16px;white-space:pre-wrap'>" + текст + "</pre>"
-    if _brevo_sync({"sender": {"name": ОТ_ИМЯ, "email": ОТ_АДРЕС}, "to": [{"email": куда}],
+    if _brevo_sync({"sender": {"name": ОТ_ИМЯ_КНИГИ, "email": ОТ_АДРЕС}, "to": [{"email": куда}],
                     "subject": тема, "htmlContent": html, "textContent": текст}):
         return True
     try:
-        п = MIMEMultipart("alternative"); п["Subject"] = тема; п["From"] = f"{ОТ_ИМЯ} <{ОТ_АДРЕС}>"; п["To"] = куда
+        п = MIMEMultipart("alternative"); п["Subject"] = тема; п["From"] = f"{ОТ_ИМЯ_КНИГИ} <{ОТ_АДРЕС}>"; п["To"] = куда
         п.attach(MIMEText(текст, "plain", "utf-8")); п.attach(MIMEText(html, "html", "utf-8"))
         _smtp_send(п); return True
     except Exception as e:
@@ -312,12 +317,12 @@ def отправить_файл(куда, тема, текст, имя_файл�
         return False
     байты = содержимое.encode("utf-8") if isinstance(содержимое, str) else содержимое
     html = "<pre style='font-family:serif;font-size:16px;white-space:pre-wrap'>" + текст + "</pre>"
-    if _brevo_sync({"sender": {"name": ОТ_ИМЯ, "email": ОТ_АДРЕС}, "to": [{"email": куда}],
+    if _brevo_sync({"sender": {"name": ОТ_ИМЯ_КНИГИ, "email": ОТ_АДРЕС}, "to": [{"email": куда}],
                     "subject": тема, "htmlContent": html, "textContent": текст,
                     "attachment": [{"name": имя_файла, "content": _b64.b64encode(байты).decode("ascii")}]}):
         return True
     try:
-        п = MIMEMultipart("mixed"); п["Subject"] = тема; п["From"] = f"{ОТ_ИМЯ} <{ОТ_АДРЕС}>"; п["To"] = куда
+        п = MIMEMultipart("mixed"); п["Subject"] = тема; п["From"] = f"{ОТ_ИМЯ_КНИГИ} <{ОТ_АДРЕС}>"; п["To"] = куда
         п.attach(MIMEText(текст, "plain", "utf-8"))
         в = _MIMEApp(байты, Name=имя_файла); в["Content-Disposition"] = f'attachment; filename="{имя_файла}"'; п.attach(в)
         _smtp_send(п); return True
