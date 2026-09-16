@@ -3350,7 +3350,7 @@ def _карта_дня_в_фоне(номер, з):
         итог = КД.собрать_карту(з["момент"], з["ш"], з["д"], з["пояс"], место=з["место"],
                                 мухурта=з["мухурта"], ичзин=з["ичзин"],
                                 этап=lambda т: зд.__setitem__("etap", т),
-                                lang=з.get("lang", "ru"))
+                                lang=з.get("lang", "ru"), режим=з.get("rezhim", "витрина"))
         зд.update({"gotovo": True, "html": итог["html_stranicy"], "fayl": итог["fayl"],
                    "razdely": итог["razdely"],
                    "imya_fayla": итог["imya_fayla"], "etap": "готово"})
@@ -3400,7 +3400,9 @@ async def karta_dnya_zapustit(request: Request):
               "место": str(з.get("mesto") or "")[:80],
               "мухурта": str(з.get("muhurta") or "")[:600],
               "ичзин": str(з.get("iching") or "")[:1500],
-              "lang": "en" if str(з.get("lang") or "ru").lower().startswith("en") else "ru"}
+              "lang": "en" if str(з.get("lang") or "ru").lower().startswith("en") else "ru",
+              # 16.09 · режим: "витрина" (бесплатная главная, только итог) или "полный" (платный разбор)
+              "rezhim": "полный" if str(з.get("rezhim") or "").lower() in ("полный", "full") else "витрина"}
     # не больше трёх карт дня одновременно — открытый адрес, деньги на каждую
     if sum(1 for т in ЗАДАЧИ_КАРТЫ_ДНЯ.values() if not т.get("gotovo")) >= 3:
         return JSONResponse({"ok": False, "reason": "busy"}, status_code=429)
