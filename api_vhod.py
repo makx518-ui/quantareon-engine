@@ -253,7 +253,32 @@ def история():
     итог.sort(key=lambda x: x["_sort"], reverse=True)
     for з in итог:
         з.pop("_sort", None)
-    return {"raschety": итог}
+    # 16.09 · его решение: покупные — ОТДЕЛЬНЫЙ раздел. Книги дней (ключи QK-/QD-) уходят из общего
+    # списка в «knigi»: ключ, тариф, срок, корень, страницы с файлами. Гости витрины в архив больше не пишут.
+    книги = []
+    ключи = set()
+    for з in итог:
+        if з["imya"].startswith(("QK-", "QD-")):
+            ключи.add(з["imya"])
+    итог = [з for з in итог if not з["imya"].startswith(("QK-", "QD-"))]
+    try:
+        for ключ_json in arhiv.перечислить(arhiv.АРХИВ + "/kniga/"):
+            т = arhiv._взять(ключ_json)
+            if not т:
+                continue
+            к = json.loads(т)
+            корень = к.get("корень") or {}
+            книги.append({
+                "klyuch": к.get("ключ"), "tarif": к.get("тариф"), "dney": к.get("дней"), "lang": к.get("lang"),
+                "pochta": к.get("почта", ""), "sozdan": (к.get("создан") or "")[:16].replace("T", " "),
+                "koren": (f'{корень.get("асц_градус")}° {корень.get("асц_знак")}' if корень.get("асц_знак") else ""),
+                "stranicy": [{"n": с["n"], "data": с["дата"], "fayl_karty": с["fayl"],
+                              "asc": f'{с.get("асц_градус")}° {с.get("асц_знак")}'} for с in к.get("страницы", [])],
+            })
+        книги.sort(key=lambda x: x["sozdan"], reverse=True)
+    except Exception as e:
+        print("история: книги не прочитались:", e)
+    return {"raschety": итог, "knigi": книги}
 
 
 def отдать(ключ):
@@ -281,6 +306,10 @@ def очистить_историю():
     from engine import arhiv
     убрано = 0
     for ключ in arhiv.перечислить(arhiv.АРХИВ + "/"):
+        # 16.09 · книги покупателей (kniga/*.json и папки ключей QK-/QD-) очистка НЕ трогает —
+        # это оплаченное; чистятся только пробные расчёты хозяина
+        if "/kniga/" in ключ or "/QK-" in ключ or "/QD-" in ключ:
+            continue
         if arhiv._убрать(ключ):
             убрано += 1
     return {"ochischeno": True, "udaleno": убрано}

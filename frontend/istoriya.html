@@ -76,7 +76,9 @@ body{background:#0d0f1a;color:#d0d0d8;font-family:'Segoe UI',sans-serif;font-siz
 </div>
 
 <div class="wrap">
-  <div class="schet"><b id="vsego">0</b> расчётов в архиве</div>
+  <div class="schet">📖 <b id="vsegoKnig">0</b> книг покупателей</div>
+  <div id="knigi"></div>
+  <div class="schet" style="margin-top:28px"><b id="vsego">0</b> расчётов в архиве</div>
   <div class="kolonki"><span>☉ карта клиенту</span><span>⚙ механика расклада</span></div>
   <div id="spisok"></div>
 </div>
@@ -89,11 +91,29 @@ function э(т){return String(т==null?"":т).replace(/[&<>"]/g,с=>({"&":"&amp;
 async function загрузить(){
   try{
     const о = await fetch("/api/istoriya").then(r=>r.json());
+    нарисоватьКниги(о.knigi||[]);
     нарисовать(о.raschety||[]);
   }catch(e){
     document.getElementById("spisok").innerHTML =
       `<div class="pusto">не удалось загрузить: ${э(e.message)}</div>`;
   }
+}
+
+function нарисоватьКниги(к){
+  document.getElementById("vsegoKnig").textContent = к.length;
+  const м = document.getElementById("knigi");
+  if(!к.length){ м.innerHTML = `<div class="pusto">книг пока нет</div>`; return; }
+  м.innerHTML = к.map(б=>`
+    <div class="karta">
+      <div class="verh">
+        <span class="imya">${э(б.klyuch)}</span>
+        <span class="tip">${б.tarif==="shiv"?"📖 книга · "+б.dney+" дн.":"☉ разовый день"}${б.koren?" · корень "+э(б.koren):""}${б.pochta?" · "+э(б.pochta):""}</span>
+        <span class="data">${э(б.sozdan)}</span>
+      </div>
+      <div style="padding:6px 0 2px;font-size:12px;color:#c9b97a">
+        ${б.stranicy.length? б.stranicy.map(с=>`<a class="b" style="margin:2px 6px 2px 0" href="/istoriya/karta?f=${encodeURIComponent(с.fayl_karty)}" target="_blank">стр. ${с.n} · ${э(с.data)} · ${э(с.asc)}</a>`).join("") : "страниц ещё нет"}
+      </div>
+    </div>`).join("");
 }
 
 function нарисовать(р){
