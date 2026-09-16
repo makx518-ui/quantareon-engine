@@ -127,19 +127,24 @@ async def stranica(request: Request):
     зап = K._читать(ст["klyuch"])
     сейчас = datetime.now(timezone.utc)
     if not зап.get("корень"):
-        if з.get("lat") is None or з.get("lon") is None:
-            # первый день без места: страница должна прислать секунду витрины (quantareon_moment)
+        # 16.09 · корень книги — секунда витрины. Сначала по номеру из движка (работает с любого
+        # устройства), потом из того, что прислала страница (память браузера, как раньше).
+        в = K.взять_витрину(з.get("vitrina")) if з.get("vitrina") else None
+        if в:
+            зап = K.открыть_корень(зап, в["момент"], в["lat"], в["lon"], в["tz"])
+        if not зап.get("корень") and (з.get("lat") is None or з.get("lon") is None):
             return JSONResponse({"ok": False, "reason": "no_place"}, status_code=400)
-        try:
-            iso = str(з.get("iso") or сейчас.isoformat())
-            датой = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-            lat, lon, tz = float(з["lat"]), float(з["lon"]), float(з.get("tz") or 0)
-        except Exception:
-            return JSONResponse({"ok": False, "reason": "bad_moment"}, status_code=400)
-        # секунда витрины: не старше суток и не из будущего
-        if not (-600 < (сейчас - датой).total_seconds() < 86400 * 2):
-            return JSONResponse({"ok": False, "reason": "bad_moment"}, status_code=400)
-        зап = K.открыть_корень(зап, датой.isoformat(), lat, lon, tz)
+        if not зап.get("корень"):
+            try:
+                iso = str(з.get("iso") or сейчас.isoformat())
+                датой = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+                lat, lon, tz = float(з["lat"]), float(з["lon"]), float(з.get("tz") or 0)
+            except Exception:
+                return JSONResponse({"ok": False, "reason": "bad_moment"}, status_code=400)
+            # секунда из браузера: не из будущего и не старше двух суток
+            if not (-600 < (сейчас - датой).total_seconds() < 86400 * 2):
+                return JSONResponse({"ok": False, "reason": "bad_moment"}, status_code=400)
+            зап = K.открыть_корень(зап, датой.isoformat(), lat, lon, tz)
     к = зап["корень"]
     n = K.номер_сегодня(зап, сейчас.isoformat())
     if n < 1:

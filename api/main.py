@@ -3424,7 +3424,15 @@ async def karta_dnya_zapustit(request: Request):
     ЗАДАЧИ_КАРТЫ_ДНЯ[номер] = {"gotovo": False, "etap": "поставлено в работу",
                               "когда": сейчас.timestamp()}
     threading.Thread(target=_карта_дня_в_фоне, args=(номер, данные), daemon=True).start()
-    return {"ok": True, "nomer": номер}
+    # 16.09 · номер секунды витрины: по нему полный разбор возьмёт ТУ ЖЕ секунду с любого устройства
+    витрина = ""
+    if данные["rezhim"] == "витрина":
+        try:
+            from engine import kniga as _K
+            витрина = _K.запомнить_витрину(момент.isoformat(), ш, д, пояс, данные["lang"])
+        except Exception as e:
+            print(f"витрина: секунда не запомнилась: {e}")
+    return {"ok": True, "nomer": номер, "vitrina": витрина}
 
 
 @app.get("/api/karta-dnya/status")
