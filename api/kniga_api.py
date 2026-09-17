@@ -104,6 +104,42 @@ async def fayl(klyuch: str = "", n: int = 0):
     return HTMLResponse(html, headers={"Content-Disposition": f'inline; filename="quantareon-{ст["klyuch"]}-{с["n"]}.html"'})
 
 
+def письмо_с_файлом(з, n, итог, lang):
+    """17.09 · файл страницы на почту. Имя вложения — латиницей (Brevo портит русские имена).
+    Не ушло — запасное письмо со ссылкой и ключом, и хозяину сообщение в Telegram. True — файл ушёл."""
+    ру = lang == "ru"
+    дата = итог["местное"].strftime("%d.%m.%Y")
+    ключ = з["ключ"]
+    тема = (f"Квантареон · {'страница ' + str(n) if з['тариф']=='shiv' else 'полный разбор дня'} · {дата}"
+            if ру else f"Quantareon · {'page ' + str(n) if з['тариф']=='shiv' else 'full reading of the day'} · {дата}")
+    имя = f"quantareon-{ключ}-{n}-{итог['местное'].strftime('%Y-%m-%d')}.html"
+    ушло = False
+    try:
+        import pochta as П
+        текст = ("Ваш разбор во вложении. Открывается в любом браузере." if ру
+                 else "Your reading is attached. Opens in any browser.")
+        ушло = bool(П.отправить_файл(з["почта"], тема, текст, имя, итог["html"]))
+        if not ушло:
+            стр = "https://quantareon.com/razbor-ru" if ру else "https://quantareon.com/razbor"
+            запас = (f"Ваш разбор готов, но файл не удалось приложить к письму.\n\n"
+                     f"Откройте страницу {стр}, впишите ключ {ключ} в поле «Мой ключ» и нажмите «Открыть книгу». "
+                     f"Там же будет кнопка «Скачать файл»." if ру else
+                     f"Your reading is ready, but the file could not be attached.\n\n"
+                     f"Open {стр}, enter the key {ключ} in the \"My key\" field and press \"Open the book\". "
+                     f"The \"Download file\" button will be there.")
+            П.отправить_текст(з["почта"], тема, запас)
+    except Exception as e:
+        print(f"книга: письмо с файлом не ушло: {e}")
+    if not ушло:
+        try:
+            import oplata_api as О
+            О._в_телеграм(f"⚠️ Файл разбора не ушёл на почту {з['почта']} (ключ {ключ}, страница {n}). "
+                          f"Отправлено письмо со ссылкой на страницу.")
+        except Exception as e:
+            print(f"книга: Telegram не ответил: {e}")
+    return ушло
+
+
 def _страница_в_фоне(номер, ключ, n, iso, lat, lon, tz, мухурта, ичзин, lang):
     from engine import kniga as K, karta_dnya as КД, arhiv as A
     зд = ЗАДАЧИ[номер]
@@ -127,15 +163,7 @@ def _страница_в_фоне(номер, ключ, n, iso, lat, lon, tz, м
                    "imya_fayla": итог["imya_fayla"], "etap": "готово"})
         # письмо с файлом — если у ключа есть почта
         if з.get("почта"):
-            try:
-                import pochta as П
-                ру = lang == "ru"
-                тема = (f"Квантареон · {'страница ' + str(n) if з['тариф']=='shiv' else 'полный разбор дня'} · {итог['местное'].strftime('%d.%m.%Y')}"
-                        if ру else f"Quantareon · {'page ' + str(n) if з['тариф']=='shiv' else 'full reading of the day'} · {итог['местное'].strftime('%d.%m.%Y')}")
-                текст = ("Ваш разбор во вложении. Открывается в любом браузере." if ру else "Your reading is attached. Opens in any browser.")
-                П.отправить_файл(з["почта"], тема, текст, итог["imya_fayla"], итог["html"])
-            except Exception as e:
-                print(f"книга: письмо с файлом не ушло: {e}")
+            письмо_с_файлом(з, n, итог, lang)
     except Exception as e:
         зд.update({"gotovo": True, "oshibka": str(e)[:300], "etap": "ошибка"})
 
