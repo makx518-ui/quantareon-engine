@@ -315,9 +315,21 @@ def _тело_ловушки(сырое):
 
 @роутер.post("/api/oplata/push")
 async def push(request: Request):
+    """Два вида запроса от телефона:
+      1) пароль в адресе (…/push?k=ПАРОЛЬ), в теле — просто текст уведомления. Так настроен MacroDroid:
+         фигурные скобки у него служебные и JSON в теле он портит;
+      2) JSON {sekret, tekst} — как раньше."""
     секрет = os.getenv("OPLATA_SECRET", "")
-    т = _тело_ловушки(await request.body())
+    сырое = await request.body()
+    пароль_в_адресе = request.query_params.get("k") or request.headers.get("x-kassa")
+    т = _тело_ловушки(сырое)
+    if пароль_в_адресе:
+        if not isinstance(т, dict) or "tekst" not in т:
+            т = {"tekst": сырое.decode("utf-8", "replace").strip()}
+        т["sekret"] = пароль_в_адресе
     if not isinstance(т, dict):
+        показ = re.sub(r'("sekret"\s*:\s*")[^"]*', r'\1***', сырое[:160].decode("utf-8", "replace"))
+        print(f"касса: ловушка прислала непонятное тело: {показ!r}")
         return JSONResponse({"ok": False, "reason": "bad_request"}, status_code=400)
     if not секрет or not secrets.compare_digest(str(т.get("sekret") or "").encode(), секрет.encode()):
         return JSONResponse({"ok": False, "reason": "locked"}, status_code=403)
