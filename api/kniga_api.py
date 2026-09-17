@@ -39,23 +39,29 @@ async def vydat(request: Request):
     if not ПАРОЛЬ or str(з.get("klyuch_hozyaina") or "") != ПАРОЛЬ:
         return JSONResponse({"ok": False, "reason": "locked"}, status_code=403)
     зап = K.выдать(з.get("pochta") or "", з.get("tarif") or "den", int(з.get("dney") or 1), з.get("lang") or "ru")
-    ушло = False
-    if зап["почта"]:
-        try:
-            import pochta as П
-            ру = зап["lang"] == "ru"
-            тема = "Ваш ключ Квантареона" if ру else "Your Quantareon key"
-            текст = (f"Ваш ключ: {зап['ключ']}\n\nВведите его на странице quantareon.com/razbor-ru — и Квантареон "
-                     f"начнёт работу над {'книгой дней' if зап['тариф']=='shiv' else 'полным разбором дня'}."
-                     f"{' Срок книги — ' + str(зап['дней']) + ' дн.' if зап['тариф']=='shiv' else ''}\n\nХраните ключ: он ваш вход."
-                     if ру else
-                     f"Your key: {зап['ключ']}\n\nEnter it at quantareon.com/razbor — and Quantareon will start "
-                     f"{'your book of days' if зап['тариф']=='shiv' else 'the full reading of the day'}."
-                     f"{' The book lasts ' + str(зап['дней']) + ' days.' if зап['тариф']=='shiv' else ''}\n\nKeep the key: it is your entrance.")
-            ушло = П.отправить_текст(зап["почта"], тема, текст)
-        except Exception as e:
-            print(f"книга: письмо с ключом не ушло: {e}")
+    ушло = письмо_с_ключом(зап)
     return {"ok": True, "klyuch": зап["ключ"], "tarif": зап["тариф"], "dney": зап["дней"], "pismo": ушло}
+
+
+def письмо_с_ключом(зап):
+    """17.09 · письмо с ключом — одно на кабинет и на оплату. True — ушло."""
+    if not зап.get("почта"):
+        return False
+    try:
+        import pochta as П
+        ру = зап["lang"] == "ru"
+        тема = "Ваш ключ Квантареона" if ру else "Your Quantareon key"
+        текст = (f"Ваш ключ: {зап['ключ']}\n\nВведите его на странице quantareon.com/razbor-ru — и Квантареон "
+                 f"начнёт работу над {'книгой дней' if зап['тариф']=='shiv' else 'полным разбором дня'}."
+                 f"{' Срок книги — ' + str(зап['дней']) + ' дн.' if зап['тариф']=='shiv' else ''}\n\nХраните ключ: он ваш вход."
+                 if ру else
+                 f"Your key: {зап['ключ']}\n\nEnter it at quantareon.com/razbor — and Quantareon will start "
+                 f"{'your book of days' if зап['тариф']=='shiv' else 'the full reading of the day'}."
+                 f"{' The book lasts ' + str(зап['дней']) + ' days.' if зап['тариф']=='shiv' else ''}\n\nKeep the key: it is your entrance.")
+        return П.отправить_текст(зап["почта"], тема, текст)
+    except Exception as e:
+        print(f"книга: письмо с ключом не ушло: {e}")
+        return False
 
 
 @роутер.post("/api/kniga/udalit")

@@ -133,7 +133,10 @@ _РЕНДЕР_БЕЗ_ПАРОЛЯ = ("/api/render-dnya",
                       "/api/karta-dnya/zapustit", "/api/karta-dnya/status", "/api/karta-dnya/fayl",
                       # 16.09 · книга дней: по ключу покупателя. Открыты только эти три; выдача
                       # проверяет хозяйский пароль внутри, удаление — только из кабинета (за паролем).
-                      "/api/kniga/stranica", "/api/kniga/status", "/api/kniga/fayl", "/api/kniga/vydat")
+                      "/api/kniga/stranica", "/api/kniga/status", "/api/kniga/fayl", "/api/kniga/vydat",
+                      # 17.09 · касса СБП: заказ и статус — по номеру своего заказа; пуш ловушки
+                      # проверяет секрет внутри. Список и ручная отметка — только из кабинета.
+                      "/api/oplata/zakaz", "/api/oplata/status", "/api/oplata/push")
 
 
 @app.middleware("http")
@@ -3359,6 +3362,14 @@ try:
     print("📖 Книга дней: подключена")
 except Exception as _e:
     print(f"⚠️ Книга дней не подключилась: {type(_e).__name__}: {_e}")
+
+# 17.09 · касса по СБП: сумма-код заказа, пуш ловушки, ключ, отчёт в Telegram
+try:
+    import oplata_api as _oplata
+    app.include_router(_oplata.роутер)
+    print("💳 Касса СБП: подключена")
+except Exception as _e:
+    print(f"⚠️ Касса СБП не подключилась: {type(_e).__name__}: {_e}")
 
 
 def _карта_дня_в_фоне(номер, з):
