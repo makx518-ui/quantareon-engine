@@ -96,10 +96,12 @@ def _занята(з, сейчас):
 def _наружу(з):
     сейчас = _сейчас()
     сост = з["состояние"]
-    if сост == "ждёт" and _дата(з["до"]) <= сейчас:
+    if сост == "ждёт" and з.get("отменён"):
+        сост = "отменён"
+    elif сост == "ждёт" and _дата(з["до"]) <= сейчас:
         сост = "истёк"
     о = {"ok": True, "nomer": з["номер"], "summa": з["сумма"], "tarif": з["тариф"],
-         "sostoyanie": {"ждёт": "zhdet", "оплачен": "oplachen", "истёк": "istek"}[сост],
+         "sostoyanie": {"ждёт": "zhdet", "оплачен": "oplachen", "истёк": "istek", "отменён": "otmenen"}[сост],
          "do": з["до"], "telefon": ПОЛУЧАТЕЛЬ["telefon"], "bank": ПОЛУЧАТЕЛЬ["bank"],
          "imya": ПОЛУЧАТЕЛЬ["imya"]}
     if сост == "оплачен":
@@ -115,7 +117,25 @@ def _адрес(request):
             or (request.client.host if request.client else "")).strip()
 
 
-def _новый_заказ(почта, тариф, lang, адрес):
+def _секунда_входа(м):
+    """18.09 · секунда входа и место с главной — чтобы книга открылась с любого устройства
+    (например, на телефоне, куда перешли по коду). Проверяем, остальное отбрасываем."""
+    try:
+        iso = str(м.get("iso") or "")
+        когда = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        if когда.tzinfo is None:
+            return None
+        lat, lon, tz = float(м["lat"]), float(м["lon"]), float(м.get("tz") or 0)
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180 and -12 <= tz <= 14):
+            return None
+        if not (-600 < (_сейчас() - когда).total_seconds() < 86400 * 2):
+            return None
+        return {"iso": когда.isoformat(), "lat": lat, "lon": lon, "tz": tz}
+    except Exception:
+        return None
+
+
+def _новый_заказ(почта, тариф, lang, адрес, секунда=None):
     цена = ТАРИФЫ[тариф][0]
     with ЗАМОК:
         база = _читать()
@@ -128,10 +148,11 @@ def _новый_заказ(почта, тариф, lang, адрес):
         if sum(1 for з in база["заказы"] if з.get("адрес") == адрес and з["состояние"] == "ждёт"
                and _дата(з["до"]) > сейчас) >= ЗАКАЗОВ_С_АДРЕСА:
             return JSONResponse({"ok": False, "reason": "too_many"}, status_code=429)
-        # метка устройства нужна только пока заказ ждёт оплату — у остальных стираем
+        # метка устройства и секунда входа нужны только пока заказ ждёт оплату — у остальных стираем
         for старый in база["заказы"]:
-            if "адрес" in старый and not _занята(старый, сейчас):
-                старый.pop("адрес")
+            if not _занята(старый, сейчас):
+                старый.pop("адрес", None)
+                старый.pop("секунда", None)
         занятые = {з["сумма"] for з in база["заказы"] if _занята(з, сейчас)}
         сумма = next((цена + к for к in range(ПОЛОСА) if цена + к not in занятые), None)
         if сумма is None:
@@ -139,6 +160,8 @@ def _новый_заказ(почта, тариф, lang, адрес):
         з = {"номер": secrets.token_hex(8), "почта": почта, "тариф": тариф, "lang": lang, "сумма": сумма,
              "создан": сейчас.isoformat(), "до": (сейчас + timedelta(minutes=ЖИВЁТ_МИНУТ)).isoformat(),
              "состояние": "ждёт", "адрес": адрес}
+        if секунда:
+            з["секунда"] = секунда
         база["заказы"].append(з)
         _писать(база)
         return _наружу(з)
@@ -160,7 +183,8 @@ async def zakaz(request: Request):
     if not ПОЛУЧАТЕЛЬ["telefon"]:
         return JSONResponse({"ok": False, "reason": "not_ready"}, status_code=503)
     адрес = hashlib.sha256(_адрес(request).encode()).hexdigest()[:16]
-    return await run_in_threadpool(_новый_заказ, почта, тариф, lang, адрес)
+    секунда = _секунда_входа(т.get("moment")) if isinstance(т.get("moment"), dict) else None
+    return await run_in_threadpool(_новый_заказ, почта, тариф, lang, адрес, секунда)
 
 
 def _найти(nomer):
@@ -169,6 +193,32 @@ def _найти(nomer):
             if з["номер"] == nomer:
                 return _наружу(з)
     return None
+
+
+def _отменить(nomer):
+    """18.09 · покупатель передумал. Заказ сразу перестаёт ждать, но сумма ещё ЗАПАС_МИНУТ
+    за ним: если перевод всё же ушёл, оплата найдётся и ключ придёт на почту."""
+    with ЗАМОК:
+        база = _читать()
+        з = next((з for з in база["заказы"] if з["номер"] == nomer), None)
+        if з is None:
+            return None
+        if з["состояние"] == "ждёт" and not з.get("отменён"):
+            з["отменён"] = True
+            з["до"] = _сейчас().isoformat()
+            з.pop("адрес", None)
+            _писать(база)
+        return _наружу(з)
+
+
+@роутер.post("/api/oplata/otmena")
+async def otmena(request: Request):
+    try:
+        т = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "reason": "bad_request"}, status_code=400)
+    о = await run_in_threadpool(_отменить, str(т.get("nomer") or ""))
+    return о or JSONResponse({"ok": False, "reason": "no_order"}, status_code=404)
 
 
 @роутер.get("/api/oplata/status")
@@ -216,6 +266,12 @@ def _закрыть(з, как):
     from engine import kniga as K
     цена, вид, дней = ТАРИФЫ[з["тариф"]]
     зап = K.выдать(з["почта"], вид, дней, з["lang"])
+    с = з.pop("секунда", None)
+    if с:
+        try:
+            зап = K.открыть_корень(зап, с["iso"], с["lat"], с["lon"], с["tz"])
+        except Exception as e:
+            print(f"касса: корень книги не открылся: {e}")
     з.update({"состояние": "оплачен", "ключ": зап["ключ"], "оплачен": _сейчас().isoformat(), "как": как})
     з.pop("адрес", None)
     return зап

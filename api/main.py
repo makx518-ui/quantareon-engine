@@ -136,7 +136,9 @@ _РЕНДЕР_БЕЗ_ПАРОЛЯ = ("/api/render-dnya",
                       "/api/kniga/stranica", "/api/kniga/status", "/api/kniga/fayl", "/api/kniga/vydat",
                       # 17.09 · касса СБП: заказ и статус — по номеру своего заказа; пуш ловушки
                       # проверяет секрет внутри. Список и ручная отметка — только из кабинета.
-                      "/api/oplata/zakaz", "/api/oplata/status", "/api/oplata/push")
+                      "/api/oplata/zakaz", "/api/oplata/status", "/api/oplata/push",
+                      # 18.09 · отмена заказа покупателем — тоже по номеру своего заказа
+                      "/api/oplata/otmena")
 
 
 @app.middleware("http")

@@ -93,17 +93,7 @@ TOPICS: Dict[str, Dict] = {
             "progression", "synastry", "horary", "degree", "zodiac",
         ],
     },
-    "oracle": {
-        "file": "oracle.txt",
-        "words": [
-            "оракул", "oracle", "сон ", "сны", "снов", "сновиден", "приснил",
-            "нумеролог", "число судьбы", "психоматриц", "рун", "футарк",
-            "расклад", "кров", "резус", "группа кров", "удач", "прогноз удач",
-            "толкован", "трактовк", "гадан", "ton", "tonkeeper",
-            "oracle", "dream", "numerolog", "rune", "futhark", "blood",
-            "luck forecast", "interpretation", "spread",
-        ],
-    },
+    # 18.09 · Оракул отключён и убран из меню — тему о нём помощник больше не подгружает
     "audiokniga": {
         "file": "audiokniga.txt",
         "words": [
