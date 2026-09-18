@@ -1697,7 +1697,7 @@ FLUX_СЛЫШИТ = ("en", "ru", "es", "fr", "de", "it", "pt", "ja", "hi", "nl")
     "it": "Salve, viaggiatore! Sono Quantareon, l'assistente vocale di questo sito. Parlo la tua lingua — parla o scrivi, e ti risponderò in essa. Chiedimi quello che vuoi.",
     "pt": "Saudações, viajante! Sou Quantareon, o assistente de voz deste site. Falo o seu idioma — fale ou escreva, e responderei nele. Pergunte-me o que quiser.",
     "ja": "ようこそ、旅人よ。私は Quantareon、このサイトの音声アシスタントです。あなたの言語を話します — 話すか書くだけで、その言語でお答えします。何でもお尋ねください。",
-    "zh": "你好，旅人！我是 Quantareon，本站的语音助手。我会说你的语言 — 只需说话或打字，我就用它回复你。有什么想问的，尽管说。",
+    "zh": "你好，旅行者！我是 Quantareon，本站的语音助手。我会说你的语言 — 只需说话或打字，我就用它回复你。有什么想问的，尽管说。",
     "ar": "مرحباً أيها المسافر! أنا Quantareon، المساعد الصوتي لهذا الموقع. أتحدث لغتك — تحدث أو اكتب فقط، وسأرد بها. اسألني عما تشاء.",
     "hi": "नमस्कार, यात्री! मैं Quantareon हूँ, इस साइट का वॉइस असिस्टेंट। मैं आपकी भाषा बोलता हूँ — बस बोलें या लिखें, मैं उसी में उत्तर दूँगा। जो चाहें पूछें।",
 }
@@ -3573,7 +3573,7 @@ async def voice_health():
         "ok": True,
         # 🏷 МЕТКА СБОРКИ. 16.08: спорили вслепую, какой файл стоит на сервере.
         # Теперь видно одним запросом. Меняя voice.py — меняй и метку.
-        "сборка": "2026-09-18 языки-гостя",
+        "сборка": "2026-09-18 языки-гостя-2",
         "llm": current_model(),
         "stt": "Deepgram Nova-3",
         "tts_ru": f"{config.TTS_VOICE} @ {config.TTS_RATE}",
