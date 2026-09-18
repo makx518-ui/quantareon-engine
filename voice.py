@@ -240,7 +240,11 @@ class Config:
     
     # Greeting - cached at startup for instant response
     GREETING_TEXT: str = "Приветствую тебя путник! Я Квантареон, голосовой помощник этого сайта. Спрашивай, что тебя интересует."
-    GREETING_TEXT_EN: str = "Greetings, traveler! I am Quantareon, the voice assistant of this site. Ask me anything you like."
+    # 🌐 18.09 добавлена строка о многих языках: гость может сидеть с
+    # английским браузером, а говорить на своём — пусть знает, что можно.
+    GREETING_TEXT_EN: str = ("Greetings, traveler! I am Quantareon, the voice assistant of this site. "
+                             "I speak your language — just speak or write, and I will answer in it. "
+                             "Ask me anything you like.")
     
     # 👑 Добавляется ТОЛЬКО создателю (узнан по секретному ключу или админ-куке)
     OWNER_BLOCK: str = """
@@ -963,10 +967,20 @@ def _tts_clean(text: str, language: str = "ru", udar: bool = True) -> str:
     t = re.sub(r"\s+", " ", t).strip()
 
     # ≈ и прочие значки голос читает невнятно или пропускает
-    t = t.replace("≈", " about ").replace("~", " about ") if not str(language).lower().startswith("ru") \
-        else t.replace("≈", " примерно ").replace("~", " примерно ")
+    # 🌐 18.09 значок «примерно» — словом на своём языке; для прочих языков
+    # просто убираем, чтобы голос не вставлял английское слово в японскую фразу.
+    _яз = str(language).lower()
+    if _яз.startswith("ru"):
+        t = t.replace("≈", " примерно ").replace("~", " примерно ")
+    elif _яз.startswith("en"):
+        t = t.replace("≈", " about ").replace("~", " about ")
+    else:
+        t = t.replace("≈", " ").replace("~", " ")
 
-    if not str(language).lower().startswith("ru"):
+    # 🌐 18.09 ЧИСЛА ПО-АНГЛИЙСКИ — ТОЛЬКО АНГЛИЙСКОМУ.
+    # Раньше сюда заходил любой нерусский язык, и в испанскую фразу
+    # вставлялось «degrees Celsius», а в японскую «percent».
+    if _яз.startswith("en"):
         # 🔢 АНГЛИЙСКИЕ ЧИСЛА. Раньше их не трогали вовсе, и голос читал
         # «81.29 rubles» как «восемьдесят один точка двадцать девять».
         # Округляем так же, как в русской ветке: погода и крупные суммы —
@@ -1389,7 +1403,25 @@ class GeoLocation:
             user_now = datetime.now(user_tz)
             
             day = msk_now.day
-            is_en = str(lang).lower().startswith("en")
+            _к = str(lang).lower()[:2]
+
+            # 🌐 18.09 ОСТАЛЬНЫЕ ДЕВЯТЬ ЯЗЫКОВ. Русская и английская присказки
+            # ниже остались нетронутыми — там его выверенные обороты и слова
+            # вроде «восемнадцатое» прописью.
+            if _к in КАЛЕНДАРЬ:
+                к = КАЛЕНДАРЬ[_к]
+                фраза = к["шаблон"].format(
+                    wd=к["дни"][msk_now.weekday()],
+                    m=к["мес"][msk_now.month - 1],
+                    d=day,
+                    t=msk_now.strftime("%H:%M"))
+                if user_tz != msk_tz:
+                    фраза += к["ваше"].format(ut=user_now.strftime("%H:%M"))
+                фраза += "." if _к not in ("ja", "zh") else "。"
+                logger.info(f"🎤 Filler ({_к}): {фраза}")
+                return фраза
+
+            is_en = not _к.startswith("ru")
 
             if is_en:
                 month = self.MONTHS_EN[msk_now.month]
@@ -1471,7 +1503,10 @@ class FluxSTT:
         self.on_interim = None      # промежуточный текст (для окна)
         self.on_turn_end = on_turn_end          # реплика закончена — вот текст
         self.on_error = on_error
-        self.lang = "en" if str(lang).lower().startswith("en") else "ru"
+        # 🌐 18.09 язык гостя, а не только ru/en. Flux слышит десять языков;
+        # китайского и арабского среди них нет — таких ведёт Nova-3.
+        _к = _код_языка(lang) or "ru"
+        self.lang = _к if _к in FLUX_СЛЫШИТ else "en"
 
         self._ws = None
         self._receive_task = None
@@ -1626,6 +1661,231 @@ _ПОДСКАЗКИ_EN = [
 ]
 
 
+# ═══════════════════════════════════════════════════════════
+# 🌐 ЯЗЫКИ ГОСТЯ (18.09) — перенос отлаженной логики Оракула
+#
+# На РУССКОЙ версии ничего не меняется: там русский и только русский.
+# На АНГЛИЙСКОЙ помощник отвечает на языке гостя — те же одиннадцать
+# языков, что уже проверены на Оракуле.
+#
+# Как узнаём язык:
+#   · распознаватель — по языку браузера (иначе ему нечем выбрать модель);
+#   · ответ и озвучка — по тексту самой реплики, как в Оракуле; если
+#     текст ни о чём не говорит, берём язык браузера.
+#
+# Озвучка: Эндрю (en-US-AndrewMultilingualNeural) — мультиязычный голос
+# Microsoft. Ему НЕ НАДО называть язык: он определяет его по тексту сам.
+# Так же он зовётся и в Оракуле.
+# ═══════════════════════════════════════════════════════════
+
+ЯЗЫКИ_ГОСТЯ = ("en", "ru", "es", "fr", "de", "it", "pt", "ja", "zh", "ar", "hi")
+
+# Что слышит Flux (быстрый распознаватель): десять языков, без китайского
+# и арабского. Гостя на этих двух ведём обычным Nova-3 — он их слышит.
+FLUX_СЛЫШИТ = ("en", "ru", "es", "fr", "de", "it", "pt", "ja", "hi", "nl")
+
+# Приветствие на одиннадцати языках. Имя Quantareon везде латиницей —
+# чтобы голос прочитал его одинаково во всех языках.
+# ⚠️ Русское приветствие оставлено ровно прежним: его голосом Ермила
+# записан файл в хранилище, и русскую сторону не трогаем.
+ПРИВЕТСТВИЕ = {
+    "en": "Greetings, traveler! I am Quantareon, the voice assistant of this site. I speak your language — just speak or write, and I will answer in it. Ask me anything you like.",
+    "ru": "Приветствую тебя путник! Я Квантареон, голосовой помощник этого сайта. Спрашивай, что тебя интересует.",
+    "es": "¡Saludos, viajero! Soy Quantareon, el asistente de voz de este sitio. Hablo tu idioma — solo habla o escribe, y te responderé en él. Pregúntame lo que quieras.",
+    "fr": "Salutations, voyageur ! Je suis Quantareon, l'assistant vocal de ce site. Je parle ta langue — parle ou écris simplement, et je te répondrai dans celle-ci. Demande-moi ce que tu veux.",
+    "de": "Sei gegrüßt, Wanderer! Ich bin Quantareon, der Sprachassistent dieser Seite. Ich spreche deine Sprache — sprich oder schreib einfach, und ich antworte darin. Frag mich, was du möchtest.",
+    "it": "Salve, viaggiatore! Sono Quantareon, l'assistente vocale di questo sito. Parlo la tua lingua — parla o scrivi, e ti risponderò in essa. Chiedimi quello che vuoi.",
+    "pt": "Saudações, viajante! Sou Quantareon, o assistente de voz deste site. Falo o seu idioma — fale ou escreva, e responderei nele. Pergunte-me o que quiser.",
+    "ja": "ようこそ、旅人よ。私は Quantareon、このサイトの音声アシスタントです。あなたの言語を話します — 話すか書くだけで、その言語でお答えします。何でもお尋ねください。",
+    "zh": "你好，旅人！我是 Quantareon，本站的语音助手。我会说你的语言 — 只需说话或打字，我就用它回复你。有什么想问的，尽管说。",
+    "ar": "مرحباً أيها المسافر! أنا Quantareon، المساعد الصوتي لهذا الموقع. أتحدث لغتك — تحدث أو اكتب فقط، وسأرد بها. اسألني عما تشاء.",
+    "hi": "नमस्कार, यात्री! मैं Quantareon हूँ, इस साइट का वॉइस असिस्टेंट। मैं आपकी भाषा बोलता हूँ — बस बोलें या लिखें, मैं उसी में उत्तर दूँगा। जो चाहें पूछें।",
+}
+
+
+def _код_языка(lang) -> str:
+    """Любую запись языка приводим к двум буквам из нашего списка."""
+    к = str(lang or "").strip().lower().replace("_", "-")[:2]
+    return к if к in ЯЗЫКИ_ГОСТЯ else ""
+
+
+def язык_браузера(accept_language: str, по_умолчанию: str = "en") -> str:
+    """Язык гостя из заголовка браузера (Accept-Language).
+
+    Браузер присылает список с весами: «es-ES,es;q=0.9,en;q=0.8».
+    Берём первый, который мы умеем. Не нашли — язык страницы.
+    """
+    try:
+        куски = []
+        for часть in str(accept_language or "").split(","):
+            часть = часть.strip()
+            if not часть:
+                continue
+            имя, _, хвост = часть.partition(";")
+            вес = 1.0
+            if "q=" in хвост:
+                try:
+                    вес = float(хвост.split("q=")[1])
+                except Exception:
+                    вес = 1.0
+            куски.append((вес, имя.strip()))
+        for _, имя in sorted(куски, key=lambda п: -п[0]):
+            к = _код_языка(имя)
+            if к:
+                return к
+    except Exception:
+        pass
+    return по_умолчанию
+
+
+def язык_текста(text: str, запасной: str = "en") -> str:
+    """Язык по самому тексту. Пусто — значит не уверены, и трогать не надо.
+
+    Логика Оракула: сначала письменность (её ни с чем не спутать), потом
+    для латиницы — по приметным буквам и частым словам. Если примет нет,
+    возвращаем пусто: пусть остаётся язык браузера. Раньше тут был
+    «английский по умолчанию» — и короткое «Hola!» уводило испанца
+    на английский, то есть делало хуже, чем ничего.
+    """
+    try:
+        t = text or ""
+        if len(t.strip()) < 2:
+            return ""
+        кириллица = len(re.findall(r"[а-яА-ЯёЁ]", t))
+        латиница = len(re.findall(r"[a-zA-Z]", t))
+        хирагана = len(re.findall(r"[\u3040-\u309f]", t))
+        катакана = len(re.findall(r"[\u30a0-\u30ff]", t))
+        китай = len(re.findall(r"[\u4e00-\u9fff]", t))
+        арабица = len(re.findall(r"[\u0600-\u06ff]", t))
+        деванагари = len(re.findall(r"[\u0900-\u097f]", t))
+
+        # ── письменность: тут ошибиться невозможно ──
+        # японский ПЕРЕД китайским: он берёт те же иероглифы, но хирагана
+        # и катакана бывают только у него
+        if хирагана + катакана >= 1:
+            return "ja"
+        if китай >= 2:
+            return "zh"
+        if арабица >= 2:
+            return "ar"
+        if деванагари >= 2:
+            return "hi"
+        if кириллица > латиница and кириллица >= 2:
+            return "ru"
+        if латиница == 0:
+            return ""
+
+        н = t.lower()
+
+        # ── приметные буквы: одной хватает ──
+        if re.search(r"[ñ¿¡]", н):
+            return "es"
+        if re.search(r"[ãõ]", н) or re.search(r"\b(voc[eê]|n[aã]o|obrigad[oa])\b", н):
+            return "pt"
+        if re.search(r"[ßäöü]", н) and not re.search(r"[àâçéèêëîïôûùœ]", н):
+            return "de"
+        # ⚠️ «ç» встречается и в португальском («você»), поэтому по ней одной
+        # французский не опознаём — только по буквам, которых нет у соседей.
+        if re.search(r"[œâêîôûë]", н):
+            return "fr"
+
+        # ── частые слова: двух хватает ──
+        def сколько(шаблон):
+            return len(re.findall(шаблон, н))
+
+        счёт = {
+            "es": сколько(r"\b(el|la|los|las|un|una|que|qu[eé]|con|pero|como|soy|hola|gracias|por|para|est[aá]|muy|d[oó]nde|c[oó]mo|puedes|quiero)\b"),
+            "fr": сколько(r"\b(le|la|les|un|une|que|avec|mais|comme|je|suis|bonjour|merci|pour|vous|est|o[uù]|comment|peux|veux)\b"),
+            "de": сколько(r"\b(der|die|das|ein|eine|und|mit|aber|ich|bin|hallo|danke|nicht|ist|sie|was|wie|kannst|m[oö]chte)\b"),
+            "it": сколько(r"\b(il|lo|la|gli|che|con|ma|come|sono|ciao|grazie|per|questo|molto|dove|puoi|voglio)\b"),
+            "pt": сколько(r"\b(o|a|os|as|um|uma|que|com|mas|como|sou|ol[aá]|obrigado|para|est[aá]|muito|onde|pode|quero)\b"),
+            "en": сколько(r"\b(the|is|are|you|what|can|how|i|and|with|but|hello|thanks|for|this|where|want)\b"),
+        }
+        лучший = max(счёт, key=счёт.get)
+        if счёт[лучший] >= 2:
+            # если два языка идут вровень — не угадываем
+            вторые = sorted(счёт.values(), reverse=True)
+            if len(вторые) > 1 and вторые[0] == вторые[1]:
+                return ""
+            return лучший
+        return ""
+    except Exception:
+        return ""
+
+
+# ═══════════════════════════════════════════════════════════
+# 🗓️ ПРИСКАЗКА ПРО ВРЕМЯ НА ОДИННАДЦАТИ ЯЗЫКАХ (18.09)
+#
+# Присказка звучит ПОСЛЕ первого вопроса человека — значит язык к этому
+# времени уже известен по его же словам, и говорить её надо на нём.
+# Русская и английская лежат отдельно, как лежали; здесь — остальные девять.
+# ═══════════════════════════════════════════════════════════
+КАЛЕНДАРЬ = {
+    "es": {
+        "мес": ["enero","febrero","marzo","abril","mayo","junio","julio","agosto",
+                "septiembre","octubre","noviembre","diciembre"],
+        "дни": ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"],
+        "шаблон": "Hoy es {wd}, {d} de {m}, son las {t} hora de Moscú",
+        "ваше": ", {ut} en tu zona",
+    },
+    "fr": {
+        "мес": ["janvier","février","mars","avril","mai","juin","juillet","août",
+                "septembre","octobre","novembre","décembre"],
+        "дни": ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"],
+        "шаблон": "Nous sommes {wd} {d} {m}, il est {t} heure de Moscou",
+        "ваше": ", {ut} chez vous",
+    },
+    "de": {
+        "мес": ["Januar","Februar","März","April","Mai","Juni","Juli","August",
+                "September","Oktober","November","Dezember"],
+        "дни": ["Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"],
+        "шаблон": "Heute ist {wd}, der {d}. {m}, {t} Uhr Moskauer Zeit",
+        "ваше": ", {ut} bei Ihnen",
+    },
+    "it": {
+        "мес": ["gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto",
+                "settembre","ottobre","novembre","dicembre"],
+        "дни": ["lunedì","martedì","mercoledì","giovedì","venerdì","sabato","domenica"],
+        "шаблон": "Oggi è {wd} {d} {m}, sono le {t} ora di Mosca",
+        "ваше": ", {ut} da te",
+    },
+    "pt": {
+        "мес": ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto",
+                "setembro","outubro","novembro","dezembro"],
+        "дни": ["segunda-feira","terça-feira","quarta-feira","quinta-feira","sexta-feira",
+                "sábado","domingo"],
+        "шаблон": "Hoje é {wd}, {d} de {m}, {t} hora de Moscou",
+        "ваше": ", {ut} no seu fuso",
+    },
+    "ja": {
+        "мес": ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],
+        "дни": ["月曜日","火曜日","水曜日","木曜日","金曜日","土曜日","日曜日"],
+        "шаблон": "今日は{m}{d}日{wd}、モスクワ時間で{t}です",
+        "ваше": "、そちらは{ut}です",
+    },
+    "zh": {
+        "мес": ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"],
+        "дни": ["星期一","星期二","星期三","星期四","星期五","星期六","星期日"],
+        "шаблон": "今天是{m}{d}日{wd}，莫斯科时间{t}",
+        "ваше": "，你那里是{ut}",
+    },
+    "ar": {
+        "мес": ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس",
+                "سبتمبر","أكتوبر","نوفمبر","ديسمبر"],
+        "дни": ["الاثنين","الثلاثاء","الأربعاء","الخميس","الجمعة","السبت","الأحد"],
+        "шаблон": "اليوم {wd}، {d} {m}، الساعة {t} بتوقيت موسكو",
+        "ваше": "، {ut} بتوقيتك",
+    },
+    "hi": {
+        "мес": ["जनवरी","फ़रवरी","मार्च","अप्रैल","मई","जून","जुलाई","अगस्त",
+                "सितंबर","अक्टूबर","नवंबर","दिसंबर"],
+        "дни": ["सोमवार","मंगलवार","बुधवार","गुरुवार","शुक्रवार","शनिवार","रविवार"],
+        "шаблон": "आज {wd}, {d} {m} है, मास्को समय {t}",
+        "ваше": ", आपके यहाँ {ut}",
+    },
+}
+
+
 def _подсказки_слов(lang: str = "ru") -> list:
     """Параметры keyterm для адреса распознавателя.
 
@@ -1634,7 +1894,21 @@ def _подсказки_слов(lang: str = "ru") -> list:
     свои = os.getenv("STT_KEYTERMS", "").strip()
     if свои.lower() in ("нет", "no", "off", "0"):
         return []
-    слова = list(_ПОДСКАЗКИ_EN if str(lang).lower().startswith("en") else _ПОДСКАЗКИ_RU)
+    # 🌐 18.09 ПОДСКАЗКИ ТОЛЬКО РУССКОМУ И АНГЛИЙСКОМУ.
+    # На этих двух они проверены в бою. Для остальных девяти языков
+    # молчим: как распознаватель отнесётся к английским подсказкам при
+    # японском или арабском — в описании Deepgram не сказано, а голос
+    # дороже подсказок. Названия разделов всё равно пишутся латиницей,
+    # их он услышит и без нашей помощи.
+    _к = str(lang).lower()[:2]
+    if _к == "ru":
+        слова = list(_ПОДСКАЗКИ_RU)
+    elif _к == "en":
+        слова = list(_ПОДСКАЗКИ_EN)
+    else:
+        слова = []
+    if not слова and not свои:
+        return []
     if свои:
         слова += [с.strip() for с in свои.split(",") if с.strip()]
     from urllib.parse import quote
@@ -1652,7 +1926,9 @@ class DeepgramSTT:
         self.on_interim = None   # 🌊 потоковый текст, пока человек говорит
         self.on_error = on_error
         # 🌐 Язык распознавания: приходит со страницы (ru по умолчанию)
-        self.lang = "en" if str(lang).lower().startswith("en") else "ru"
+        # 🌐 18.09 язык гостя целиком: Nova-3 слышит все одиннадцать,
+        # включая китайский и арабский.
+        self.lang = _код_языка(lang) or "ru"
         
         self._ws = None
         self._receive_task = None
@@ -2285,7 +2561,8 @@ class GroqLLM:
         self.history: List[Dict] = []
         self._session: Optional[aiohttp.ClientSession] = None
         self.user_id: int = 0
-        self.lang: str = "ru"          # 🌐 язык страницы, с которой пришли
+        self.lang: str = "ru"           # 🌐 язык ГОСТЯ (на английской версии — любой из 11)
+        self.lang_stranicy: str = "ru"  # 🌐 язык самой страницы: только ru или en
     
     async def _get_session(self):
         if not self._session or self._session.closed:
@@ -2321,7 +2598,9 @@ class GroqLLM:
                     user_input,
                     sticky_topic=getattr(self, "_last_topic", None),
                     deep=deep,
-                    lang=getattr(self, "lang", "ru"),   # знания на языке страницы
+                    # 🌐 18.09 знания написаны на двух языках; гостю на любом
+                    # нерусском даём английские, дальше модель сама переведёт
+                    lang=("ru" if str(getattr(self, "lang", "ru")).startswith("ru") else "en"),
                     sticky_part=_липкая_часть,
                 )
                 if block:
@@ -2333,11 +2612,27 @@ class GroqLLM:
                 logger.warning(f"VOICE: знания не подмешались: {e}")
         # 🌐 Английская версия сайта: характер описан по-русски, и память тянет
         # ассистента обратно в русский. Поэтому язык задаём прямо и жёстко.
-        if getattr(self, "lang", "ru") == "en":
-            system += ("\n\n[LANGUAGE - OVERRIDES EVERYTHING ABOVE]: The user is on the English "
-                       "version of the site. Reply in English ONLY, every single time, even if the "
-                       "user's message is short, ambiguous, or written in another language, and even "
-                       "if your memory of this user is in Russian. Never mix languages.")
+        # 🌐 18.09 ЯЗЫК ГОСТЯ. На русской версии — только русский, как было.
+        # На английской — язык самого гостя: приказ берём из словаря Оракула,
+        # он там выверен на живых людях.
+        _яз_гостя = getattr(self, "lang", "ru")
+        if not str(getattr(self, "lang_stranicy", "ru")).startswith("ru"):
+            # 🌐 18.09 ЯЗЫК РЕШАЕТ САМА МОДЕЛЬ — по словам собеседника.
+            # Жёстко называть ей один язык нельзя: ошибёмся в определении —
+            # запрём испанца в английском. Поэтому даём ПРАВИЛО и СПИСОК,
+            # а наше определение идёт лишь подсказкой. Так это и сделано
+            # в Оракуле, где одиннадцать языков проверены на живых людях.
+            system += (
+                "\n\n[LANGUAGE - OVERRIDES EVERYTHING ABOVE]\n"
+                "Answer in the SAME language the person is using. Look at their message "
+                "and reply in that language — every single time.\n"
+                "You speak these languages: English, Русский, Español, Français, Deutsch, "
+                "Italiano, Português, 日本語, 中文, العربية, हिन्दी.\n"
+                "If the person switches language mid-conversation, switch with them.\n"
+                "Never mix two languages in one answer. Never answer in Russian unless the "
+                "person wrote in Russian.\n"
+                f"Hint: their browser and their last message look like «{_яз_гостя}» — "
+                "but the person's own words decide, not this hint.")
         else:
             system += ("\n\n[ЯЗЫК — ВАЖНЕЕ ВСЕГО, ЧТО НАПИСАНО ВЫШЕ]: Собеседник на русской "
                        "версии сайта. Отвечай ТОЛЬКО на русском языке — всегда, без единого "
@@ -2705,12 +3000,17 @@ class EdgeTTSTurbo:
                 f"на {int(config.YANDEX_ПАУЗА_СЕК / 60)} минут к Дмитрию")
     
     def __init__(self, lang: str = "ru"):
-        en = str(lang).lower().startswith("en")
+        # 🌐 18.09 К ЭНДРЮ ИДЁТ ЛЮБОЙ НЕРУССКИЙ ЯЗЫК.
+        # Раньше условие было «начинается с en» — и гость-испанец попадал
+        # к русскому Ермилу. Эндрю мультиязычный: язык он берёт из текста
+        # сам, называть его не нужно (так же зовут его и в Оракуле).
+        _к = _код_языка(lang) or "ru"
+        en = (_к != "ru")
         self.voice = config.TTS_VOICE_EN if en else config.TTS_VOICE
         self.rate = config.TTS_RATE_EN if en else config.TTS_RATE
         self.pitch = config.TTS_PITCH_EN if en else config.TTS_PITCH
         self.volume = config.TTS_VOLUME_EN if en else config.TTS_VOLUME
-        self.lang = "en" if en else "ru"
+        self.lang = _к if en else "ru"
         # 🗣️ 24.08 Яндекс — основной, Дмитрий (Edge) — запасной.
         # ⚠️ ТОЛЬКО РУССКИЙ. Английскую сторону он трогать запретил:
         # там Эндрю его устраивает, а английский голос у Яндекса один
@@ -3004,6 +3304,9 @@ class EdgeTTSTurbo:
 # ============================================================
 CACHED_GREETING_AUDIO: bytes = b""
 CACHED_GREETING_AUDIO_EN: bytes = b""
+# 🌐 18.09 приветствия на прочих девяти языках — озвучиваются при первом
+# гостe на этом языке и дальше живут в памяти до перезапуска
+ПРИВЕТ_КЕШ: Dict[str, bytes] = {}
 # 🗣️ 25.08 ВТОРОЕ ПРИВЕТСТВИЕ — голосом Ермила, только для умной модели.
 # Файл один на всех отдавать нельзя: заменили бы — и гости на быстрой
 # слышали бы Ермила в приветствии, а дальше Дмитрия. Поэтому держим два,
@@ -3065,11 +3368,12 @@ async def warm_greetings():
         if not CACHED_GREETING_AUDIO:
             CACHED_GREETING_AUDIO = await EdgeTTSTurbo("ru").synthesize(config.GREETING_TEXT)
             откуда_ru = "синтез"
-        CACHED_GREETING_AUDIO_EN = await _из_хранилища("en")
-        откуда_en = "хранилище"
-        if not CACHED_GREETING_AUDIO_EN:
-            CACHED_GREETING_AUDIO_EN = await EdgeTTSTurbo("en").synthesize(config.GREETING_TEXT_EN)
-            откуда_en = "синтез"
+        # 🌐 18.09 АНГЛИЙСКОЕ ПРИВЕТСТВИЕ ОЗВУЧИВАЕМ ЗАНОВО, из хранилища
+        # НЕ берём: там лежит прежняя запись, без строки о многих языках.
+        # Русское по-прежнему из хранилища — оно голосом Ермила, такого
+        # синтезом не повторить.
+        CACHED_GREETING_AUDIO_EN = await EdgeTTSTurbo("en").synthesize(config.GREETING_TEXT_EN)
+        откуда_en = "синтез"
         # 🗣️ 25.08 ПРИВЕТСТВИЕ ЕРМИЛА для умной модели. Лежит в хранилище
         # рядом со старым, отдельным файлом — старое остаётся гостям.
         # Нет файла — не беда: на умной отдадим обычное, не замолчим.
@@ -3218,7 +3522,7 @@ async def voice_debug(key: str = ""):
 
 
 @router.get("/api/greeting")
-async def get_greeting(lang: str = "ru"):
+async def get_greeting(request: Request, lang: str = "ru"):
     """Отдать заранее озвученное приветствие (ru/en).
 
     🗣️ 26.08 Приветствие Ермила теперь ВСЕМ, а не только на умной модели:
@@ -3226,10 +3530,37 @@ async def get_greeting(lang: str = "ru"):
     Файла нет в хранилище — молча отдаём прежнее, человек не останется
     без приветствия.
     """
-    if str(lang).lower().startswith("en"):
+    # 🌐 18.09 на английской версии здороваемся на языке гостя — его
+    # присылает сам браузер. Русская версия остаётся русской всегда.
+    _к = _код_языка(lang) or "ru"
+    # Сайт назвал язык прямо — уважаем его. Пришло голое «en» (английская
+    # страница, языка гостя сайт не знает) — уточняем по браузеру.
+    if _к == "en":
+        _к = язык_браузера(request.headers.get("accept-language", ""), "en")
+
+    # русский и английский лежат готовыми с запуска — отдаём мгновенно
+    if _к == "ru":
+        audio = CACHED_GREETING_ERMIL or CACHED_GREETING_AUDIO
+    elif _к == "en":
         audio = CACHED_GREETING_AUDIO_EN
     else:
-        audio = CACHED_GREETING_ERMIL or CACHED_GREETING_AUDIO
+        # 🌐 18.09 ОСТАЛЬНЫЕ ДЕВЯТЬ ЯЗЫКОВ — озвучиваем при первом гостe
+        # и держим в памяти. Готовить все одиннадцать на запуске незачем:
+        # большинство из них может не понадобиться ни разу за день.
+        audio = ПРИВЕТ_КЕШ.get(_к, b"")
+        if not audio:
+            try:
+                audio = await EdgeTTSTurbo(_к).synthesize(ПРИВЕТСТВИЕ[_к])
+                if audio:
+                    ПРИВЕТ_КЕШ[_к] = audio
+                    logger.info(f"VOICE: приветствие {_к} озвучено ({len(audio)} байт)")
+            except Exception as e:
+                logger.warning(f"VOICE: приветствие {_к} не озвучилось: {e}")
+                audio = b""
+        # не вышло — пусть гость слышит хотя бы английское
+        if not audio:
+            audio = CACHED_GREETING_AUDIO_EN
+
     if audio:
         return Response(content=audio, media_type="audio/mpeg")
     return JSONResponse({"error": "greeting not ready"}, status_code=503)
@@ -3242,7 +3573,7 @@ async def voice_health():
         "ok": True,
         # 🏷 МЕТКА СБОРКИ. 16.08: спорили вслепую, какой файл стоит на сервере.
         # Теперь видно одним запросом. Меняя voice.py — меняй и метку.
-        "сборка": "2026-08-18 скорость-ноль",
+        "сборка": "2026-09-18 языки-гостя",
         "llm": current_model(),
         "stt": "Deepgram Nova-3",
         "tts_ru": f"{config.TTS_VOICE} @ {config.TTS_RATE}",
@@ -3291,12 +3622,18 @@ class VoiceSessionTurbo:
         self.barge_in_requested = False
         self.first_message = True
         
-        self.lang: str = "ru"          # 🌐 язык страницы, с которой пришли
+        self.lang: str = "ru"          # 🌐 язык ГОСТЯ (11 языков на английской версии)
+        self.lang_stranicy: str = "ru"  # 🌐 язык самой страницы: только ru или en
         self._last_topic = None        # 📚 раздел сайта, о котором сейчас речь
         self.user_tz: str = ""         # 🕐 часовой пояс браузера (точнее, чем по IP)
         self.cached_filler_audio: bytes = b""
         self.cached_filler_text: str = ""
         self.filler_ready = asyncio.Event()
+        # 🗓️ 18.09 номер поколения присказки. Если язык гостя поменялся по
+        # его словам, мы запускаем вторую озвучку — а первая в этот момент
+        # ещё идёт. Без номера она допишет свой английский результат поверх
+        # нужного, и человек услышит чужой язык. Номер решает, чей ответ в силе.
+        self._filler_gen: int = 0
         
         # 🧠 Memory
         self.user_id: int = 0
@@ -3414,8 +3751,9 @@ class VoiceSessionTurbo:
     
     async def _cache_filler(self):
         """Кешируем филлер в фоне — готов к мгновенной отправке."""
+        моё = getattr(self, "_filler_gen", 0)
         try:
-            self.cached_filler_text = self.geo.generate_filler(self.lang)
+            текст = self.geo.generate_filler(self.lang)
 
             # 🗣️ 24.08 ПРИСКАЗКА ИДЁТ ТЕМ ЖЕ ПУТЁМ, ЧТО И ОТВЕТ.
             # Раньше она звалась к Edge напрямую, мимо класса озвучки. При
@@ -3426,16 +3764,26 @@ class VoiceSessionTurbo:
             # ставится в finally, сессия не виснет, ждут её максимум 2 с.
             # ⚠️ Готовится ОДИН РАЗ в начале сессии: переключишь модель
             # посреди разговора — присказка останется прежним голосом.
-            self.cached_filler_audio = await self.tts.synthesize(
-                self.cached_filler_text)
+            звук = await self.tts.synthesize(текст)
+
+            # опоздали: язык успели сменить, и уже готовится другая присказка
+            if моё != getattr(self, "_filler_gen", 0):
+                logger.info(f"[{self.session_id}] 🗓️ присказка поколения {моё} "
+                            f"устарела — не ставлю")
+                return
+
+            self.cached_filler_text = текст
+            self.cached_filler_audio = звук
             logger.info(f"[{self.session_id}] ✅ Filler cached: {len(self.cached_filler_audio)} bytes")
 
         except Exception as e:
             logger.error(f"[{self.session_id}] Filler cache error: {e}")
-            self.cached_filler_text = "Hello!" if self.lang == "en" else "Привет!"
-            self.cached_filler_audio = b""
+            if моё == getattr(self, "_filler_gen", 0):
+                self.cached_filler_text = "Привет!" if str(self.lang).startswith("ru") else "Hello!"
+                self.cached_filler_audio = b""
         finally:
-            self.filler_ready.set()
+            if моё == getattr(self, "_filler_gen", 0):
+                self.filler_ready.set()
     
     async def handle_audio(self, audio_data: bytes):
         # 🤫 для придержки: слышна ли ПРЯМО СЕЙЧАС речь. Текст от Deepgram
@@ -4201,6 +4549,41 @@ class VoiceSessionTurbo:
             # Значок «Ищу…» зажигается по сигналу от модели — колбэк ниже.
             web_ctx = ""
 
+            # 🌐 18.09 ЯЗЫК ОТВЕТА — ПО ТЕКСТУ РЕПЛИКИ, как в Оракуле.
+            # Браузер говорит, какой язык у гостя, но человек может писать
+            # и на другом. Русская версия сюда не заходит — она русская.
+            if not str(getattr(self, "lang", "ru")).startswith("ru"):
+                try:
+                    _новый = язык_текста(transcript)
+                    if _новый and _новый != self.lang:
+                        logger.info(f"[{self.session_id}] 🌐 язык гостя: "
+                                    f"{self.lang} → {_новый} (по тексту реплики)")
+                        self.lang = _новый
+                        self.llm.lang = _новый
+                        self.tts = EdgeTTSTurbo(_новый)
+
+                        # 🗓️ 18.09 ПРИСКАЗКА ПРО ВРЕМЯ — НА ЕГО ЯЗЫКЕ.
+                        # Она звучит перед первым ответом, то есть УЖЕ ПОСЛЕ
+                        # его вопроса. Готовили её по браузеру; раз человек
+                        # заговорил на другом языке — переозвучиваем, иначе
+                        # выйдет разнобой: приветствие на одном, время на
+                        # другом. Не успеет за отведённые секунды — просто
+                        # не прозвучит, ответ от этого не задержится.
+                        if self.first_message:
+                            try:
+                                self._filler_gen = getattr(self, "_filler_gen", 0) + 1
+                                self.filler_ready = asyncio.Event()
+                                self.cached_filler_audio = b""
+                                self.cached_filler_text = ""
+                                asyncio.create_task(self._cache_filler())
+                                logger.info(f"[{self.session_id}] 🗓️ присказка "
+                                            f"переозвучивается на {_новый}")
+                            except Exception as e:
+                                logger.warning(f"[{self.session_id}] присказку "
+                                               f"переозвучить не вышло: {e}")
+                except Exception as e:
+                    logger.warning(f"[{self.session_id}] язык по тексту не определился: {e}")
+
             await self._send_json({
                 "type": "status",
                 "status": "thinking",
@@ -4325,7 +4708,14 @@ class VoiceSessionTurbo:
                 # 🇷🇺 Второй рубеж: на русской версии ответ жёстко русифицируем
                 # (промпт — просьба, этот фильтр — замок). Ловит украинский,
                 # белорусский и прочих родственников по чужим буквам.
-                if getattr(self, "lang", "ru") != "en":
+                # 🌐 18.09 замок русского языка работает ТОЛЬКО на русской СТРАНИЦЕ.
+                # Было «не английский» — и на английской версии он вырезал бы
+                # испанский, японский и все прочие ответы гостю.
+                # ⚠️ Смотрим именно на страницу, а не на язык гостя: русский
+                # человек на английской странице получает ответ по-русски, но
+                # с английскими названиями разделов — замок принял бы их за
+                # чужую латиницу и выбросил.
+                if str(getattr(self, "lang_stranicy", "ru")).startswith("ru"):
                     text_chunk = GroqLLM.только_русский(text_chunk)
                     if not text_chunk:
                         continue
@@ -4446,7 +4836,7 @@ class VoiceSessionTurbo:
 
             # 🇷🇺 Если фильтр языка вычистил ВЕСЬ ответ (модель ушла в чужой
             # язык целиком) — помощник не должен молчать. Говорим по-русски.
-            if not оборвали and not сказано and getattr(self, "lang", "ru") != "en":
+            if not оборвали and not сказано and str(getattr(self, "lang_stranicy", "ru")).startswith("ru"):
                 запасная = "Извини, я отвлёкся. Повтори, пожалуйста, вопрос."
                 logger.warning(f"[{self.session_id}] 🚨 ЯЗЫК: весь ответ вычищен, отдаю запасную фразу")
 
@@ -4765,7 +5155,17 @@ async def websocket_voice(websocket: WebSocket):
 
     # 🌐 Язык страницы, с которой пришли (сайт присылает ?lang=ru / ?lang=en)
     _lang_q = websocket.query_params.get("lang", "ru")
-    session.lang = "en" if str(_lang_q).lower().startswith("en") else "ru"
+    _стр = "en" if str(_lang_q).lower().startswith("en") else "ru"
+    # 🌐 18.09 ЯЗЫК ГОСТЯ. Русская версия — русская всегда, без вариантов.
+    # На английской берём язык браузера: одиннадцать языков, те же, что
+    # проверены на Оракуле. Сайт для этого править не надо — браузер сам
+    # присылает свой язык в заголовке при подключении.
+    if _стр == "ru":
+        session.lang = "ru"
+    else:
+        session.lang = язык_браузера(
+            websocket.headers.get("accept-language", ""), "en")
+    session.lang_stranicy = _стр
     # голос пересобираем под язык: движок создавался до того, как язык стал известен
     session.tts = EdgeTTSTurbo(session.lang)
     # 🕐 часовой пояс от браузера — точнее определения по адресу в сети
@@ -4806,6 +5206,7 @@ async def websocket_voice(websocket: WebSocket):
         logger.info(f"[{session_id}] 🧠 User ID: {session.user_id} (IP fallback)")
     session.llm.user_id = session.user_id
     session.llm.lang = session.lang
+    session.llm.lang_stranicy = session.lang_stranicy
     
     # 🧹 СТАРАЯ СЕССИЯ ТОГО ЖЕ ЧЕЛОВЕКА — ЗАКРЫТЬ.
     # Его дневник 17.08: в 02:52 живут ОДНОВРЕМЕННО 093602 и 107788,
