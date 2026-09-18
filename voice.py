@@ -1684,6 +1684,31 @@ _ПОДСКАЗКИ_EN = [
 # и арабского. Гостя на этих двух ведём обычным Nova-3 — он их слышит.
 FLUX_СЛЫШИТ = ("en", "ru", "es", "fr", "de", "it", "pt", "ja", "hi", "nl")
 
+# Строгий приказ отвечать на нужном языке. Взят у Оракула слово в слово —
+# там он выверен на живых людях. 18.09: мягкого правила оказалось мало —
+# модель уходила в русский, потому что её характер и память описаны по-русски.
+ЯЗЫК_ПРИКАЗ = {
+    "ru": "КРИТИЧЕСКИ ВАЖНО: Отвечай строго на русском языке. Весь текст ответа должен быть на русском.",
+    "en": "CRITICAL: Respond strictly in English. Your entire response must be in English. Do not insert phrases in other languages.",
+    "es": "CRÍTICO: Responde estrictamente en español. Toda tu respuesta debe estar en español. No insertes frases en otros idiomas.",
+    "fr": "CRITIQUE : Répondez strictement en français. Toute votre réponse doit être en français. N'insérez pas de phrases dans d'autres langues.",
+    "de": "KRITISCH: Antworte ausschließlich auf Deutsch. Deine gesamte Antwort muss auf Deutsch sein. Füge keine Sätze in anderen Sprachen ein.",
+    "it": "CRITICO: Rispondi rigorosamente in italiano. Tutta la tua risposta deve essere in italiano. Non inserire frasi in altre lingue.",
+    "pt": "CRÍTICO: Responda estritamente em português. Toda a sua resposta deve estar em português. Não insira frases em outros idiomas.",
+    "ja": "重要:必ず日本語で回答してください。回答全体を日本語で書いてください。他の言語のフレーズを混ぜないでください。",
+    "zh": "关键:请严格使用中文回答。你的整个回答必须是中文。不要混入其他语言的短语。",
+    "ar": "حرج: أجب باللغة العربية فقط. يجب أن تكون إجابتك بالكامل باللغة العربية. لا تُدخل عبارات بلغات أخرى.",
+    "hi": "महत्वपूर्ण: कृपया केवल हिंदी में उत्तर दें। आपका पूरा उत्तर हिंदी में होना चाहिए। अन्य भाषाओं के वाक्यांश न डालें।",
+}
+
+# 🎧 18.09 МНОГОЯЗЫЧНЫЙ СЛУХ. Nova-3 умеет слушать, не зная языка заранее:
+# сам разбирает речь на любом из этих десяти. Ставим его на английской
+# версии — иначе испанец с английским браузером звучит для нас тарабарщиной
+# («Prehydration» вместо «Привет, Квантареон»).
+# Китайского и арабского в этом наборе нет — их по-прежнему ведём по языку
+# браузера, явным указанием.
+NOVA_МНОГОЯЗЫЧНЫЙ = ("en", "ru", "es", "fr", "de", "it", "pt", "ja", "hi", "nl")
+
 # Приветствие на одиннадцати языках. Имя Quantareon везде латиницей —
 # чтобы голос прочитал его одинаково во всех языках.
 # ⚠️ Русское приветствие оставлено ровно прежним: его голосом Ермила
@@ -1900,10 +1925,12 @@ def _подсказки_слов(lang: str = "ru") -> list:
     # японском или арабском — в описании Deepgram не сказано, а голос
     # дороже подсказок. Названия разделов всё равно пишутся латиницей,
     # их он услышит и без нашей помощи.
-    _к = str(lang).lower()[:2]
+    _к = str(lang).lower()
     if _к == "ru":
         слова = list(_ПОДСКАЗКИ_RU)
-    elif _к == "en":
+    elif _к in ("en", "multi"):
+        # в многоязычном режиме подсказки тоже разрешены — оставляем
+        # английские, чтобы «Quantareon» и названия разделов слышались верно
         слова = list(_ПОДСКАЗКИ_EN)
     else:
         слова = []
@@ -1927,8 +1954,9 @@ class DeepgramSTT:
         self.on_error = on_error
         # 🌐 Язык распознавания: приходит со страницы (ru по умолчанию)
         # 🌐 18.09 язык гостя целиком: Nova-3 слышит все одиннадцать,
-        # включая китайский и арабский.
-        self.lang = _код_языка(lang) or "ru"
+        # включая китайский и арабский. Отдельное значение «multi» —
+        # многоязычный слух: язык не называем, он разбирает сам.
+        self.lang = "multi" if str(lang) == "multi" else (_код_языка(lang) or "ru")
         
         self._ws = None
         self._receive_task = None
@@ -2622,17 +2650,20 @@ class GroqLLM:
             # запрём испанца в английском. Поэтому даём ПРАВИЛО и СПИСОК,
             # а наше определение идёт лишь подсказкой. Так это и сделано
             # в Оракуле, где одиннадцать языков проверены на живых людях.
+            _пр = ЯЗЫК_ПРИКАЗ.get(_яз_гостя, ЯЗЫК_ПРИКАЗ["en"])
             system += (
                 "\n\n[LANGUAGE - OVERRIDES EVERYTHING ABOVE]\n"
-                "Answer in the SAME language the person is using. Look at their message "
-                "and reply in that language — every single time.\n"
-                "You speak these languages: English, Русский, Español, Français, Deutsch, "
-                "Italiano, Português, 日本語, 中文, العربية, हिन्दी.\n"
-                "If the person switches language mid-conversation, switch with them.\n"
-                "Never mix two languages in one answer. Never answer in Russian unless the "
-                "person wrote in Russian.\n"
-                f"Hint: their browser and their last message look like «{_яз_гостя}» — "
-                "but the person's own words decide, not this hint.")
+                # строгий приказ на самом языке — мягкого правила оказалось мало:
+                # 18.09 модель ответила по-русски англоязычному гостю
+                + _пр + "\n"
+                "This holds every single time, even if the person's message is short, "
+                "garbled or hard to understand, and even if your character description "
+                "or your memory of this user is written in another language.\n"
+                "The ONLY reason to change language: the person clearly writes or speaks "
+                "in another of these languages — English, Русский, Español, Français, "
+                "Deutsch, Italiano, Português, 日本語, 中文, العربية, हिन्दी. "
+                "Then answer in that one instead, and keep to it.\n"
+                "Never mix two languages in one answer.")
         else:
             system += ("\n\n[ЯЗЫК — ВАЖНЕЕ ВСЕГО, ЧТО НАПИСАНО ВЫШЕ]: Собеседник на русской "
                        "версии сайта. Отвечай ТОЛЬКО на русском языке — всегда, без единого "
@@ -3587,7 +3618,7 @@ async def voice_health():
         "ok": True,
         # 🏷 МЕТКА СБОРКИ. 16.08: спорили вслепую, какой файл стоит на сервере.
         # Теперь видно одним запросом. Меняя voice.py — меняй и метку.
-        "сборка": "2026-09-18 языки-из-хранилища",
+        "сборка": "2026-09-18 многоязычный-слух",
         "llm": current_model(),
         "stt": "Deepgram Nova-3",
         "tts_ru": f"{config.TTS_VOICE} @ {config.TTS_RATE}",
@@ -3690,10 +3721,21 @@ class VoiceSessionTurbo:
                 note(self.session_id, "откат на Nova-3", "Flux не подключился")
 
             self.using_flux = False
+            # 🎧 18.09 НА АНГЛИЙСКОЙ ВЕРСИИ СЛУШАЕМ МНОГОЯЗЫЧНО.
+            # Язык браузера — плохая опора: человек с английским браузером
+            # может говорить по-испански, и мы слышали тарабарщину. В этом
+            # режиме Nova-3 разбирает речь сам. Русская версия не меняется:
+            # там как был русский, так и остаётся.
+            # Китайского и арабского в наборе нет — для них оставляем язык
+            # браузера, иначе их не расслышать вовсе.
+            _яз_слуха = self.lang
+            if (str(getattr(self, "lang_stranicy", "ru")) == "en"
+                    and self.lang in NOVA_МНОГОЯЗЫЧНЫЙ):
+                _яз_слуха = "multi"
             self.stt = DeepgramSTT(
                 on_transcript=self._on_transcript,
                 on_error=self._on_stt_error,
-                lang=self.lang
+                lang=_яз_слуха
             )
             # 🌊 поток слов — по нему видно, что человек ещё говорит
             self.stt.on_interim = self._на_поток
