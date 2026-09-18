@@ -2608,7 +2608,8 @@ class GroqLLM:
         self.user_id: int = 0
         self.lang: str = "ru"           # 🌐 язык ГОСТЯ (на английской версии — любой из 11)
         self.lang_stranicy: str = "ru"  # 🌐 язык самой страницы: только ru или en
-    
+        self.lang_vybran: bool = False  # 🚩 гость нажал флаг — язык назван прямо
+
     async def _get_session(self):
         if not self._session or self._session.closed:
             self._session = aiohttp.ClientSession()
@@ -3637,7 +3638,7 @@ async def voice_health():
         "ok": True,
         # 🏷 МЕТКА СБОРКИ. 16.08: спорили вслепую, какой файл стоит на сервере.
         # Теперь видно одним запросом. Меняя voice.py — меняй и метку.
-        "сборка": "2026-09-18 родные-голоса",
+        "сборка": "2026-09-18 флаги",
         "llm": current_model(),
         "stt": "Deepgram Nova-3",
         "tts_ru": f"{config.TTS_VOICE} @ {config.TTS_RATE}",
@@ -3688,6 +3689,7 @@ class VoiceSessionTurbo:
         
         self.lang: str = "ru"          # 🌐 язык ГОСТЯ (11 языков на английской версии)
         self.lang_stranicy: str = "ru"  # 🌐 язык самой страницы: только ru или en
+        self.lang_vybran: bool = False  # 🚩 гость нажал флаг — язык назван прямо
         self._last_topic = None        # 📚 раздел сайта, о котором сейчас речь
         self.user_tz: str = ""         # 🕐 часовой пояс браузера (точнее, чем по IP)
         self.cached_filler_audio: bytes = b""
@@ -3747,8 +3749,13 @@ class VoiceSessionTurbo:
             # там как был русский, так и остаётся.
             # Китайского и арабского в наборе нет — для них оставляем язык
             # браузера, иначе их не расслышать вовсе.
+            # 🚩 А если гость нажал флаг — гадать не нужно совсем: язык
+            # назван прямо, и мы называем его прямо распознавателю. Так
+            # точнее для всех одиннадцати, а для китайского с арабским это
+            # единственный способ быть услышанными.
             _яз_слуха = self.lang
             if (str(getattr(self, "lang_stranicy", "ru")) == "en"
+                    and not getattr(self, "lang_vybran", False)
                     and self.lang in NOVA_МНОГОЯЗЫЧНЫЙ):
                 _яз_слуха = "multi"
             self.stt = DeepgramSTT(
@@ -4627,7 +4634,10 @@ class VoiceSessionTurbo:
             # 🌐 18.09 ЯЗЫК ОТВЕТА — ПО ТЕКСТУ РЕПЛИКИ, как в Оракуле.
             # Браузер говорит, какой язык у гостя, но человек может писать
             # и на другом. Русская версия сюда не заходит — она русская.
-            if not str(getattr(self, "lang", "ru")).startswith("ru"):
+            # 🚩 А если гость нажал флаг — язык назван им самим, и угадывать
+            # по тексту мы уже не вправе: захочет другой, нажмёт другой флаг.
+            if (not str(getattr(self, "lang", "ru")).startswith("ru")
+                    and not getattr(self, "lang_vybran", False)):
                 try:
                     _новый = язык_текста(transcript)
                     if _новый and _новый != self.lang:
@@ -5241,6 +5251,17 @@ async def websocket_voice(websocket: WebSocket):
         session.lang = язык_браузера(
             websocket.headers.get("accept-language", ""), "en")
     session.lang_stranicy = _стр
+    # 🚩 18.09 ФЛАГ. Гость нажал флаг своего языка — сайт присылает ?g=<код>.
+    # Это сильнее всего остального: браузер лишь предполагает, речь можно
+    # расслышать неверно, а тут человек сказал сам. Раз язык назван прямо,
+    # распознавателю тоже называем его прямо — гадать больше не нужно,
+    # и китайский с арабским, которых нет в режиме догадки, начинают
+    # слышаться. На русской версии флагов нет, туда это не заходит.
+    _явный = _код_языка(websocket.query_params.get("g", ""))
+    if _стр != "ru" and _явный:
+        session.lang = _явный
+        session.lang_vybran = True
+        logger.info(f"[{session_id}] 🚩 язык назван флагом: {_явный}")
     # голос пересобираем под язык: движок создавался до того, как язык стал известен
     session.tts = EdgeTTSTurbo(session.lang)
     # 🕐 часовой пояс от браузера — точнее определения по адресу в сети
