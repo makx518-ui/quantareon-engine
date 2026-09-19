@@ -4748,6 +4748,10 @@ class VoiceSessionTurbo:
             
             start_time = time.time()
             first_audio_time = None
+            # 📓 19.09 своя метка для ГОЛОСА ОТВЕТА: прежнюю занимает
+            # присказка про время, и без этой на первом вопросе разговора
+            # запись в дневник не попадала вовсе
+            _звук_ответа_был = False
             chunk_count = 0
             response_main_lang = None  # 🛡️ Основной язык ответа (определяем по первому чанку)
             
@@ -4771,6 +4775,7 @@ class VoiceSessionTurbo:
                     first_audio_time = time.time()
                     latency = first_audio_time - start_time
                     logger.info(f"[{self.session_id}] ⚡ INSTANT Filler: {latency:.3f}s ({len(self.cached_filler_audio)} bytes)")
+                    note(self.session_id, "присказка пошла", f"{latency:.2f} с после вопроса")
                     
                     await self.websocket.send_bytes(self.cached_filler_audio)
 
@@ -4877,7 +4882,7 @@ class VoiceSessionTurbo:
                     await self._send_json({"type": "metric_tts_start"})
                 
                 async def send_audio(audio_bytes):
-                    nonlocal first_audio_time
+                    nonlocal first_audio_time, _звук_ответа_был
                     if first_audio_time is None:
                         first_audio_time = time.time()
                         # 🌐 Человек слышит ответ — значку пора гаснуть.
@@ -4890,14 +4895,20 @@ class VoiceSessionTurbo:
                         asyncio.create_task(_снять_значок())
                         latency = first_audio_time - start_time
                         logger.info(f"[{self.session_id}] ⚡ First audio: {latency:.2f}s")
-                        # 📓 19.09 ЭТО ЖЕ ЧИСЛО — В ДНЕВНИК. Движок считал его
-                        # и раньше, но писал только в журнал, а журнал Render
-                        # не показывает. Теперь видно через /api/voice-health/debug:
-                        # можно посмотреть вечером и сравнить с утром, по живым
-                        # разговорам, а не по подставным записям.
-                        note(self.session_id, "звук пошёл", f"{latency:.2f} с после вопроса")
-                    
+
                     if not self.barge_in_requested and _я_актуален():
+                        # 📓 19.09 ГОЛОС ОТВЕТА — В ДНЕВНИК, СО СВОЕЙ МЕТКОЙ.
+                        # ⚠️ Почему своя, а не first_audio_time: ту занимает
+                        # присказка про время — она уходит другим путём и
+                        # раньше, и на первом вопросе разговора записи о
+                        # голосе ответа не появлялось вовсе (поймано 19.09).
+                        # ⚠️ Почему ЗДЕСЬ, а не выше: выше звук ещё может не
+                        # уйти — человек перебил или ответ устарел. Пишем
+                        # только про тот звук, который правда отправлен.
+                        if not _звук_ответа_был:
+                            _звук_ответа_был = True
+                            note(self.session_id, "звук пошёл",
+                                 f"{time.time() - start_time:.2f} с после вопроса")
                         await self.websocket.send_bytes(audio_bytes)
                 
                 # ⚡ СНАЧАЛА текст на экран (мгновенно, не ждёт озвучку)
