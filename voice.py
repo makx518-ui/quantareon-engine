@@ -4890,6 +4890,12 @@ class VoiceSessionTurbo:
                         asyncio.create_task(_снять_значок())
                         latency = first_audio_time - start_time
                         logger.info(f"[{self.session_id}] ⚡ First audio: {latency:.2f}s")
+                        # 📓 19.09 ЭТО ЖЕ ЧИСЛО — В ДНЕВНИК. Движок считал его
+                        # и раньше, но писал только в журнал, а журнал Render
+                        # не показывает. Теперь видно через /api/voice-health/debug:
+                        # можно посмотреть вечером и сравнить с утром, по живым
+                        # разговорам, а не по подставным записям.
+                        note(self.session_id, "звук пошёл", f"{latency:.2f} с после вопроса")
                     
                     if not self.barge_in_requested and _я_актуален():
                         await self.websocket.send_bytes(audio_bytes)
