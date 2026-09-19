@@ -198,6 +198,13 @@ class Config:
     YANDEX_API_KEY: str = os.getenv("YANDEX_API_KEY", "")
     YANDEX_FOLDER_ID: str = os.getenv("YANDEX_FOLDER_ID", "")
     YANDEX_VOICE: str = "ermil"        # его выбор из семи мужских
+    # 🇬🇧 19.09 АНГЛИЙСКИЙ ТОЖЕ ЧЕРЕЗ ЯНДЕКС — голос john (его решение).
+    # Причина: Эндрю живёт у Microsoft, а та вечерами отдаёт кусок за 2–7 с
+    # и нестабильно (дневник 19.09: до первого звука 4.4–5.3 с против
+    # 2.3–2.5 с у русского на Ермиле). Английских голосов у Яндекса один.
+    # ⚠️ Остальные языки (es, fr, de, it, pt, ja, zh, ar, hi) — как были,
+    # у Microsoft: у Яндекса их нет (кроме немецкого, но его не трогаем).
+    YANDEX_VOICE_EN: str = "john"
     YANDEX_SPEED: str = "1.0"          # 25.08 его выбор на слух: обычный темп.
                                        # Стояло 0.9 — сказал «вяло говорит»;
                                        # пробовали и 1.05, и 1.1 — «естественнее
@@ -219,6 +226,10 @@ class Config:
     # ⚠️ Английская сторона Яндекса не касается вовсе: там Эндрю через Edge,
     # эта настройка на неё не влияет.
     ПОДСТРАХОВКА_ДМИТРИЕМ: bool = False
+    # 🇬🇧 19.09 АНГЛИЙСКАЯ СТОРОНА — ПОДСТРАХОВКА ЭНДРЮ ВКЛЮЧЕНА (его
+    # решение: «если вдруг Яндекс молчит, тогда переключить на Эндрю»).
+    # Не отдал Яндекс (две попытки по 2 с) — тот же кусок идёт к Microsoft.
+    ПОДСТРАХОВКА_ЭНДРЮ: bool = True
 
     YANDEX_TIMEOUT: float = 2.0
     YANDEX_TRIES: int = 2
@@ -3133,9 +3144,15 @@ class EdgeTTSTurbo:
         # ⚠️ ТОЛЬКО РУССКИЙ. Английскую сторону он трогать запретил:
         # там Эндрю его устраивает, а английский голос у Яндекса один
         # и незнакомый. Ставим — не рискуем тем, что уже работает.
-        self.ya_voice = config.YANDEX_VOICE
-        self.ya_on = (not en) and bool(config.YANDEX_API_KEY
-                                       and config.YANDEX_FOLDER_ID)
+        # 🇬🇧 19.09 АНГЛИЙСКИЙ ТОЖЕ К ЯНДЕКСУ (Джон), его решение. Прочие
+        # языки — по-прежнему Microsoft: у Яндекса их нет.
+        self.ya_voice = config.YANDEX_VOICE_EN if _к == "en" else config.YANDEX_VOICE
+        self.ya_on = (_к in ("ru", "en")) and bool(config.YANDEX_API_KEY
+                                                   and config.YANDEX_FOLDER_ID)
+        # подстраховка Microsoft, если Яндекс не отдал звук:
+        # русский — Дмитрием (выключена 27.08), английский — Эндрю (включена)
+        self.подстраховка = (config.ПОДСТРАХОВКА_ЭНДРЮ if _к == "en"
+                             else config.ПОДСТРАХОВКА_ДМИТРИЕМ)
 
     @staticmethod
     def _ya_text(text: str, lang: str) -> str:
@@ -3218,17 +3235,24 @@ class EdgeTTSTurbo:
         """Одно предложение у Яндекса, сырым звуком (без сжатия)."""
         if not self.ya_on:
             return b""
-        данные = urllib.parse.urlencode({
+        параметры = {
             "text": self._ya_text(text, self.lang),
             "lang": "ru-RU" if self.lang == "ru" else "en-US",
             "voice": self.ya_voice,
             "speed": config.YANDEX_SPEED,
-            "emotion": config.YANDEX_EMOTION,
             "folderId": config.YANDEX_FOLDER_ID,
             # mp3: куски склеиваются встык, паузу берём готовым кусочком
             # (_КАДР_ТИШИНЫ) — так не нужен ffmpeg на сервере.
             "format": "mp3",
-        }).encode()
+        }
+        # 🎭 19.09 МАНЕРА (emotion) — ТОЛЬКО РУССКИМ ГОЛОСАМ. У Яндекса она
+        # описана для части русских голосов (ermil, jane, zahar, omazh);
+        # для john её не шлём: neutral и так по умолчанию, а отказ 400 на
+        # лишний параметр считался бы «лёг совсем» и через три раза
+        # выключил бы Яндекс на пять минут — и русской стороне тоже.
+        if self.lang == "ru":
+            параметры["emotion"] = config.YANDEX_EMOTION
+        данные = urllib.parse.urlencode(параметры).encode()
 
         def _сходить() -> bytes:
             зпр = urllib.request.Request(
@@ -3301,10 +3325,10 @@ class EdgeTTSTurbo:
             звук = await self._yandex(_tts_clean(сырой, self.lang, udar=False))
             if звук:
                 return звук
-            if not config.ПОДСТРАХОВКА_ДМИТРИЕМ:
+            if not self.подстраховка:
                 logger.warning("🗣️ Яндекс не отдал звук — молчим (подстраховка выключена)")
                 return b""
-            logger.warning("🗣️ Яндекс не отдал звук → идём к Дмитрию")
+            logger.warning(f"🗣️ Яндекс не отдал звук → идём к Microsoft ({self.voice})")
 
         # ── дорожка Дмитрия: как было до 24.08
         text = _tts_clean(text, self.lang)   # словарь произношения + чистка
@@ -3348,10 +3372,10 @@ class EdgeTTSTurbo:
                 except Exception as e:
                     logger.warning(f"⚠️ отправка звука не прошла: {e}")
                 return
-            if not config.ПОДСТРАХОВКА_ДМИТРИЕМ:
+            if not self.подстраховка:
                 logger.warning("🗣️ Яндекс не отдал звук — молчим (подстраховка выключена)")
                 return
-            logger.warning("🗣️ Яндекс не отдал звук → идём к Дмитрию")
+            logger.warning(f"🗣️ Яндекс не отдал звук → идём к Microsoft ({self.voice})")
         text = _tts_clean(text, self.lang)   # словарь произношения + чистка
         if not text or not text.strip():
             return
@@ -3705,11 +3729,11 @@ async def voice_health():
         "ok": True,
         # 🏷 МЕТКА СБОРКИ. 16.08: спорили вслепую, какой файл стоит на сервере.
         # Теперь видно одним запросом. Меняя voice.py — меняй и метку.
-        "сборка": "2026-09-19 без интернета",
+        "сборка": "2026-09-19 английский на Джоне",
         "llm": current_model(),
         "stt": "Deepgram Nova-3",
         "tts_ru": f"{config.TTS_VOICE} @ {config.TTS_RATE}",
-        "tts_en": f"{config.TTS_VOICE_EN} @ {config.TTS_RATE_EN}",
+        "tts_en": f"yandex {config.YANDEX_VOICE_EN} (запасной {config.TTS_VOICE_EN})",
         "smart_turn": "подключён" if SMART_TURN else "НЕ подключён",
         "greeting_ru_bytes": len(CACHED_GREETING_AUDIO),
         "greeting_en_bytes": len(CACHED_GREETING_AUDIO_EN),
