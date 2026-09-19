@@ -3664,7 +3664,7 @@ async def voice_health():
         "ok": True,
         # 🏷 МЕТКА СБОРКИ. 16.08: спорили вслепую, какой файл стоит на сервере.
         # Теперь видно одним запросом. Меняя voice.py — меняй и метку.
-        "сборка": "2026-09-18 флаги",
+        "сборка": "2026-09-19 счётчик",
         "llm": current_model(),
         "stt": "Deepgram Nova-3",
         "tts_ru": f"{config.TTS_VOICE} @ {config.TTS_RATE}",
@@ -4775,7 +4775,12 @@ class VoiceSessionTurbo:
                     first_audio_time = time.time()
                     latency = first_audio_time - start_time
                     logger.info(f"[{self.session_id}] ⚡ INSTANT Filler: {latency:.3f}s ({len(self.cached_filler_audio)} bytes)")
-                    note(self.session_id, "присказка пошла", f"{latency:.2f} с после вопроса")
+                    # 📏 19.09 тот же счёт от мига «договорил», см. выше
+                    _слово_ф = getattr(self, "_последнее_слово", 0) or start_time
+                    note(self.session_id, "присказка пошла",
+                         f"ЖДАЛ {first_audio_time - _слово_ф:.2f} с "
+                         f"(до начала ответа {start_time - _слово_ф:.2f} с, "
+                         f"присказка {latency:.2f} с)")
                     
                     await self.websocket.send_bytes(self.cached_filler_audio)
 
@@ -4907,8 +4912,21 @@ class VoiceSessionTurbo:
                         # только про тот звук, который правда отправлен.
                         if not _звук_ответа_был:
                             _звук_ответа_был = True
+                            # 📏 19.09 СЧИТАЕМ ОТ МИГА, КОГДА ЧЕЛОВЕК ДОГОВОРИЛ.
+                            # ⚠️ start_time ставится ЗДЕСЬ ЖЕ, прямо перед
+                            # сочинением ответа, и всё, что было до него —
+                            # ожидание сигнала «договорил» от браузера, работа
+                            # сторожа, придержка — в замер не попадало вовсе.
+                            # Журнал показывал 1.26 с там, где человек ждал 8.
+                            # _последнее_слово движок пишет на каждом куске
+                            # расшифровки (стр. 4127) — это и есть тот миг.
+                            _слово = getattr(self, "_последнее_слово", 0) or start_time
+                            _всего = time.time() - _слово
+                            _ответ = time.time() - start_time
                             note(self.session_id, "звук пошёл",
-                                 f"{time.time() - start_time:.2f} с после вопроса")
+                                 f"ЖДАЛ {_всего:.2f} с "
+                                 f"(до начала ответа {start_time - _слово:.2f} с, "
+                                 f"ответ и озвучка {_ответ:.2f} с)")
                         await self.websocket.send_bytes(audio_bytes)
                 
                 # ⚡ СНАЧАЛА текст на экран (мгновенно, не ждёт озвучку)
