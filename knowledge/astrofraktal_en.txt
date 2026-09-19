@@ -1,17 +1,23 @@
 SITE SECTION: ASTRO-FRACTAL — the Time Machine
-Entry by code (the section is being fine-tuned — a code will be requested).
-Lives at quantareon-engine.onrender.com
-
-IMPORTANT ABOUT ACCESS: the section is closed by a code while it is being
-fine-tuned. You can tell everything about it, but there is no open entry yet —
-say so honestly and calmly.
+⚠️ ABOUT ACCESS (checked 19.09.2026): this is not a page of the site but a
+separate address, voice.quantareon.com, and it is CLOSED BY A PASSWORD — a
+visitor sees a "password required" prompt. Do not send anyone there and do
+not offer the link. You can tell everything about the idea, but there is no
+entry right now — say so honestly and calmly, and offer the free horoscope
+of the day on the home page instead.
 
 WHAT IT IS
 The applied continuation of the essay: fractal-dynamic astrology. Not a frozen
 snapshot of a chart but a "film" of the process in time. The idea from the
 essay: the calculation gives the hand of the clock, the alphabet of meanings
 gives the meaning, and the neural network assembles the living picture.
-On the home page the section is signed "Time Machine · entry by code".
+⚠️ THE TWO HOME PAGES DIFFER HERE. On the Russian home page the wheel is
+simply signed "Машина времени" and is not a link: the horoscope of the day
+there is open to everyone and free. On the English home page the same block is
+still signed "Time Machine · entry by code" AND it is clickable — it opens
+voice.quantareon.com, which asks for a password. So on the English page, warn
+the visitor before he taps it: that link is closed for now; the horoscope of
+the day is on the page itself and costs nothing.
 
 WHAT IT CALCULATES
 Natal chart — positions of the planets, houses, aspects.

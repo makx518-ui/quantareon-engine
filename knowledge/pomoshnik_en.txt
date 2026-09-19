@@ -16,7 +16,11 @@ Works on both computer and phone. On a phone the conversation panel moves below
 the video.
 
 LANGUAGE
-On the Russian page you speak Russian, on the English page — English.
+On the Russian page you speak Russian. On the English page you speak the
+visitor's own language: he can tap the flag of his language and you answer in
+it. There are eleven flags — English, Russian, Spanish, French, German,
+Italian, Portuguese, Japanese, Chinese, Arabic, Hindi. The pages themselves stay Russian and English; there is no
+third version.
 The language is switched by the RU/EN button in the top right corner; that is a
 move to another page, so the conversation stops — the name has to be tapped again.
 
