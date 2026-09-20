@@ -42,6 +42,15 @@ from fastapi.responses import JSONResponse
     "den":    (300,  "den",  1),
     "shiv7":  (1500, "shiv", 7),
     "shiv30": (6000, "shiv", 30),
+    # 20.09 · товар-файл: готовый файл вместо системы ключей/страниц (см. вид "fayl" ниже)
+    "kniga-kundalini": (700, "fayl", 0),
+}
+# 20.09 · товары-файлы: тариф → путь к файлу, имя вложения, название для отчёта в Telegram
+ТОВАРЫ_ФАЙЛЫ = {
+    "kniga-kundalini": {
+        "путь": os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "ogon_glubin.pdf"),
+        "imya": "Ogon-Glubin.pdf",
+    },
 }
 ПОЛОСА = 25          # сколько сумм подряд у тарифа: 300 … 324
 ЖИВЁТ_МИНУТ = 60     # сколько заказ ждёт перевод
@@ -227,6 +236,23 @@ async def status(nomer: str = ""):
     return о or JSONResponse({"ok": False, "reason": "no_order"}, status_code=404)
 
 
+@роутер.get("/api/oplata/fayl")
+async def fayl(nomer: str = ""):
+    """20.09 · товар-файл (книга): скачивание по номеру ОПЛАЧЕННОГО заказа — не по паролю кабинета."""
+    о = await run_in_threadpool(_найти, nomer)
+    if not о or о.get("sostoyanie") != "oplachen":
+        return JSONResponse({"ok": False, "reason": "no_order"}, status_code=404)
+    товар = ТОВАРЫ_ФАЙЛЫ.get(о.get("tarif"))
+    if not товар or not os.path.isfile(товар["путь"]):
+        # 20.09 · КРИТИК: файл не залился при деплое — не ронять ручку голым 500,
+        # отдать тот же чистый отказ, что и на остальные случаи кассы
+        if товар:
+            print(f"касса: файл товара не найден на диске: {товар['путь']}")
+        return JSONResponse({"ok": False, "reason": "no_file"}, status_code=404)
+    from fastapi.responses import FileResponse
+    return FileResponse(товар["путь"], media_type="application/pdf", filename=товар["imya"])
+
+
 # ─── пуш от ловушки ───────────────────────────────────────────────
 _СУММА = re.compile(r"([+]?)\s*(\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d+)(?:[.,](\d{1,2}))?\s*(?:₽|руб|RUB|р\.)", re.I)
 
@@ -263,24 +289,59 @@ def суммы_из_текста(текст):
 
 def _закрыть(з, как):
     """Заказ оплачен: выдать ключ. Вызывается под замком; письмо шлёт _после_оплаты — уже без замка."""
-    from engine import kniga as K
     цена, вид, дней = ТАРИФЫ[з["тариф"]]
-    зап = K.выдать(з["почта"], вид, дней, з["lang"])
-    с = з.pop("секунда", None)
-    if с:
-        try:
-            зап = K.открыть_корень(зап, с["iso"], с["lat"], с["lon"], с["tz"])
-        except Exception as e:
-            print(f"касса: корень книги не открылся: {e}")
+    if вид == "fayl":
+        # 20.09 · товар-файл (книга): готовый файл, без системы ключей/страниц K.kniga
+        з.pop("секунда", None)
+        зап = {"ключ": "QF-" + з["номер"][:8].upper(), "почта": з["почта"], "тариф": з["тариф"],
+               "lang": з["lang"], "вид": "fayl"}
+    else:
+        from engine import kniga as K
+        зап = K.выдать(з["почта"], вид, дней, з["lang"])
+        с = з.pop("секунда", None)
+        if с:
+            try:
+                зап = K.открыть_корень(зап, с["iso"], с["lat"], с["lon"], с["tz"])
+            except Exception as e:
+                print(f"касса: корень книги не открылся: {e}")
     з.update({"состояние": "оплачен", "ключ": зап["ключ"], "оплачен": _сейчас().isoformat(), "как": как})
     з.pop("адрес", None)
     return зап
 
 
+def _письмо_файла_товара(зап):
+    """20.09 · товар-файл (книга): PDF вложением на почту. True — ушло."""
+    товар = ТОВАРЫ_ФАЙЛЫ.get(зап["тариф"])
+    if not товар or not зап.get("почта"):
+        return False
+    try:
+        with open(товар["путь"], "rb") as ф:
+            содержимое = ф.read()
+    except Exception as e:
+        print(f"касса: файл товара не нашёлся ({товар['путь']}): {e}")
+        return False
+    ру = зап.get("lang") != "en"
+    тема = "Ваша книга «Огонь глубин»" if ру else "Your book"
+    текст = (f"Спасибо за покупку! Книга «Огонь глубин» — во вложении.\n\n"
+             f"Если файл не открылся — скачайте его на странице quantareon.com/kundalini-ru, "
+             f"код заказа: {зап['ключ']}." if ру else
+             f"Thank you for your purchase! The book is attached.\n\n"
+             f"If it did not open — download it at quantareon.com/kundalini-ru, order code: {зап['ключ']}.")
+    try:
+        import pochta as П
+        return bool(П.отправить_файл(зап["почта"], тема, текст, товар["imya"], содержимое))
+    except Exception as e:
+        print(f"касса: письмо с файлом не ушло: {e}")
+        return False
+
+
 def _после_оплаты(номер, зап):
-    """Письмо с ключом и отчёт в Telegram. Долгое (почта ждёт до 30 с) — поэтому вне замка."""
-    import kniga_api as KA
-    ушло = KA.письмо_с_ключом(зап)
+    """Письмо с ключом/файлом и отчёт в Telegram. Долгое (почта ждёт до 30 с) — поэтому вне замка."""
+    if зап.get("вид") == "fayl":
+        ушло = _письмо_файла_товара(зап)
+    else:
+        import kniga_api as KA
+        ушло = KA.письмо_с_ключом(зап)
     with ЗАМОК:
         база = _читать()
         з = next((з for з in база["заказы"] if з["номер"] == номер), None)
@@ -313,7 +374,8 @@ def _кто(текст):
 
 
 def _отчёт(з):
-    имена = {"den": "разовый день", "shiv7": "книга · 7 дней", "shiv30": "книга · 30 дней"}
+    имена = {"den": "разовый день", "shiv7": "книга · 7 дней", "shiv30": "книга · 30 дней",
+             "kniga-kundalini": "книга «Огонь глубин»"}
     return (f"✅ Оплата {з['сумма']} ₽ — {имена.get(з['тариф'], з['тариф'])}\n"
             f"Почта: {з['почта']}\nКлюч: {з['ключ']}\n"
             f"Письмо: {'ушло' if з.get('письмо') else 'НЕ ушло — отправь ключ руками'}\n"
