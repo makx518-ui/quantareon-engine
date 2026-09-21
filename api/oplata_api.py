@@ -44,12 +44,21 @@ from fastapi.responses import JSONResponse
     "shiv30": (6000, "shiv", 30),
     # 20.09 · товар-файл: готовый файл вместо системы ключей/страниц (см. вид "fayl" ниже)
     "kniga-kundalini": (700, "fayl", 0),
+    "kniga-telepat": (500, "fayl", 0),
 }
 # 20.09 · товары-файлы: тариф → путь к файлу, имя вложения, название для отчёта в Telegram
 ТОВАРЫ_ФАЙЛЫ = {
     "kniga-kundalini": {
         "путь": os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "ogon_glubin.pdf"),
         "imya": "Ogon-Glubin.pdf",
+        "название": "Огонь глубин",
+        "stranica": "kundalini-ru",
+    },
+    "kniga-telepat": {
+        "путь": os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "telepat.pdf"),
+        "imya": "Telepat.pdf",
+        "название": "Телепат",
+        "stranica": "telepat-ru",
     },
 }
 ПОЛОСА = 25          # сколько сумм подряд у тарифа: 300 … 324
@@ -321,12 +330,14 @@ def _письмо_файла_товара(зап):
         print(f"касса: файл товара не нашёлся ({товар['путь']}): {e}")
         return False
     ру = зап.get("lang") != "en"
-    тема = "Ваша книга «Огонь глубин»" if ру else "Your book"
-    текст = (f"Спасибо за покупку! Книга «Огонь глубин» — во вложении.\n\n"
-             f"Если файл не открылся — скачайте его на странице quantareon.com/kundalini-ru, "
+    название = товар.get("название", "")
+    страница = товар.get("stranica", "")
+    тема = f"Ваша книга «{название}»" if ру else "Your book"
+    текст = (f"Спасибо за покупку! Книга «{название}» — во вложении.\n\n"
+             f"Если файл не открылся — скачайте его на странице quantareon.com/{страница}, "
              f"код заказа: {зап['ключ']}." if ру else
              f"Thank you for your purchase! The book is attached.\n\n"
-             f"If it did not open — download it at quantareon.com/kundalini-ru, order code: {зап['ключ']}.")
+             f"If it did not open — download it at quantareon.com/{страница}, order code: {зап['ключ']}.")
     try:
         import pochta as П
         return bool(П.отправить_файл(зап["почта"], тема, текст, товар["imya"], содержимое))
@@ -375,7 +386,7 @@ def _кто(текст):
 
 def _отчёт(з):
     имена = {"den": "разовый день", "shiv7": "книга · 7 дней", "shiv30": "книга · 30 дней",
-             "kniga-kundalini": "книга «Огонь глубин»"}
+             "kniga-kundalini": "книга «Огонь глубин»", "kniga-telepat": "книга «Телепат»"}
     return (f"✅ Оплата {з['сумма']} ₽ — {имена.get(з['тариф'], з['тариф'])}\n"
             f"Почта: {з['почта']}\nКлюч: {з['ключ']}\n"
             f"Письмо: {'ушло' if з.get('письмо') else 'НЕ ушло — отправь ключ руками'}\n"
