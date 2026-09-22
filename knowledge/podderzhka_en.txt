@@ -1,0 +1,27 @@
+SITE SECTION: SUPPORT
+Page: quantareon.com/support.html (Russian: support-ru.html)
+The menu item is called "Support" and sits last in the menu.
+
+WHAT IT IS
+A page for reaching Vlad. It offers three ways to write to him directly,
+and he answers personally. The page is open to everyone and free.
+
+THREE WAYS TO GET IN TOUCH
+1. Email — vlad@quantareon.com
+2. Telegram — @quantareon
+3. WhatsApp — the page carries a button and a QR code: on a phone you point
+   the camera at it, on a computer you press the button, and a chat opens.
+
+WHEN TO SEND SOMEONE HERE
+Asked "how do I get in touch", "how can I write to you", "is there an email",
+"what is your Telegram", "what is your WhatsApp", "where is support",
+"I need a human" — send them here and name the ways.
+
+HOW TO SPEAK ABOUT IT
+Briefly and plainly: there is a Support section with email, Telegram and
+WhatsApp, and Vlad answers himself. Do NOT give out a phone number — there is
+none on the page, only a button and a QR code. Do not promise response times,
+you do not know them.
+
+⚠️ DO NOT CONFUSE with Labs. Labs is a closed section for the owner, for
+partners and investors. Support is for any guest of the site.
