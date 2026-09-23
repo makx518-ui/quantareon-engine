@@ -98,6 +98,23 @@ TOPICS: Dict[str, Dict] = {
             "vlad", "author", "creator", "quantareon labs", "github", "telegram",
         ],
     },
+    # 23.09 · страница полного разбора: гороскопы на день, неделю, месяц, год — цены,
+    # как получить, ключ. ⚠️ Стоит ПЕРЕД astrofraktal нарочно: «гороскоп» есть и там,
+    # а при равном счёте выигрывает тема, объявленная раньше.
+    "razbor": {
+        "file": "razbor.txt",
+        "words": [
+            "полный разбор", "полного разбора", "полному разбору", "разбор дня",
+            "недельн", "месячн", "годово", "годовой гороскоп", "годового гороскоп", "суточн",
+            "гороскоп на неделю", "гороскоп на месяц", "гороскоп на год",
+            "на неделю", "на месяц", "на год", "сколько стоит гороскоп", "цена гороскоп",
+            "купить гороскоп", "заказать гороскоп", "оплат", "ключ", "платный",
+            "full reading", "weekly", "monthly", "yearly", "weekly horoscope",
+            "monthly horoscope", "yearly horoscope", "for a week", "for a month",
+            "for a year", "how much", "price", "buy a horoscope", "order a horoscope",
+            "my key", "paid",
+        ],
+    },
     "astrofraktal": {
         "file": "astrofraktal.txt",
         "words": [

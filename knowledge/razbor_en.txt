@@ -1,0 +1,49 @@
+SITE SECTION: THE FULL READING — HOROSCOPES FOR A DAY, A WEEK, A MONTH AND A YEAR
+
+WHERE
+The page quantareon.com/razbor.html. Reached by the link "Want the full
+reading of the day?" under the horoscope of the day on the home page.
+
+HOW IT WORKS
+The horoscope is built from the second the visitor entered the site. That
+second becomes the Ascendant of the chart, and the whole pattern of the sky
+at that moment unfolds from it: houses by the Placidus system, planets,
+aspects, degrees and their meanings. The machine does the calculation, to
+the second; an advanced artificial-intelligence model writes the living
+interpretation. It is the same second as the free horoscope of the day on
+the home page: one chart, read deeper.
+
+FOUR HOROSCOPES
+- Daily — the full reading of the current day: the core of the day, the
+  karmic points, the planetary pattern by houses and hours, the nerve and
+  the summary. Ready in about five minutes.
+- Weekly — the karmic vector of the week, the core, each of the seven days
+  hour by hour, the nerve of the week and the point of exit with advice.
+  About five minutes.
+- Monthly — four weeks, each with all its days and a summary of the week,
+  then the nerve and the point of exit of the month. Up to ten minutes.
+- Yearly — the karmic vector, the core and an overview of the year, twelve
+  months linked by bridges, and at the end the scenario of the year as one
+  story. About thirty minutes.
+The daily one is a snapshot — here and now. A week, a month and a year are a
+story: every day has a yesterday and a tomorrow. They are not stitched from
+separate days: the machine unfolds the whole period from the one second of
+entry at once, and it reads as one story from the point of entry to the
+point of exit.
+
+PRICES ON THE ENGLISH PAGE
+Daily $4, weekly $10, monthly $20, yearly $45. The longer the period, the
+cheaper each day.
+
+PAYMENT IS NOT SWITCHED ON YET ON THE ENGLISH PAGE
+The Pay button is greyed out on purpose: card payment is being set up and
+will be opened for all countries soon. Asked about the price, name these
+amounts plainly, say the payment is not running yet, and offer the free
+horoscope of the day on the home page meanwhile. Never mention roubles, SBP
+or Russian banks to a visitor here — that is the Russian page's way of
+paying, and it is of no use to him.
+Once payment works, it goes like this: enter the e-mail, choose the
+horoscope, pay; a key appears on the screen and comes by e-mail; the
+horoscope starts by itself and the finished file comes by e-mail; the key
+opens it on the page from any device. Lost key or no file — write to
+Support from the e-mail used for payment.
