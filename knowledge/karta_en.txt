@@ -113,12 +113,17 @@ available in Russian right now, English payment is being set up.
     Russian page: quantareon.com/support-ru.html
     English page: quantareon.com/support.html
 
-⚠️ WHAT'S NEW ON THE SITE — recent changes, checked 22.09.2026
+⚠️ WHAT'S NEW ON THE SITE — recent changes, checked 24.09.2026
 
 Asked "what's new on the site", "what was added", "what changed" — this is
 a DIFFERENT question from the general "what is here" (there, no list; here,
 a list is right — answer briefly, point by point, invent nothing beyond
 this):
+- The newest (23 September 2026): the full-reading page now has horoscopes
+  for a week, a month and a year — weekly $10, monthly $20, yearly $45, the
+  daily one $4. They replaced the former "stitching" of days, which is gone.
+  Asked whether the prices changed — yes, on 23 September; say so. Payment
+  on the English page is still not switched on.
 - A new third essay, "Astrofractal Astrology" (14 September 2026).
 - Two new paid books: "Kundalini" (700 roubles) and "Telepath"
   (500 roubles) — each has a free introduction, the full text is paid, as a
