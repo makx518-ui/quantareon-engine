@@ -50,6 +50,7 @@ from fastapi.responses import JSONResponse
     "kniga-kundalini": (700, "fayl", 0),
     "kniga-kundalini-en": (700, "fayl", 0),  # 26.09 · англ. перевод «Fire of the Depths», отдельный тариф — свой файл
     "kniga-telepat": (500, "fayl", 0),
+    "kniga-telepat-en": (700, "fayl", 0),  # 26.09 · англ. перевод «Telepath», отдельный тариф — свой файл
 }
 # 20.09 · товары-файлы: тариф → путь к файлу, имя вложения, название для отчёта в Telegram
 ТОВАРЫ_ФАЙЛЫ = {
@@ -71,6 +72,13 @@ from fastapi.responses import JSONResponse
         "imya": "Telepat.pdf",
         "название": "Телепат",
         "stranica": "telepat-ru",
+    },
+    # 26.09 · английский перевод — отдельный тариф, свой файл, своё имя вложения и страница
+    "kniga-telepat-en": {
+        "путь": os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "telepath_en.pdf"),
+        "imya": "Telepath.pdf",
+        "название": "Telepath",
+        "stranica": "telepat",
     },
 }
 ПОЛОСА = 25          # сколько сумм подряд у тарифа: 300 … 324
@@ -417,7 +425,7 @@ def _кто(текст):
 def _отчёт(з):
     имена = {"den": "разовый день", "shiv7": "книга · 7 дней", "shiv30": "книга · 30 дней",
              "kniga-kundalini": "книга «Огонь глубин»", "kniga-kundalini-en": "книга «Fire of the Depths» (EN)",
-             "kniga-telepat": "книга «Телепат»",
+             "kniga-telepat": "книга «Телепат»", "kniga-telepat-en": "книга «Telepath» (EN)",
              "nedelya": "недельный гороскоп", "mesyac": "месячный гороскоп", "god": "годовой гороскоп"}
     return (f"✅ Оплата {з['сумма']} ₽ — {имена.get(з['тариф'], з['тариф'])}\n"
             f"Почта: {з['почта']}\nКлюч: {з['ключ']}\n"
