@@ -3387,6 +3387,22 @@ try:
 except Exception as _e:
     print(f"⚠️ Касса СБП не подключилась: {type(_e).__name__}: {_e}")
 
+# 27.09 · классика (натал/соляр/синастрия) с razbor-ru: чат сбора данных + очередь на оплаченный расчёт
+try:
+    import klassika_api as _klassika
+    app.include_router(_klassika.роутер)
+    print("🔭 Классика (натал/соляр/синастрия): подключена")
+except Exception as _e:
+    print(f"⚠️ Классика не подключилась: {type(_e).__name__}: {_e}")
+
+# 27.09 · TON — разовая оплата для нерезидентов (книги на английских страницах), поверх той же кассы
+try:
+    import ton_api as _ton
+    app.include_router(_ton.роутер)
+    print("💎 Касса TON: подключена")
+except Exception as _e:
+    print(f"⚠️ Касса TON не подключилась: {type(_e).__name__}: {_e}")
+
 
 def _карта_дня_в_фоне(номер, з):
     from engine import karta_dnya as КД
