@@ -144,7 +144,10 @@ _РЕНДЕР_БЕЗ_ПАРОЛЯ = ("/api/render-dnya",
                       "/api/oplata/fayl",
                       # 23.09 · гороскоп на срок (неделя, месяц, год): запуск — только с хозяйским
                       # паролем внутри ручки (пока нет оплаты), статус и файл — по номеру своей задачи
-                      "/api/srok/zapustit", "/api/srok/status", "/api/srok/fayl")
+                      "/api/srok/zapustit", "/api/srok/status", "/api/srok/fayl",
+                      # 27.09 · касса TON (книги на английских страницах): сумма и старт проверки —
+                      # тоже по номеру своего заказа, ничего чужого через них не достать
+                      "/api/ton/payment-info", "/api/ton/start-poll")
 
 
 @app.middleware("http")
