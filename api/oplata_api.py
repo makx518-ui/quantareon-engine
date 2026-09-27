@@ -53,9 +53,16 @@ from fastapi.responses import JSONResponse
     "klassika_sinastria": (3600, "klassika", 0),
     # 20.09 · товар-файл: готовый файл вместо системы ключей/страниц (см. вид "fayl" ниже)
     "kniga-kundalini": (700, "fayl", 0),
-    "kniga-kundalini-en": (700, "fayl", 0),  # 26.09 · англ. перевод «Fire of the Depths», отдельный тариф — свой файл
+    "kniga-kundalini-en": (None, "fayl", 0),  # 26.09 · англ. перевод «Fire of the Depths»; 27.09 · оплата только TON (см. ТАРИФЫ_TON)
     "kniga-telepat": (500, "fayl", 0),
-    "kniga-telepat-en": (700, "fayl", 0),  # 26.09 · англ. перевод «Telepath», отдельный тариф — свой файл
+    "kniga-telepat-en": (None, "fayl", 0),  # 26.09 · англ. перевод «Telepath»; 27.09 · оплата только TON (см. ТАРИФЫ_TON)
+}
+# 27.09 · английские книги — оплата ТОЛЬКО через TON (api/ton_api.py), цена в долларах.
+# СБП к ним не относится вообще: рублёвую сумму-код не занимают, телефон/банк получателя
+# покупателю не отдаются, без телефона СБП заказ всё равно создаётся, пуш ловушки их не закрывает.
+ТАРИФЫ_TON = {
+    "kniga-kundalini-en": 10.0,
+    "kniga-telepat-en": 10.0,
 }
 # 20.09 · товары-файлы: тариф → путь к файлу, имя вложения, название для отчёта в Telegram
 ТОВАРЫ_ФАЙЛЫ = {
@@ -145,8 +152,13 @@ def _наружу(з):
         сост = "истёк"
     о = {"ok": True, "nomer": з["номер"], "summa": з["сумма"], "tarif": з["тариф"],
          "sostoyanie": {"ждёт": "zhdet", "оплачен": "oplachen", "истёк": "istek", "отменён": "otmenen"}[сост],
-         "do": з["до"], "telefon": ПОЛУЧАТЕЛЬ["telefon"], "bank": ПОЛУЧАТЕЛЬ["bank"],
-         "imya": ПОЛУЧАТЕЛЬ["imya"]}
+         "do": з["до"]}
+    if з["тариф"] in ТАРИФЫ_TON:
+        # 27.09 · TON-заказ: цена в долларах, реквизиты СБП (телефон, банк, имя) наружу не отдаём
+        о["summa"] = ТАРИФЫ_TON[з["тариф"]]
+        о["valyuta"] = "USD"
+    else:
+        о.update({"telefon": ПОЛУЧАТЕЛЬ["telefon"], "bank": ПОЛУЧАТЕЛЬ["bank"], "imya": ПОЛУЧАТЕЛЬ["imya"]})
     if сост == "оплачен":
         о["klyuch"] = з.get("ключ", "")
         о["pismo"] = bool(з.get("письмо"))
@@ -180,6 +192,7 @@ def _секунда_входа(м):
 
 def _новый_заказ(почта, тариф, lang, адрес, секунда=None, astro_dannye=None):
     цена = ТАРИФЫ[тариф][0]
+    тон = тариф in ТАРИФЫ_TON   # 27.09 · TON-заказ: рублёвая сумма-код СБП ему не нужна
     with ЗАМОК:
         база = _читать()
         сейчас = _сейчас()
@@ -197,10 +210,13 @@ def _новый_заказ(почта, тариф, lang, адрес, секун�
                 старый.pop("адрес", None)
                 старый.pop("секунда", None)
                 старый.pop("astro_dannye", None)
-        занятые = {з["сумма"] for з in база["заказы"] if _занята(з, сейчас)}
-        сумма = next((цена + к for к in range(ПОЛОСА) if цена + к not in занятые), None)
-        if сумма is None:
-            return JSONResponse({"ok": False, "reason": "busy"}, status_code=429)
+        if тон:
+            сумма = None
+        else:
+            занятые = {з["сумма"] for з in база["заказы"] if _занята(з, сейчас)}
+            сумма = next((цена + к for к in range(ПОЛОСА) if цена + к not in занятые), None)
+            if сумма is None:
+                return JSONResponse({"ok": False, "reason": "busy"}, status_code=429)
         з = {"номер": secrets.token_hex(8), "почта": почта, "тариф": тариф, "lang": lang, "сумма": сумма,
              "создан": сейчас.isoformat(), "до": (сейчас + timedelta(minutes=ЖИВЁТ_МИНУТ)).isoformat(),
              "состояние": "ждёт", "адрес": адрес}
@@ -226,7 +242,7 @@ async def zakaz(request: Request):
         return JSONResponse({"ok": False, "reason": "bad_mail"}, status_code=400)
     if тариф not in ТАРИФЫ:
         return JSONResponse({"ok": False, "reason": "bad_tarif"}, status_code=400)
-    if not ПОЛУЧАТЕЛЬ["telefon"]:
+    if not ПОЛУЧАТЕЛЬ["telefon"] and тариф not in ТАРИФЫ_TON:
         return JSONResponse({"ok": False, "reason": "not_ready"}, status_code=503)
     адрес = hashlib.sha256(_адрес(request).encode()).hexdigest()[:16]
     секунда = _секунда_входа(т.get("moment")) if isinstance(т.get("moment"), dict) else None
@@ -461,11 +477,15 @@ def _отчёт(з):
     блок_тон = ""
     if тон:
         хэш = тон.get("hash") or ""
-        блок_тон = (f"💎 Сумма в TON: {тон.get('ton_summa', '?')} TON\n"
+        блок_тон = ((f"🧭 Узнан: {тон['po']}\n" if тон.get("po") else "") +
                     f"💳 Кошелёк отправителя: {тон.get('from', '—')}\n"
                     f"🔗 Хэш перевода: {хэш or '—'}\n"
                     + (f"🔎 Проверить: https://tonviewer.com/transaction/{хэш}\n" if хэш else ""))
-    return (f"✅ Оплата {з['сумма']} ₽ — {имена.get(з['тариф'], з['тариф'])}\n"
+    if з["тариф"] in ТАРИФЫ_TON:
+        сумма = f"${ТАРИФЫ_TON[з['тариф']]:g}" + (f" · {тон['ton_summa']} TON" if тон.get("ton_summa") else "")
+    else:
+        сумма = f"{з['сумма']} ₽"
+    return (f"✅ Оплата {сумма} — {имена.get(з['тариф'], з['тариф'])}\n"
             f"Почта: {з['почта']}\nКлюч: {з['ключ']}\n"
             f"Письмо: {'ушло' if з.get('письмо') else 'НЕ ушло — отправь ключ руками'}\n"
             f"Отмечено: {отметка}\n"
@@ -474,7 +494,7 @@ def _отчёт(з):
 
 
 def _наша_полоса(сумма):
-    return any(цена <= сумма < цена + ПОЛОСА for цена, _, _ in ТАРИФЫ.values())
+    return any(цена is not None and цена <= сумма < цена + ПОЛОСА for цена, _, _ in ТАРИФЫ.values())
 
 
 def _разобрать_пуш(текст, когда):
@@ -492,7 +512,8 @@ def _разобрать_пуш(текст, когда):
         база["пуши"] = недавние + [[отпечаток, минута]]
         сейчас = _сейчас()
         for сумма in суммы:
-            ждут = [з for з in база["заказы"] if з["сумма"] == сумма and _занята(з, сейчас)]
+            ждут = [з for з in база["заказы"] if з["сумма"] == сумма and з["тариф"] not in ТАРИФЫ_TON
+                    and _занята(з, сейчас)]
             if ждут:
                 найден = min(ждут, key=lambda з: з["создан"])
                 break
