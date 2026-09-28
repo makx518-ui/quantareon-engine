@@ -250,6 +250,12 @@ async def zakaz(request: Request):
         # гороскоп на срок разворачивается от секунды входа — без неё его не из чего строить
         return JSONResponse({"ok": False, "reason": "no_moment"}, status_code=400)
     astro_dannye = т.get("astro_dannye") if isinstance(т.get("astro_dannye"), dict) else None
+    if ТАРИФЫ[тариф][1] == "klassika":
+        # 28.09 · данные приходят из браузера — проверка, что подходят к тарифу и расчёт не упадёт
+        import klassika_api as KL
+        astro_dannye = KL.чистые_dannye(тариф, astro_dannye)
+    else:
+        astro_dannye = None
     if ТАРИФЫ[тариф][1] == "klassika" and not astro_dannye:
         # классика собирается чатом ДО оплаты — без данных считать нечего
         return JSONResponse({"ok": False, "reason": "no_dannye"}, status_code=400)
