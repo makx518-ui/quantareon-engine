@@ -150,7 +150,10 @@ _РЕНДЕР_БЕЗ_ПАРОЛЯ = ("/api/render-dnya",
                       "/api/ton/payment-info", "/api/ton/start-poll",
                       # 28.09 · классика (натал/соляр/синастрия) с razbor-ru: чат сбора данных
                       # (лимит сообщений внутри), статус и файл — по номеру своего заказа
-                      "/api/klassika/chat", "/api/klassika/status", "/api/klassika/fayl")
+                      "/api/klassika/chat", "/api/klassika/status", "/api/klassika/fayl",
+                      # 28.09 · кабинет: построить классику вручную — пароль хозяина проверяется внутри,
+                      # как у «Выдать ключ» (/api/kniga/vydat)
+                      "/api/klassika/vruchnuyu")
 
 
 @app.middleware("http")

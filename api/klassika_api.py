@@ -399,6 +399,7 @@ def _построить_натал_или_соляр(к, этап):
     запрос["moment"] = посчитано.get("moment")
     карта = карта_файлом(запрос, итог["razdely"])
     имя_файла = f"{НАЗВАНИЕ[к['tarif']]} · {к.get('имя','гость')} · Квантареон.html"
+    к["arhiv"] = карта.get("fayl") or ""   # 28.09 · путь копии в архиве — для правки карандашом в кабинете
     return карта["html"], имя_файла
 
 
@@ -596,7 +597,7 @@ def _построить_синастрию(к, этап):
     # в Истории на voice.quantareon.com её можно открыть и поправить карандашом «✎ править»
     try:
         from engine import arhiv as A
-        A.положить_карту(к.get("имя", "гость"), "sinastriya", html)
+        к["arhiv"] = A.положить_карту(к.get("имя", "гость"), "sinastriya", html) or ""
     except Exception as e:
         print(f"классика: синастрия в архив карт не легла: {type(e).__name__}: {e}")
     return html, имя_файла
@@ -637,7 +638,8 @@ def _в_фоне(номер, к):
                 print(f"классика {номер}: отметка письма не записалась: {e}")
             _в_телеграм(f"📜 {НАЗВАНИЕ[к['tarif']]} готов · ключ {ключ_из_номера(номер)}\nПочта: {к['почта']}\n"
                        f"Письмо с файлом: {'ушло' if к['письмо'] else 'НЕ ушло — отправь файл руками'}")
-        зд.update({"gotovo": True, "html": html, "imya_fayla": имя_файла, "etap": "готово"})
+        зд.update({"gotovo": True, "html": html, "imya_fayla": имя_файла, "etap": "готово",
+                   "arhiv": к.get("arhiv", "")})
     except BaseException as e:
         ош = f"{type(e).__name__}: {e}"[:300]
         print(f"классика {номер}: сбой {ош}")
@@ -730,13 +732,77 @@ def _из_облака(номер):
     if с == "готово":
         from engine import arhiv as A
         html = A._взять(f"{_префикс()}/{номер}/итог.html") or ""
-        return ({"gotovo": True, "html": html, "imya_fayla": к.get("имя_файла"), "etap": "готово"} if html
+        return ({"gotovo": True, "html": html, "imya_fayla": к.get("имя_файла"), "etap": "готово",
+                 "arhiv": к.get("arhiv", "")} if html
                 else {"gotovo": False, "etap": "файл ещё не сохранился в архиве — подожди немного"})
     if с == "сбой":
         return {"gotovo": True, "oshibka": к.get("ошибка", "сбой")}
     if с == "в очереди":
         return {"gotovo": False, "etap": "в очереди — начну, как только закончу предыдущий разбор"}
     return {"gotovo": False, "etap": "продолжаю после перерыва" if с == "в работе" else "сбой связи, скоро продолжу"}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  КАБИНЕТ · построить разбор вручную (28.09)
+# ═══════════════════════════════════════════════════════════════════
+# Хозяин в «Моём кабинете» (voice.quantareon.com/knigi) строит натал/соляр/синастрию бесплатно —
+# под паролем движка, как «Выдать ключ». Путь разбора тот же, что у оплаченного заказа
+# (поставить_оплаченный → очередь → работник), только без кассы. Почта — по желанию.
+
+def _человек_из_полей(п):
+    return {"дата": str(п.get("data") or "").strip(), "время": (str(п.get("vremya") or "").strip() or None),
+            "место": str(п.get("mesto") or "").strip()[:120], "пол": str(п.get("pol") or "").strip().upper()[:1]}
+
+
+@роутер.post("/api/klassika/vruchnuyu")
+async def vruchnuyu(request: Request):
+    import os
+    import secrets as _секреты
+    try:
+        т = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "reason": "bad_request"}, status_code=400)
+    пароль = os.environ.get("QUANTAREON_PASSWORD", "")
+    if not пароль or not _секреты.compare_digest(str(т.get("klyuch_hozyaina") or "").encode(), пароль.encode()):
+        return JSONResponse({"ok": False, "reason": "locked"}, status_code=403)
+    тариф = str(т.get("tarif") or "")
+    if тариф not in ТИП_ПО_ТАРИФУ:
+        return JSONResponse({"ok": False, "reason": "bad_tarif"}, status_code=400)
+    люди = [л for л in (т.get("lyudi") or []) if isinstance(л, dict)]
+    тип = ТИП_ПО_ТАРИФУ[тариф]
+    нужно = 2 if тип == "синастрия" else 1
+    if len(люди) < нужно:
+        return JSONResponse({"ok": False, "reason": "no_dannye", "tekst": "Заполни данные"}, status_code=400)
+    ч = [_человек_из_полей(л) for л in люди[:нужно]]
+    for к in ч:
+        if not _ДАТА.fullmatch(к["дата"]):
+            return JSONResponse({"ok": False, "reason": "bad_data", "tekst": f"Дата «{к['дата']}» — нужно ДД.ММ.ГГГГ"}, status_code=400)
+        if к["время"] and not _ВРЕМЯ.fullmatch(к["время"]):
+            return JSONResponse({"ok": False, "reason": "bad_data", "tekst": f"Время «{к['время']}» — нужно ЧЧ:ММ"}, status_code=400)
+        if not к["место"]:
+            return JSONResponse({"ok": False, "reason": "bad_data", "tekst": "Впиши город рождения"}, status_code=400)
+    if тип == "синастрия":
+        метка = {"тип": тип, "первый": ч[0], "второй": ч[1]}
+    else:
+        метка = {"тип": тип, **ч[0]}
+        if тип == "соляр":
+            метка["текущее_место"] = str((люди[0].get("mesto_seychas") or "")).strip()[:120]
+            год = str(т.get("god") or "").strip()
+            if год.isdigit():
+                метка["год"] = int(год)
+    try:
+        данные = await _собрать_dannye(метка)
+    except _ОшибкаМеста as e:
+        return JSONResponse({"ok": False, "reason": "mesto", "tekst": str(e)}, status_code=400)
+    данные = чистые_dannye(тариф, данные)
+    if not данные:
+        return JSONResponse({"ok": False, "reason": "no_dannye", "tekst": "Данные не прошли проверку"}, status_code=400)
+    почта = str(т.get("pochta") or "").strip()[:200]
+    lang = "en" if str(т.get("lang") or "").startswith("en") else "ru"
+    номер = _секреты.token_hex(8)
+    await run_in_threadpool(поставить_оплаченный, номер, тариф, данные, почта, lang)
+    return {"ok": True, "nomer": номер, "klyuch": ключ_из_номера(номер),
+            "mesto": [д.get("место") for д in ([данные["первый"], данные["второй"]] if тип == "синастрия" else [данные])]}
 
 
 @роутер.get("/api/klassika/status")
@@ -750,7 +816,8 @@ def status(nomer: str = Query(...)):
         return {"ok": True, "gotovo": False, "etap": зд.get("etap", "")}
     if зд.get("oshibka"):
         return {"ok": True, "gotovo": True, "oshibka": зд["oshibka"]}
-    return {"ok": True, "gotovo": True, "imya_fayla": зд.get("imya_fayla"), "html": зд.get("html", "")}
+    return {"ok": True, "gotovo": True, "imya_fayla": зд.get("imya_fayla"), "html": зд.get("html", ""),
+            "arhiv": зд.get("arhiv", "")}
 
 
 @роутер.get("/api/klassika/fayl")

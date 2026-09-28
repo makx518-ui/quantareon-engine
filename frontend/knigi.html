@@ -122,6 +122,61 @@
       <div class="otvet" id="otvetP"></div>
       <iframe class="ramka" id="ramka" hidden title="разбор"></iframe>
     </div>
+
+    <!-- 28.09 · КЛАССИКА вручную: натал / соляр / синастрия бесплатно, тем же путём, что заказ с сайта -->
+    <div class="blok">
+      <h2>Классика: построить разбор</h2>
+      <div class="ryad">
+        <div>
+          <label for="kTarif">Разбор</label>
+          <select id="kTarif">
+            <option value="klassika_natal" selected>Натальная карта</option>
+            <option value="klassika_solyar">Соляр</option>
+            <option value="klassika_sinastria">Синастрия</option>
+          </select>
+        </div>
+        <div>
+          <label for="kPochta">Почта (можно не заполнять)</label>
+          <input id="kPochta" type="email" autocomplete="off" placeholder="файл уйдёт и туда">
+        </div>
+      </div>
+      <div class="kCh" id="kCh1">
+        <div class="malo" id="kKto1" style="margin:12px 0 4px">Человек</div>
+        <div class="ryad">
+          <div><label>Дата рождения</label><input class="kDat" placeholder="ДД.ММ.ГГГГ" autocomplete="off"></div>
+          <div><label>Время</label><input class="kVr" placeholder="ЧЧ:ММ (если не знаешь — пусто)" autocomplete="off"></div>
+        </div>
+        <div class="ryad">
+          <div style="flex:2 1 260px"><label>Город рождения</label><input class="kMs" placeholder="Город, страна — например: Ижевск, Россия" autocomplete="off"></div>
+          <div><label>Пол</label><select class="kPol"><option value="M">мужской</option><option value="F">женский</option></select></div>
+        </div>
+      </div>
+      <div id="kSolyar" hidden>
+        <div class="ryad">
+          <div style="flex:2 1 260px"><label for="kSeychas">Где будет в день рождения</label><input id="kSeychas" placeholder="Город, страна — если пусто, место рождения" autocomplete="off"></div>
+          <div><label for="kGod">Год соляра</label><input id="kGod" type="number" min="1900" max="2200" placeholder="текущий"></div>
+        </div>
+      </div>
+      <div class="kCh" id="kCh2" hidden>
+        <div class="malo" style="margin:12px 0 4px">Второй человек</div>
+        <div class="ryad">
+          <div><label>Дата рождения</label><input class="kDat" placeholder="ДД.ММ.ГГГГ" autocomplete="off"></div>
+          <div><label>Время</label><input class="kVr" placeholder="ЧЧ:ММ (если не знаешь — пусто)" autocomplete="off"></div>
+        </div>
+        <div class="ryad">
+          <div style="flex:2 1 260px"><label>Город рождения</label><input class="kMs" placeholder="Город, страна" autocomplete="off"></div>
+          <div><label>Пол</label><select class="kPol"><option value="M">мужской</option><option value="F" selected>женский</option></select></div>
+        </div>
+      </div>
+      <div class="malo">Бесплатно для тебя, под паролем движка. Строится тем же путём, что заказ с сайта: натал — около получаса, синастрия — около десяти минут. Страницу можно не держать открытой: готовый разбор найдёшь по ключу.</div>
+      <div style="margin-top:16px">
+        <button class="b zolotoy" id="kPostroit">Построить</button>
+        <button class="b" id="kSkachat" hidden style="margin-left:8px">Скачать файл</button>
+        <a class="b" id="kOtkryt" href="#" target="_blank" rel="noopener" hidden style="margin-left:8px">Открыть во весь экран</a>
+      </div>
+      <div class="otvet" id="kOtvet"></div>
+      <iframe class="ramka" id="kRamka" hidden title="классика"></iframe>
+    </div>
   </section>
 
 </div>
@@ -250,6 +305,99 @@ function показать(html, n, ключ) {
   const s = $("skachat"); s.hidden = false; s.href = URL.createObjectURL(b);
   s.download = "quantareon-" + ключ + "-" + n + ".html";
 }
+
+/* ── 28.09 · КЛАССИКА вручную ───────────────────────────── */
+function кВид() {
+  const т = $("kTarif").value;
+  $("kSolyar").hidden = т !== "klassika_solyar";
+  $("kCh2").hidden = т !== "klassika_sinastria";
+  $("kKto1").textContent = т === "klassika_sinastria" ? "Первый человек" : "Человек";
+}
+$("kTarif").addEventListener("change", кВид); кВид();
+
+function кЧеловек(блок) {
+  return { data: блок.querySelector(".kDat").value.trim(), vremya: блок.querySelector(".kVr").value.trim(),
+           mesto: блок.querySelector(".kMs").value.trim(), pol: блок.querySelector(".kPol").value };
+}
+
+$("kPostroit").addEventListener("click", async () => {
+  const о = $("kOtvet"), т = $("kTarif").value, кн = $("kPostroit");
+  о.className = "otvet"; $("kRamka").hidden = true; $("kSkachat").hidden = true; $("kOtkryt").hidden = true;
+  const люди = [кЧеловек($("kCh1"))];
+  if (т === "klassika_sinastria") люди.push(кЧеловек($("kCh2")));
+  if (т === "klassika_solyar") люди[0].mesto_seychas = $("kSeychas").value.trim();
+  for (const л of люди) {
+    if (!/^\d{1,2}\.\d{1,2}\.\d{4}$/.test(л.data)) { о.className = "otvet err"; о.textContent = "Дата — в виде ДД.ММ.ГГГГ"; return; }
+    if (л.vremya && !/^\d{1,2}:\d{2}$/.test(л.vremya)) { о.className = "otvet err"; о.textContent = "Время — в виде ЧЧ:ММ или пусто"; return; }
+    if (!л.mesto) { о.className = "otvet err"; о.textContent = "Впиши город рождения"; return; }
+  }
+  кн.disabled = true; о.innerHTML = 'Ищу место на карте<span class="tochki"></span>';
+  try {
+    const д = await fetch("/api/klassika/vruchnuyu", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ klyuch_hozyaina: $("pw").value, tarif: т, pochta: $("kPochta").value.trim(),
+                             lyudi: люди, god: $("kGod").value.trim() })
+    }).then(r => r.json());
+    if (!д.ok) {
+      о.className = "otvet err";
+      о.textContent = д.reason === "locked" ? "Пароль движка не подошёл" : (д.tekst || ("Не вышло: " + д.reason));
+      кн.disabled = false; return;
+    }
+    о.innerHTML = 'Ключ: <span class="klyuch">' + э(д.klyuch) + '</span> · место: ' + э((д.mesto || []).join(" / ")) +
+                  '<br><span id="kEtap">в работе</span><span class="tochki"></span>';
+    for (let i = 0; i < 1200; i++) {          // до 100 минут, опрос раз в 5 секунд
+      await ждать(5000);
+      const с = await fetch("/api/klassika/status?nomer=" + д.nomer, { cache: "no-store" }).then(x => x.json()).catch(() => null);
+      if (!с || !с.ok) continue;
+      if (с.gotovo && с.oshibka) { о.className = "otvet err"; о.textContent = "Ошибка: " + с.oshibka; кн.disabled = false; return; }
+      if (с.gotovo) {
+        о.innerHTML = 'Готово · ключ <span class="klyuch">' + э(д.klyuch) + '</span>';
+        кГотово(с, д.klyuch);
+        кн.disabled = false; return;
+      }
+      const е = $("kEtap"); if (е && с.etap) е.textContent = с.etap;
+    }
+    о.className = "otvet err"; о.textContent = "Слишком долго — ключ " + д.klyuch + ", разбор допишется сам";
+  } catch (e) { о.className = "otvet err"; о.textContent = "Связь прервалась"; }
+  кн.disabled = false;
+});
+
+/* 28.09 · его слово: «то, что я открываю в кабинете — моё, клиенту не идёт; я сам редактирую,
+   смотрю, копирую, отправляю». Поэтому в кабинете разбор открывается из архива — с карандашом
+   «✎ править» внизу (та же страница, что в «Истории разборов»). «Скачать файл» берёт из архива
+   свежую версию — со всеми сохранёнными правками, но без панели правки. */
+const кСостояние = { arhiv: "", html: "", imya: "" };
+function кГотово(с, ключ) {
+  кСостояние.arhiv = с.arhiv || ""; кСостояние.html = с.html || "";
+  кСостояние.imya = с.imya_fayla || ("quantareon-" + ключ + ".html");
+  const р = $("kRamka"); р.hidden = false;
+  if (кСостояние.arhiv) {
+    const адрес = "/istoriya/karta?f=" + encodeURIComponent(кСостояние.arhiv);
+    р.removeAttribute("srcdoc"); р.src = адрес;
+    const о = $("kOtkryt"); о.href = адрес; о.hidden = false;
+  } else { р.srcdoc = кСостояние.html; }
+  $("kSkachat").hidden = false;
+}
+function кБезПанели(html) {
+  const i = html.indexOf('<div class="pravka">');
+  if (i < 0) return html;
+  const j = html.lastIndexOf("</body>");
+  return html.slice(0, i) + (j > i ? html.slice(j) : "</body></html>");
+}
+$("kSkachat").addEventListener("click", async () => {
+  let html = кСостояние.html;
+  if (кСостояние.arhiv) {
+    try {
+      const о = await fetch("/istoriya/karta?f=" + encodeURIComponent(кСостояние.arhiv), { cache: "no-store" });
+      if (о.ok) html = await о.text();
+    } catch (e) {}
+  }
+  html = кБезПанели(html);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+  a.download = кСостояние.imya; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+});
 
 /* открываем ту вкладку, на которой были в прошлый раз */
 let старт = "klienty";
