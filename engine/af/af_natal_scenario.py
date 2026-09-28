@@ -24,13 +24,16 @@ SLOI=[("ЯДРО — кто он (дух · душа · зачем пришёл 
       ("ВЫСШИЕ — прорыв · иллюзия · глубина",["Уран","Нептун","Плутон"]),
       ("КАРМИКА-ТОЧКИ — тень · благодать",["Чёрная Луна","Белая Луна"])]
 
-def natal_aspects(flat):
+def natal_aspects(flat, orbis=None):
+    """28.09 · orbis(a, b, вид) -> орбис; None — прежняя таблица ASP (Астрофрактал не меняется).
+    Классика с razbor-ru передаёт свою таблицу Влада (engine/klassika_natal.py, ОРБИС)."""
     out=[]; names=list(flat)
     for i,a in enumerate(names):
         for b in names[i+1:]:
             if {a,b}=={"Сев.Узел","Юж.Узел"}: continue
             d=abs(flat[a]-flat[b])%360; d=min(d,360-d)
             for an,ad,orb in ASP:
+                if orbis is not None: orb=orbis(a,b,an)
                 if abs(d-ad)<=orb: out.append((an,round(abs(d-ad),2),a,b)); break
     return sorted(out,key=lambda x:x[1])
 
@@ -47,7 +50,7 @@ def fractal4(name, ap):
         lv.append(f"{x['sign_name']} {x['sabian']}° [{tag}]")
     return f"{name}: " + " → ".join(lv)
 
-def render_natal(m):
+def render_natal(m, orbis=None):
     P=all_portraits(m); L=["█"*70,"█ НАТАЛЬНЫЙ РАСКЛАД · ядро-потенциал (изнутри наружу, градусы вплетены)","█"*70]
     for title,names in SLOI:
         L.append(f"\n╔══ {title} ══")
@@ -58,7 +61,7 @@ def render_natal(m):
         r=RULER[int(m.cusps[h-1]//30)]
         L.append(f"  дом {h:>2} ({SIGN[int(m.cusps[h-1]//30)]} на куспиде) → управитель {r}: стоит в {SIGN[int(m.flat[r]//30)]}, дом {m.house_of(m.flat[r])}")
     L.append("\n╔══ АСПЕКТЫ (на каждом конце: планета·знак·дом·градус·код; что несёт) ══")
-    for an,orb,a,b in natal_aspects(m.flat):
+    for an,orb,a,b in natal_aspects(m.flat, orbis):
         L.append(f"\n  ▶ {a} {an} {b} · орб {orb}°")
         L.append(f"     {_end(m,a)}")
         L.append(f"     {_end(m,b)}")
