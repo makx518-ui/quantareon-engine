@@ -309,7 +309,7 @@ MAX_AUDIO_BYTES = 8 * 1024 * 1024  # 8 МБ — с запасом на пару 
 
 
 async def transcribe_audio(audio_bytes: bytes, filename: str = "voice.webm",
-                           language: str = "ru") -> dict:
+                           language: str = "ru", prompt: str = "") -> dict:
     """
     Речь -> текст через Groq Whisper.
     Возвращает {"text": str} или {"text": "", "error": str}
@@ -326,6 +326,8 @@ async def transcribe_audio(audio_bytes: bytes, filename: str = "voice.webm",
     data = {"model": STT_MODEL, "response_format": "json"}
     if language:
         data["language"] = language
+    if prompt:
+        data["prompt"] = prompt[:400]   # 28.09 · подсказка Whisper: о чём речь — точнее числа и названия
 
     try:
         async with httpx.AsyncClient(timeout=90) as client:

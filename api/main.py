@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException, Query, UploadFile, File, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -3233,12 +3233,14 @@ async def chat_endpoint(req: ChatRequest, request: Request):
 
 
 @app.post("/transcribe")
-async def transcribe_endpoint(file: UploadFile = File(...), language: str = "ru"):
-    """Речь -> текст для голосового ввода в чате Квантареона. Публичный."""
+async def transcribe_endpoint(file: UploadFile = File(...), language: str = "ru",
+                              prompt: str = Form("")):
+    """Речь -> текст для голосового ввода в чате Квантареона. Публичный.
+    28.09 · prompt (необязательно) — подсказка Whisper, о чём речь (окно данных классики)."""
     from chat import transcribe_audio
     audio = await file.read()
     result = await transcribe_audio(audio, filename=file.filename or "voice.webm",
-                                    language=language)
+                                    language=language, prompt=prompt)
     return result
 
 
