@@ -47,9 +47,9 @@ from starlette.concurrency import run_in_threadpool
 ТИП_ПО_ТАРИФУ = {"klassika_natal": "натал", "klassika_solyar": "соляр", "klassika_sinastria": "синастрия"}
 НАЗВАНИЕ = {"klassika_natal": "Натальная карта", "klassika_solyar": "Соляр", "klassika_sinastria": "Синастрия"}
 НАЗВАНИЕ_EN = {"klassika_natal": "Natal chart", "klassika_solyar": "Solar return", "klassika_sinastria": "Synastry"}
-ЖДАТЬ = {"klassika_natal": "около получаса", "klassika_solyar": "около пятнадцати минут",
+ЖДАТЬ = {"klassika_natal": "около двадцати минут", "klassika_solyar": "около пятнадцати минут",
         "klassika_sinastria": "около десяти минут"}
-ЖДАТЬ_EN = {"klassika_natal": "about half an hour", "klassika_solyar": "about fifteen minutes",
+ЖДАТЬ_EN = {"klassika_natal": "about twenty minutes", "klassika_solyar": "about fifteen minutes",
            "klassika_sinastria": "about ten minutes"}
 
 ОДНОВРЕМЕННО = 1                              # новое направление — не толкаемся с Астрофракталом за место
