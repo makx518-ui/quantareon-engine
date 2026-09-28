@@ -202,7 +202,7 @@ def _число(з, мин, макс):
 
 
 _ДАТА = re.compile(r"\d{1,2}\.\d{1,2}\.\d{4}")
-_ВРЕМЯ = re.compile(r"\d{1,2}:\d{2}")
+_ВРЕМЯ = re.compile(r"\d{1,2}:\d{2}(:\d{2})?")   # 28.09 · секунды — как в окне ввода voice.quantareon.com
 
 
 def _человек_годен(ч):
@@ -303,7 +303,7 @@ def ключ_из_номера(номер):
     return "QN-" + "-".join(номер[i:i + 4] for i in range(0, 16, 4)).upper()
 
 
-def поставить_оплаченный(номер, тариф, dannye, почта, lang="ru"):
+def поставить_оплаченный(номер, тариф, dannye, почта, lang="ru", имя=None):
     """Оплачено → карточка в облако и в очередь. Вызывается кассой (api/oplata_api.py)."""
     if тариф not in ТИП_ПО_ТАРИФУ or not _НОМЕР.fullmatch(номер or "") or not dannye:
         raise ValueError(f"плохой оплаченный классический заказ: {тариф} {номер} {bool(dannye)}")
@@ -311,6 +311,8 @@ def поставить_оплаченный(номер, тариф, dannye, по
         return
     к = {"tarif": тариф, "dannye": dannye, "почта": почта, "lang": lang,
         "состояние": "в очереди", "попыток": 0, "создан": time.time()}
+    if имя:
+        к["имя"] = str(имя)[:80]
     _записать(номер, к)
     _открыт(номер, True)
     ЗАДАЧИ[номер] = {"gotovo": False, "etap": "в очереди — начну, как только закончу предыдущий разбор",
@@ -589,7 +591,7 @@ def _построить_синастрию(к, этап):
                         максимум=30000)   # у Оракула astro_compat — 30000
     разделы = _разделы_пары(текст) or [("Совместимость", текст)]
     этап("собираю карту")
-    html = karta_html.карта_клиенту(разделы, "первый и второй", заказ="sinastriya",
+    html = karta_html.карта_клиенту(разделы, к.get("имя") or "первый и второй", заказ="sinastriya",
                                     данные_рождения={"дата": d["первый"]["дата"], "время": d["первый"].get("время"),
                                                      "место": d["первый"]["место"]})
     имя_файла = f"Синастрия · {к.get('имя','гость')} · Квантареон.html"
@@ -754,6 +756,43 @@ def _человек_из_полей(п):
             "место": str(п.get("mesto") or "").strip()[:120], "пол": str(п.get("pol") or "").strip().upper()[:1]}
 
 
+def _коорд(п, суффикс=""):
+    """28.09 · окно ввода как на voice.quantareon.com: 🔍 уже нашёл (или руками вписаны) GMT, широта, долгота.
+    Все три годны → (шир, долг, gmt); иначе None — тогда место ищется по названию, как раньше."""
+    try:
+        ш = float(str(п.get("shirota" + суффикс)).replace(",", "."))
+        д = float(str(п.get("dolgota" + суффикс)).replace(",", "."))
+        г = float(str(п.get("gmt" + суффикс)).replace(",", ".").replace("+", ""))
+    except (TypeError, ValueError):
+        return None
+    if -90 <= ш <= 90 and -180 <= д <= 180 and -14 <= г <= 14:
+        return ш, д, г
+    return None
+
+
+def _данные_по_коорд(тип, люди, ч, год):
+    """Все координаты уже есть → данные без геокодера. Иначе None."""
+    нужно = 2 if тип == "синастрия" else 1
+    к = [_коорд(л) for л in люди[:нужно]]
+    if not all(к):
+        return None
+    полные = [{**чел, "_shirota": кк[0], "_dolgota": кк[1], "_gmt": кк[2]} for чел, кк in zip(ч, к)]
+    if тип == "синастрия":
+        return {"тип": тип, "первый": полные[0], "второй": полные[1]}
+    итог = {"тип": тип, **полные[0]}
+    if тип == "соляр":
+        сейчас = _коорд(люди[0], "_seychas")
+        место_сейчас = str(люди[0].get("mesto_seychas") or "").strip()[:120]
+        if место_сейчас and not сейчас:
+            return None                      # город «сейчас» вписан, но не найден — пусть ищет геокодер
+        if сейчас:
+            итог.update({"текущее_место": место_сейчас or итог["место"], "_shirota_seychas": сейчас[0],
+                        "_dolgota_seychas": сейчас[1], "_gmt_seychas": сейчас[2]})
+        if год:
+            итог["_god_solyara"] = год
+    return итог
+
+
 @роутер.post("/api/klassika/vruchnuyu")
 async def vruchnuyu(request: Request):
     import os
@@ -778,7 +817,7 @@ async def vruchnuyu(request: Request):
         if not _ДАТА.fullmatch(к["дата"]):
             return JSONResponse({"ok": False, "reason": "bad_data", "tekst": f"Дата «{к['дата']}» — нужно ДД.ММ.ГГГГ"}, status_code=400)
         if к["время"] and not _ВРЕМЯ.fullmatch(к["время"]):
-            return JSONResponse({"ok": False, "reason": "bad_data", "tekst": f"Время «{к['время']}» — нужно ЧЧ:ММ"}, status_code=400)
+            return JSONResponse({"ok": False, "reason": "bad_data", "tekst": f"Время «{к['время']}» — нужно ЧЧ:ММ или ЧЧ:ММ:СС"}, status_code=400)
         if not к["место"]:
             return JSONResponse({"ok": False, "reason": "bad_data", "tekst": "Впиши город рождения"}, status_code=400)
     if тип == "синастрия":
@@ -790,17 +829,21 @@ async def vruchnuyu(request: Request):
             год = str(т.get("god") or "").strip()
             if год.isdigit():
                 метка["год"] = int(год)
-    try:
-        данные = await _собрать_dannye(метка)
-    except _ОшибкаМеста as e:
-        return JSONResponse({"ok": False, "reason": "mesto", "tekst": str(e)}, status_code=400)
+    данные = _данные_по_коорд(тип, люди, ч, метка.get("год"))
+    if данные is None:
+        try:
+            данные = await _собрать_dannye(метка)
+        except _ОшибкаМеста as e:
+            return JSONResponse({"ok": False, "reason": "mesto", "tekst": str(e)}, status_code=400)
     данные = чистые_dannye(тариф, данные)
     if not данные:
         return JSONResponse({"ok": False, "reason": "no_dannye", "tekst": "Данные не прошли проверку"}, status_code=400)
     почта = str(т.get("pochta") or "").strip()[:200]
     lang = "en" if str(т.get("lang") or "").startswith("en") else "ru"
     номер = _секреты.token_hex(8)
-    await run_in_threadpool(поставить_оплаченный, номер, тариф, данные, почта, lang)
+    имена = [str(л.get("imya") or "").strip()[:40] for л in люди[:нужно]]
+    имя = " и ".join(и for и in имена if и) or None
+    await run_in_threadpool(поставить_оплаченный, номер, тариф, данные, почта, lang, имя)
     return {"ok": True, "nomer": номер, "klyuch": ключ_из_номера(номер),
             "mesto": [д.get("место") for д in ([данные["первый"], данные["второй"]] if тип == "синастрия" else [данные])]}
 
