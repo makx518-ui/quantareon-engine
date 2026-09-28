@@ -34,6 +34,35 @@ from typing import Optional
 
 from engine.interpret import _спросить
 
+# 28.09 · его решение: помощник окна ввода — как в Оракуле, на Groq, но быстрая модель
+# gpt-oss-20b («зачем умный в окне ввода»). Ключ — тот же GROQ_API_KEY, что у чата сайта (chat.py).
+# Groq не ответил — запасной путь прежний (engine.interpret._спросить).
+import os as _os
+МОДЕЛЬ_ПОМОЩНИКА = _os.getenv("KLASSIKA_CHAT_MODEL", "openai/gpt-oss-20b")
+
+
+async def _спросить_грок(system_prompt, user_prompt, max_tokens=1500, temperature=0.6):
+    import httpx
+    ключ = _os.getenv("GROQ_API_KEY", "")
+    if not ключ:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=45) as клиент:
+            о = await клиент.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {ключ}", "Content-Type": "application/json"},
+                json={"model": МОДЕЛЬ_ПОМОЩНИКА,
+                      "messages": [{"role": "system", "content": system_prompt},
+                                   {"role": "user", "content": user_prompt}],
+                      "temperature": temperature, "max_tokens": max_tokens,
+                      "reasoning_effort": "low"})
+            о.raise_for_status()
+            т = (о.json()["choices"][0]["message"].get("content") or "").strip()
+            return т or None
+    except Exception as e:
+        print(f"помощник классики: Groq {МОДЕЛЬ_ПОМОЩНИКА} не ответил — {type(e).__name__}: {e}")
+        return None
+
 # ============================================================
 # СИСТЕМНЫЙ ПРОМПТ
 # ============================================================
@@ -168,13 +197,15 @@ async def klassika_chat_reply(history: list, user_text: str, model: str = None, 
         система += ("\n\nВАЖНО: клиент уже выбрал на странице и оплачивает " + _ВЫБОР[тип] +
                     " Если он просит другой разбор — мягко скажи, что сейчас выбран этот, а другой"
                     " можно выбрать в списке тарифов выше.")
-    ответ = await _спросить(
-        system_prompt=система,
-        user_prompt=диалог,
-        model=model,
-        max_tokens=400,
-        temperature=0.6,
-    )
+    ответ = await _спросить_грок(система, диалог)
+    if not ответ:
+        ответ = await _спросить(
+            system_prompt=система,
+            user_prompt=диалог,
+            model=model,
+            max_tokens=400,
+            temperature=0.6,
+        )
     return (ответ or "").strip()
 
 
