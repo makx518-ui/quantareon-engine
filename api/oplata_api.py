@@ -190,18 +190,18 @@ def _секунда_входа(м):
         return None
 
 
-def _новый_заказ(почта, тариф, lang, адрес, секунда=None, astro_dannye=None):
+def _новый_заказ(почта, тариф, lang, адрес, секунда=None, astro_dannye=None, владелец=False):
     цена = ТАРИФЫ[тариф][0]
     тон = тариф in ТАРИФЫ_TON   # 27.09 · TON-заказ: рублёвая сумма-код СБП ему не нужна
     with ЗАМОК:
         база = _читать()
         сейчас = _сейчас()
         # тот же человек и тот же тариф, заказ ещё ждёт — отдаём его же, новую сумму не занимаем
-        for з in reversed(база["заказы"]):
+        for з in ([] if владелец else reversed(база["заказы"])):   # владельцу — всегда новый, со своими данными
             if з["почта"].lower() == почта.lower() and з["тариф"] == тариф and з["состояние"] == "ждёт" \
                     and _дата(з["до"]) > сейчас:
                 return _наружу(з)
-        if sum(1 for з in база["заказы"] if з.get("адрес") == адрес and з["состояние"] == "ждёт"
+        if not владелец and sum(1 for з in база["заказы"] if з.get("адрес") == адрес and з["состояние"] == "ждёт"
                and _дата(з["до"]) > сейчас) >= ЗАКАЗОВ_С_АДРЕСА:
             return JSONResponse({"ok": False, "reason": "too_many"}, status_code=429)
         # метка устройства, секунда входа и данные классики нужны только пока заказ ждёт оплату
@@ -259,7 +259,25 @@ async def zakaz(request: Request):
     if ТАРИФЫ[тариф][1] == "klassika" and not astro_dannye:
         # классика собирается чатом ДО оплаты — без данных считать нечего
         return JSONResponse({"ok": False, "reason": "no_dannye"}, status_code=400)
+    # 28.09 · его решение: АДМИН-ССЫЛКА, как в Оракуле. Владелец зашёл по своей ссылке — заказ
+    # сразу считается оплаченным и идёт ТЕМ ЖЕ путём, что платный (_отметить → _после_оплаты:
+    # ключ, письмо, построение, файл, Telegram). Ключ — отдельный от пароля движка, лежит на
+    # Render в QUANTAREON_ADMIN_KEY; нет переменной — режима владельца нет вовсе.
+    админ = str(т.get("admin") or "")
+    if админ:
+        if not _владелец(админ):
+            return JSONResponse({"ok": False, "reason": "admin_locked"}, status_code=403)
+        новый = await run_in_threadpool(_новый_заказ, почта, тариф, lang, адрес, секунда, astro_dannye, True)
+        if not isinstance(новый, dict) or not новый.get("nomer"):
+            return новый
+        return await run_in_threadpool(_отметить, новый["nomer"], "владелец")
     return await run_in_threadpool(_новый_заказ, почта, тариф, lang, адрес, секунда, astro_dannye)
+
+
+def _владелец(ключ):
+    import secrets as _с
+    верный = os.getenv("QUANTAREON_ADMIN_KEY", "")
+    return len(верный) >= 12 and _с.compare_digest(str(ключ).encode(), верный.encode())
 
 
 def _найти(nomer):
@@ -478,7 +496,8 @@ def _отчёт(з):
              "kniga-telepat": "книга «Телепат»", "kniga-telepat-en": "книга «Telepath» (EN)",
              "nedelya": "недельный гороскоп", "mesyac": "месячный гороскоп", "god": "годовой гороскоп",
              "klassika_natal": "натальная карта", "klassika_solyar": "соляр", "klassika_sinastria": "синастрия"}
-    отметка = {"пуш": "ловушкой", "TON": "TON-кошелёк"}.get(з.get("как"), "руками в кабинете")
+    отметка = {"пуш": "ловушкой", "TON": "TON-кошелёк",
+               "владелец": "БЕСПЛАТНО — владелец по админ-ссылке"}.get(з.get("как"), "руками в кабинете")
     тон = з.get("ton") or {}
     блок_тон = ""
     if тон:
