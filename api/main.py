@@ -151,9 +151,9 @@ _РЕНДЕР_БЕЗ_ПАРОЛЯ = ("/api/render-dnya",
                       # 28.09 · классика (натал/соляр/синастрия) с razbor-ru: чат сбора данных
                       # (лимит сообщений внутри), статус и файл — по номеру своего заказа
                       "/api/klassika/chat", "/api/klassika/status", "/api/klassika/fayl",
-                      # 28.09 · кабинет: построить классику вручную — пароль хозяина проверяется внутри,
-                      # как у «Выдать ключ» (/api/kniga/vydat)
-                      "/api/klassika/vruchnuyu")
+                      # 28.09 · режим владельца (админ-ссылка на razbor-ru): правка и отправка файла —
+                      # ключ владельца QUANTAREON_ADMIN_KEY проверяется внутри, без него 403
+                      "/api/vladelec/pravka", "/api/vladelec/otpravit")
 
 
 @app.middleware("http")
@@ -291,11 +291,7 @@ def stranica_istorii():
     })
 
 
-@app.get("/knigi", response_class=HTMLResponse)
-def stranica_knig():
-    """16.09 · его страница: две вкладки — «Клиенты» (кто купил, почта, страницы, корзинка)
-    и «Мой кабинет» (выдать ключ, построить разбор для опыта). За паролем движка, как история."""
-    return FileResponse(FRONT / "knigi.html", headers={"Cache-Control": "no-store"})
+# 28.09 · страница «Книги Квантареона» (/knigi) убрана — его слово: всё на razbor-ru по админ-ссылке
 
 
 @app.get("/api/istoriya")
@@ -3405,6 +3401,14 @@ try:
     print("🔭 Классика (натал/соляр/синастрия): подключена")
 except Exception as _e:
     print(f"⚠️ Классика не подключилась: {type(_e).__name__}: {_e}")
+
+# 28.09 · режим владельца на razbor-ru: правка готового гороскопа и отправка файла на любую почту
+try:
+    import vladelec_api as _vladelec
+    app.include_router(_vladelec.роутер)
+    print("👑 Режим владельца: подключён")
+except Exception as _e:
+    print(f"⚠️ Режим владельца не подключился: {type(_e).__name__}: {_e}")
 
 # 27.09 · TON — разовая оплата для нерезидентов (книги на английских страницах), поверх той же кассы
 try:
