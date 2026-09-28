@@ -82,6 +82,9 @@ SYSTEM_PROMPT_KLASSIKA = """Ты — Квантареон, мастер запа
 подтверждено, вывести СЛУЖЕБНУЮ МЕТКУ. Трактовку карты ты в этом диалоге НЕ
 пишешь — это делает отдельный движок после оплаты.
 
+ПРАВИЛО ВРЕМЕНИ (28.09): если клиент назвал время с секундами (20:56:38) — пиши его с секундами:
+TIME: 20:56:38. Секунды нужны для точных углов карты. Нет секунд — ЧЧ:ММ.
+
 ПРАВИЛО МЕСТА: в поле PLACE пиши город ТОЧНО так, как назвал клиент, только
 переведи буквы латиницей (транслитерация), не заменяя на другое, устаревшее
 или советское название (например, «Кургантепа» → «Kurgantepa», а НЕ
@@ -221,13 +224,13 @@ async def klassika_chat_reply(history: list, user_text: str, model: str = None, 
 
 _NATAL_RE = re.compile(
     r'\[LAUNCH_ASTRO_NATAL:\s*(\d{1,2}\.\d{1,2}\.\d{4})'
-    r'(?:,\s*TIME:\s*(\d{1,2}:\d{2}))?'
+    r'(?:,\s*TIME:\s*(\d{1,2}:\d{2}(?::\d{2})?))?'
     r'(?:,\s*PLACE:\s*([^,\]]+))?'
     r'(?:,\s*GENDER:\s*([MFmf]))?\s*\]'
 )
 _SOLAR_RE = re.compile(
     r'\[LAUNCH_ASTRO_SOLAR:\s*(\d{1,2}\.\d{1,2}\.\d{4})'
-    r'(?:,\s*TIME:\s*(\d{1,2}:\d{2}))?'
+    r'(?:,\s*TIME:\s*(\d{1,2}:\d{2}(?::\d{2})?))?'
     r'(?:,\s*PLACE:\s*([^,\]]+))?'
     r'(?:,\s*CURRENT:\s*([^,\]]+))?'
     r'(?:,\s*GENDER:\s*([MFmf]))?'
@@ -236,7 +239,7 @@ _SOLAR_RE = re.compile(
 _COMPAT_RE = re.compile(r'\[LAUNCH_ASTRO_COMPAT:\s*(.+?)\s*\]', re.DOTALL)
 _COMPAT_PART_RE = {
     "date": re.compile(r'(\d{1,2}\.\d{1,2}\.\d{4})'),
-    "time": re.compile(r'TIME:\s*(\d{1,2}:\d{2})'),
+    "time": re.compile(r'TIME:\s*(\d{1,2}:\d{2}(?::\d{2})?)'),
     "place": re.compile(r'PLACE:\s*([^|,\]]+)'),
     "gender": re.compile(r'GENDER:\s*([MFmf])'),
 }
