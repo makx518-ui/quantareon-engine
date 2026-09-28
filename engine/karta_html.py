@@ -384,7 +384,7 @@ def карта_клиенту(трактовка_по_разделам, имя, 
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{_html.escape(заг.title())} · {_html.escape(имя)}</title>
+<title>{_html.escape(заг[:1].upper() + заг[1:].lower())} · {_html.escape(имя)}</title>
 <style>{СТИЛЬ}</style>
 </head>
 <body>

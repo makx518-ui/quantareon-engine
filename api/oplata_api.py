@@ -48,9 +48,9 @@ from fastapi.responses import JSONResponse
     "god":     (3600, "srok", 365),
     # 27.09 · классика (натал/соляр/синастрия) с razbor-ru: данные собраны чатом ДО оплаты
     # (engine/chat_klassika.py), оплачено → заказ в api/klassika_api.py, файл — на почту
-    "klassika_natal":     (3600, "klassika", 0),
-    "klassika_solyar":    (3600, "klassika", 0),
-    "klassika_sinastria": (3600, "klassika", 0),
+    "klassika_natal":     (2100, "klassika", 0),
+    "klassika_solyar":    (2100, "klassika", 0),
+    "klassika_sinastria": (2100, "klassika", 0),
     # 20.09 · товар-файл: готовый файл вместо системы ключей/страниц (см. вид "fayl" ниже)
     "kniga-kundalini": (700, "fayl", 0),
     "kniga-kundalini-en": (None, "fayl", 0),  # 26.09 · англ. перевод «Fire of the Depths»; 27.09 · оплата только TON (см. ТАРИФЫ_TON)
