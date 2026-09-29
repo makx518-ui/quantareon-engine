@@ -205,6 +205,11 @@ class Config:
     # ⚠️ Остальные языки (es, fr, de, it, pt, ja, zh, ar, hi) — как были,
     # у Microsoft: у Яндекса их нет (кроме немецкого, но его не трогаем).
     YANDEX_VOICE_EN: str = "john"
+    # 🎚️ 29.09 JOHN НИЖЕ НА 70 Гц — «побрутальнее» (его выбор на слух из пробы
+    # /tts-proba: −60, −70, −80 → взял −70). Сдвиг тона есть только в API v3,
+    # поэтому английская сторона ходит в v3; не вышло — тот же кусок по-старому
+    # (v1, без сдвига), отказы v3 защиту Яндекса не трогают. 0 — выключить.
+    YANDEX_PITCH_EN: int = -70
     YANDEX_SPEED: str = "1.0"          # 25.08 его выбор на слух: обычный темп.
                                        # Стояло 0.9 — сказал «вяло говорит»;
                                        # пробовали и 1.05, и 1.1 — «естественнее
@@ -3235,6 +3240,11 @@ class EdgeTTSTurbo:
         """Одно предложение у Яндекса, сырым звуком (без сжатия)."""
         if not self.ya_on:
             return b""
+        if self.lang == "en" and config.YANDEX_PITCH_EN:
+            звук3 = await self._ya_v3(text)
+            if звук3:
+                EdgeTTSTurbo._ya_отказов = 0
+                return звук3
         параметры = {
             "text": self._ya_text(text, self.lang),
             "lang": "ru-RU" if self.lang == "ru" else "en-US",
@@ -3301,6 +3311,51 @@ class EdgeTTSTurbo:
             n = (звук[6] << 21) | (звук[7] << 14) | (звук[8] << 7) | звук[9]
             звук = звук[10 + n:]
         return звук
+    async def _ya_v3(self, text: str) -> bytes:
+        """29.09 · английский John через API v3 со сдвигом тона. Пусто — не вышло
+        (тогда вызывающий идёт старым путём v1). Отказы здесь НЕ считаются в
+        защиту Яндекса — чтобы сбой v3 не выключил русскую сторону."""
+        import json as _j, base64 as _b
+        тело = _j.dumps({
+            "text": self._ya_text(text, self.lang),
+            "hints": [{"voice": self.ya_voice}, {"speed": str(config.YANDEX_SPEED)},
+                      {"pitchShift": str(config.YANDEX_PITCH_EN)}],
+            "outputAudioSpec": {"containerAudio": {"containerAudioType": "MP3"}},
+        }).encode()
+
+        def _сходить() -> bytes:
+            зпр = urllib.request.Request(
+                "https://tts.api.cloud.yandex.net/tts/v3/utteranceSynthesis",
+                data=тело,
+                headers={"Authorization": f"Api-Key {config.YANDEX_API_KEY}",
+                         "x-folder-id": config.YANDEX_FOLDER_ID,
+                         "Content-Type": "application/json"})
+            with urllib.request.urlopen(зпр, timeout=config.YANDEX_TIMEOUT) as о:
+                сырое = о.read().decode("utf-8")
+            звук, дек, i = b"", _j.JSONDecoder(), 0
+            while i < len(сырое):
+                while i < len(сырое) and сырое[i].isspace():
+                    i += 1
+                if i >= len(сырое):
+                    break
+                объект, i = дек.raw_decode(сырое, i)
+                кус = ((объект.get("result") or {}).get("audioChunk") or {}).get("data")
+                if кус:
+                    звук += _b.b64decode(кус)
+            return звук
+
+        try:
+            звук = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(None, _сходить),
+                timeout=config.YANDEX_TIMEOUT + 1)
+        except Exception as e:
+            logger.warning(f"🗣️ Яндекс v3 (John −тон): {type(e).__name__} — идём по-старому")
+            return b""
+        if len(звук) > 10 and звук[:3] == b"ID3":
+            n = (звук[6] << 21) | (звук[7] << 14) | (звук[8] << 7) | звук[9]
+            звук = звук[10 + n:]
+        return звук
+
     @staticmethod
     async def _collect(communicate) -> bytes:
         """Собрать весь звук от Edge. Вынесено отдельно, чтобы обернуть
