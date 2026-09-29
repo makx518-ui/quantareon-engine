@@ -3261,6 +3261,93 @@ async def tts_endpoint(req: TtsRequest):
     return StreamingResponse(tts_stream(text, language=lang), media_type="audio/mpeg")
 
 
+# ── 29.09 · ПРОБА АНГЛИЙСКОГО ГОЛОСА («побрутальнее» — его просьба).
+# Одна страница /tts-proba с плеерами: John (Яндекс, v3 — там есть сдвиг тона)
+# и Эндрю (Microsoft — тон и скорость). Живой голос сайта НЕ меняется.
+# Только готовые варианты и один текст, каждый синтезируется один раз и
+# держится в памяти — лишних запросов к Яндексу нет.
+_ПРОБА_ТЕКСТ = ("Greetings, traveler! I am Quantareon, the voice assistant of this site. "
+                "Ask me anything you like.")
+_ПРОБА = {
+    "john0":    ("John — как сейчас", "john", 0, 1.0),
+    "john60":   ("John — тон −60", "john", -60, 1.0),
+    "john120":  ("John — тон −120", "john", -120, 1.0),
+    "john200":  ("John — тон −200, чуть медленнее", "john", -200, 0.95),
+    "andrew0":  ("Andrew — как сейчас", "andrew", "-15Hz", "+5%"),
+    "andrew25": ("Andrew — тон −25", "andrew", "-25Hz", "+0%"),
+    "andrew35": ("Andrew — тон −35, чуть медленнее", "andrew", "-35Hz", "-5%"),
+}
+_ПРОБА_КЭШ: dict = {}
+
+
+def _проба_john(сдвиг: int, скорость: float) -> bytes:
+    import json as _j, base64 as _b, urllib.request as _u
+    тело = {"text": _ПРОБА_ТЕКСТ,
+            "hints": [{"voice": "john"}, {"speed": str(скорость)}, {"pitchShift": str(сдвиг)}],
+            "outputAudioSpec": {"containerAudio": {"containerAudioType": "MP3"}}}
+    зпр = _u.Request("https://tts.api.cloud.yandex.net/tts/v3/utteranceSynthesis",
+                     data=_j.dumps(тело).encode(),
+                     headers={"Authorization": f"Api-Key {os.getenv('YANDEX_API_KEY', '')}",
+                              "x-folder-id": os.getenv("YANDEX_FOLDER_ID", ""),
+                              "Content-Type": "application/json"})
+    with _u.urlopen(зпр, timeout=20) as о:
+        сырое = о.read().decode("utf-8")
+    звук, дек, i = b"", _j.JSONDecoder(), 0
+    while i < len(сырое):
+        while i < len(сырое) and сырое[i].isspace():
+            i += 1
+        if i >= len(сырое):
+            break
+        объект, i = дек.raw_decode(сырое, i)
+        кус = ((объект.get("result") or {}).get("audioChunk") or {}).get("data")
+        if кус:
+            звук += _b.b64decode(кус)
+    return звук
+
+
+async def _проба_andrew(тон: str, темп: str) -> bytes:
+    import edge_tts
+    буф = bytearray()
+    async for часть in edge_tts.Communicate(text=_ПРОБА_ТЕКСТ, voice="en-US-AndrewMultilingualNeural",
+                                             rate=темп, pitch=тон, volume="+15%").stream():
+        if часть["type"] == "audio":
+            буф.extend(часть["data"])
+    return bytes(буф)
+
+
+@app.get("/tts-proba")
+async def tts_proba(v: str = ""):
+    """Без v — страница с плеерами; с v — mp3 этого варианта."""
+    import asyncio
+    if not v:
+        строки = "".join(
+            f'<div style="margin:18px 0"><div style="margin-bottom:6px">{н}</div>'
+            f'<audio controls preload="none" src="/tts-proba?v={к}" style="width:100%"></audio></div>'
+            for к, (н, *_) in _ПРОБА.items())
+        return HTMLResponse(
+            '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            '<title>Проба голоса</title><body style="font-family:sans-serif;max-width:560px;margin:30px auto;'
+            'padding:0 16px;background:#111;color:#eee"><h2>Английский голос — проба</h2>'
+            f'<p style="color:#aaa">Текст: «{_ПРОБА_ТЕКСТ}»</p>{строки}</body>')
+    if v not in _ПРОБА:
+        return Response(status_code=404)
+    if v not in _ПРОБА_КЭШ:
+        _, кто, а, б = _ПРОБА[v]
+        try:
+            if кто == "john":
+                звук = await asyncio.get_event_loop().run_in_executor(None, _проба_john, а, б)
+            else:
+                звук = await _проба_andrew(а, б)
+        except Exception as e:
+            print(f"проба голоса {v}: {type(e).__name__}: {e}")
+            return Response(content=f"ошибка: {type(e).__name__}: {e}"[:300], status_code=502,
+                            media_type="text/plain; charset=utf-8")
+        if not звук:
+            return Response(content="пустой ответ", status_code=502, media_type="text/plain; charset=utf-8")
+        _ПРОБА_КЭШ[v] = звук
+    return Response(content=_ПРОБА_КЭШ[v], media_type="audio/mpeg")
+
+
 @app.websocket("/stt-stream")
 async def stt_stream(ws: WebSocket):
     """
