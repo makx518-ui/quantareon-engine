@@ -3271,6 +3271,8 @@ _ПРОБА_ТЕКСТ = ("Greetings, traveler! I am Quantareon, the voice assis
 _ПРОБА = {
     "john0":    ("John — как сейчас", "john", 0, 1.0),
     "john60":   ("John — тон −60", "john", -60, 1.0),
+    "john70":   ("John — тон −70", "john", -70, 1.0),
+    "john80":   ("John — тон −80", "john", -80, 1.0),
     "john120":  ("John — тон −120", "john", -120, 1.0),
     "john200":  ("John — тон −200, чуть медленнее", "john", -200, 0.95),
     "andrew0":  ("Andrew — как сейчас", "andrew", "-15Hz", "+5%"),
