@@ -17,9 +17,8 @@ Kyrgyzstan; paused the practice at 29, resumed at 37; reached the state of
 Samadhi after twenty years.
 The full book on the RUSSIAN page costs 700 roubles, paid by SBP bank
 transfer to a phone number, from any bank's app, Russia only — the button
-there is active: "Скачать книгу · 700 ₽". On the ENGLISH page payment is
-NOT switched on yet — the button is disabled, with a placeholder price of
-$10.
+there is active: "Скачать книгу · 700 ₽". On the ENGLISH page the book
+costs $10, paid in TON — see below.
 
 THE BOOK "TELEPATH"
 Russian page: quantareon.com/telepat-ru.html
@@ -31,8 +30,19 @@ memory of the world) through which thought and feeling pass whole, without
 words, bypassing ordinary speech.
 The full book on the RUSSIAN page costs 500 roubles, paid the same way
 (SBP transfer to a phone number), Russia only — the button there is
-active: "Скачать книгу · 500 ₽". On the ENGLISH page payment is NOT
-switched on yet — disabled, placeholder $10.
+active: "Скачать книгу · 500 ₽". On the ENGLISH page the book costs $10,
+paid in TON — see below.
+
+BUYING ON THE ENGLISH PAGES (works since 27 September 2026)
+$10 per book, paid in TON cryptocurrency from any TON wallet. Enter the
+e-mail, press "Download the book · $10" — the amount in TON, a QR code and
+an "Open wallet" button appear. Scan the QR with a TON wallet app, or on a
+phone tap "Open wallet" — the address, amount and comment fill in by
+themselves. The server finds the payment on its own; the book opens on the
+page and also arrives by e-mail. No wallet yet — the page suggests the free
+Keeper wallet (formerly Tonkeeper). The first e-mail may land in Spam.
+Never mention roubles, SBP or Russian banks to a visitor on the English
+pages.
 
 HOW TO SPEAK ABOUT IT
 Don't confuse the book with the Music section, or with Kundalini as a

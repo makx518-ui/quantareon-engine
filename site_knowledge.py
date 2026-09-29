@@ -113,6 +113,9 @@ TOPICS: Dict[str, Dict] = {
             "monthly horoscope", "yearly horoscope", "for a week", "for a month",
             "for a year", "how much", "price", "buy a horoscope", "order a horoscope",
             "my key", "paid",
+            # 29.09 · классические разборы на razbor-ru (натал 2100, соляр и синастрия «скоро»)
+            "натальная карт", "натальную карт", "натальной карт", "классическ",
+            "соляр", "синастри", "natal chart", "solar return", "synastry",
         ],
     },
     "astrofraktal": {
@@ -172,6 +175,9 @@ TOPICS: Dict[str, Dict] = {
             "скачать книгу", "купить книгу", "цена книги", "сколько стоит книга",
             "kundalini book", "buy the book", "download the book", "book price",
             "kniga-kundalini", "kniga-telepat",
+            # 29.09 · английские книги оплачиваются в TON
+            "в ton", "тон-кошел", "криптовалют", "tonkeeper", "keeper",
+            "ton wallet", "pay with ton", "in ton", "crypto", "pay for the book", "оплатить книгу", "оплата книги",
         ],
     },
     # 21.09 · две короткие бесплатные статьи — Самадхи и Мантра. Слова не
