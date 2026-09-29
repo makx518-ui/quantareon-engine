@@ -3317,6 +3317,51 @@ async def _проба_andrew(тон: str, темп: str) -> bytes:
     return bytes(буф)
 
 
+_ПРИВЕТ_EN_НОВОЕ: dict = {}
+_ПРИВЕТ_EN_СОХРАНЁН: dict = {}
+
+
+async def _привет_en_новое() -> bytes:
+    """Английское приветствие голосом John −70 — тем же путём, что живой разговор."""
+    if not _ПРИВЕТ_EN_НОВОЕ.get("звук"):
+        import voice as _v
+        _ПРИВЕТ_EN_НОВОЕ["звук"] = await _v.EdgeTTSTurbo("en").synthesize(_v.ПРИВЕТСТВИЕ["en"])
+    return _ПРИВЕТ_EN_НОВОЕ.get("звук") or b""
+
+
+@app.get("/tts-proba/privet-en")
+async def tts_proba_privet():
+    звук = await _привет_en_новое()
+    if not звук:
+        return Response(content="Яндекс не отдал звук", status_code=502, media_type="text/plain; charset=utf-8")
+    return Response(content=звук, media_type="audio/mpeg")
+
+
+@app.post("/tts-proba/privet-en/save")
+async def tts_proba_privet_save():
+    """Положить новое приветствие в хранилище (greeting-en-john70.mp3) и сразу в память движка.
+    Один раз в 5 минут — чтобы кнопку не дёргали."""
+    import time as _t
+    if _t.time() - _ПРИВЕТ_EN_СОХРАНЁН.get("когда", 0) < 300:
+        return JSONResponse({"ok": True, "note": "уже сохранено недавно"})
+    звук = await _привет_en_новое()
+    if not звук:
+        return JSONResponse({"ok": False, "error": "Яндекс не отдал звук"}, status_code=502)
+    from engine import arhiv
+    к = arhiv._клиент()
+    if к is None:
+        return JSONResponse({"ok": False, "error": "нет доступа к хранилищу"}, status_code=500)
+    try:
+        к.put_object(Bucket=arhiv.БАКЕТ, Key="greeting-en-john70.mp3", Body=звук,
+                     ContentType="audio/mpeg", CacheControl="public, max-age=3600")
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"{type(e).__name__}: {e}"[:300]}, status_code=500)
+    import voice as _v
+    _v.CACHED_GREETING_AUDIO_EN = звук
+    _ПРИВЕТ_EN_СОХРАНЁН["когда"] = _t.time()
+    return JSONResponse({"ok": True, "bytes": len(звук)})
+
+
 @app.get("/tts-proba")
 async def tts_proba(v: str = ""):
     """Без v — страница с плеерами; с v — mp3 этого варианта."""
@@ -3330,7 +3375,13 @@ async def tts_proba(v: str = ""):
             '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             '<title>Проба голоса</title><body style="font-family:sans-serif;max-width:560px;margin:30px auto;'
             'padding:0 16px;background:#111;color:#eee"><h2>Английский голос — проба</h2>'
-            f'<p style="color:#aaa">Текст: «{_ПРОБА_ТЕКСТ}»</p>{строки}</body>')
+            f'<p style="color:#aaa">Текст: «{_ПРОБА_ТЕКСТ}»</p>{строки}'
+            '<hr style="border-color:#333;margin:28px 0"><h2>Новое приветствие — John −70</h2>'
+            '<audio controls preload="none" src="/tts-proba/privet-en" style="width:100%"></audio>'
+            '<p><button id="s" style="font-size:18px;padding:12px 20px;margin-top:12px" '
+            'onclick="this.disabled=true;this.textContent=\'Ставлю…\';fetch(\'/tts-proba/privet-en/save\','
+            '{method:\'POST\'}).then(r=>r.json()).then(j=>{this.textContent=j.ok?\'✅ Поставлено на сайт\':'
+            '(\'❌ \'+(j.error||\'ошибка\'))})">Поставить на сайт</button></p></body>')
     if v not in _ПРОБА:
         return Response(status_code=404)
     if v not in _ПРОБА_КЭШ:
