@@ -110,6 +110,19 @@ class CompletionTest(unittest.TestCase):
         space['_спросить']=lambda *a,**kw:'Уран в секстиле к Плутону.'
         with self.assertRaises(ValueError): space[fn.name]('Уран в секстиле к Плутону.',p)
 
+    def test_prose_audit_reports_without_blocking_or_llm(self):
+        tree=ast.parse((ROOT/'engine/chitatel.py').read_text(encoding='utf-8-sig'))
+        fn=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='_аудит_аспектов')
+        messages=[]
+        space={'print':lambda *args:messages.append(args)}
+        exec(compile(ast.Module(body=[fn],type_ignores=[]),'audit', 'exec'),space)
+        p={n:K.точка(n,d,False) for n,d in [('Уран',0),('Плутон',100)]}
+        text='Уран в секстиле к Плутону.'
+        self.assertEqual(space[fn.name](text,p),text)
+        self.assertEqual(len(messages),1)
+        self.assertIn('не блокирует',messages[0][0])
+        self.assertIn('текст = _аудит_аспектов(', (ROOT/'engine/chitatel.py').read_text(encoding='utf-8-sig'))
+
     def test_known_and_unknown_passport_labels(self):
         kw=dict(дата_р='09.11.1981',место_р='Москва',пояс_р='GMT+3',солнечный_час='03:15',расхождение_сек=None)
         known=K.паспорт(**kw,время_известно=True,время_рождения='03:15')
