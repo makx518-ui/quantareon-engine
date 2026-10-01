@@ -109,7 +109,7 @@ class DeliveryTest(unittest.TestCase):
         self.assertEqual(self.files[0][-1],response.text)
         self.assertIsNotNone(reader.call_args.kwargs['точки'])
 
-    def test_real_calculation_machine_reading_delivered_when_editor_is_invalid(self):
+    def test_real_calculation_narrative_is_delivered_after_explicit_fact_repair(self):
         import swisseph as swe
         from engine import arhiv
         original = swe.houses
@@ -121,16 +121,17 @@ class DeliveryTest(unittest.TestCase):
         with patch.object(swe, 'houses', compatible), \
              patch.object(arhiv, 'положить_кухню', return_value='test/kitchen.json'), \
              patch.object(arhiv, 'положить_карту', return_value='test/chart.html'), \
-             patch.object(chitatel, '_спросить', return_value='Выдуманный аспект Уран—Нептун: трин'):
+             patch.object(chitatel, '_спросить', return_value='## Чтение\nУран в трине к Нептуну, что обещает успех. Содержательный рассказ.'), \
+             patch('engine.razvertka.откорректировать', side_effect=lambda text, fn: (text, 0)):
             self.worker()
         self.assertEqual(self.card['состояние'], 'готово', self.card.get('ошибка'))
         self.assertEqual(self.card['machine_natal']['aspects'], 41)
-        self.assertEqual(self.card['machine_natal']['mode'], 'machine')
-        self.assertEqual(self.card['storozh'], [])
+        self.assertEqual(self.card['machine_natal']['mode'], 'two_pass_narrative')
+        self.assertTrue(self.card['storozh'])
         response = self.client.get('/api/klassika/fayl', params={'nomer': self.number})
         self.assertEqual(response.status_code, 200)
-        self.assertNotIn('Выдуманный аспект', response.text)
-        self.assertIn('Меркурий — Белая Луна: оппозиция', response.text)
+        self.assertNotIn('что обещает успех', response.text)
+        self.assertIn('Содержательный рассказ.', response.text)
         self.assertEqual(self.files[0][-1], response.text)
         self.assertIn('Дева 29°38′17″', response.text)
 

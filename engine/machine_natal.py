@@ -1,7 +1,7 @@
-"""Natal facts and interpretations are rendered by code, never repaired in prose.
+"""Machine-owned natal records and library seeds for the two-pass reader.
 
-The optional LLM chooses permutations of existing cards and a registered style.
-No model-authored sentence, number or fact is accepted into the delivered reading.
+build/reader_packet supply facts and short source meanings to chitatel.прочитать.
+read remains a standalone reference renderer, not the delivered natal narrative.
 """
 import json
 import re
@@ -234,6 +234,14 @@ def build(points, cusps=None, known=True):
                 'source': data['functions'][name]['source']}
         card['text'] = _point_text(card, data)
         cards[name] = card
+    if known:
+        for card in cards.values():
+            house = card['house']
+            cusp = m.cusps[house-1]
+            owner = KN.УПРАВИТЕЛЬ[KN._знак(cusp)]
+            card['house_cusp'] = position(cusp)
+            card['house_ruler'] = owner
+            card['house_ruler_position'] = _address(cards[owner])
     aspects = aspect_records(points, cusps, known)
     for row in aspects:
         row['text'] = _aspect_text(row, cards, data)
@@ -242,6 +250,54 @@ def build(points, cusps=None, known=True):
     groups['aspects'] = [row['id'] for row in aspects]
     return {'version': data['version'], 'known': known, 'points': cards,
             'aspects': aspects, 'groups': groups, 'bridge': m}
+
+
+def reader_packet(machine, names=None, with_aspects=True):
+    """Short contextual shelves; identities refer to the same calculation as SVG.
+
+    The model supplies a contextual reading, not new facts. Both endpoint degree
+    meanings remain in their own point records, including when the rulers coincide.
+    """
+    data = library()
+    cards = []
+    for p in machine['points'].values():
+        if names is not None and p['name'] not in names:
+            continue
+        card = {k: p[k] for k in ('id', 'name', 'position', 'symbol', 'ruler',
+                 'ruler_position', 'chain', 'rules', 'retro', 'stationary', 'dignity', 'layer', 'code')}
+        card['function'] = data['functions'][p['name']]['theme']
+        card['task'] = data['functions'][p['name']]['task']
+        card['sign_method'] = data['signs'][p['sign']]
+        if machine['known']:
+            card.update({k: p[k] for k in ('house', 'house_cusp', 'house_ruler', 'house_ruler_position')})
+            card['house_meaning'] = data['houses'][str(p['house'])]
+        cards.append(card)
+    aspects = []
+    for row in machine['aspects'] if with_aspects else []:
+        a, b = machine['points'][row['A']], machine['points'][row['B']]
+        theme = (data['pair_themes'].get(a['name']+'|'+b['name']) or
+                 data['pair_themes'].get(b['name']+'|'+a['name']) or
+                 data['functions'][a['name']]['theme']+' и '+data['functions'][b['name']]['theme'])
+        item = {k: row[k] for k in ('id', 'A', 'B', 'kind', 'nominal', 'angle',
+                                   'orb', 'direct', 'exact', 'note', 'motion')}
+        item['endpoint_ids'] = [a['id'], b['id']]
+        item['pair_theme'] = theme
+        item['degree_actions'] = {a['name']: a['code']['действие'], b['name']: b['code']['действие']}
+        if machine['known']:
+            item['life_domains'] = {a['name']: data['houses'][str(a['house'])],
+                                    b['name']: data['houses'][str(b['house'])]}
+        aspects.append(item)
+    payload = {'source': 'текущая карта; точные факты и смысловые основания, не готовый рассказ',
+               'version': machine['version'], 'known_birth_time': machine['known'],
+               'points': cards, 'aspects': aspects,
+               'aspect_meanings': {k: {'principle': v['principle'], 'risk': v['risk']}
+                                   for k, v in data['aspects'].items()} if with_aspects else {},
+               'sources': data['sources'],
+               'reading_task': 'Прочти оба конца из их собственных записей и раскрой совместный смысл '
+                 'через вид аспекта, функции, жизненные сферы и оба значения градусов. '
+                 'Повторяющиеся темы свяжи в сквозной сценарий. Не печатай эти записи вместо рассказа.'}
+    return '[МАШИННЫЕ ОСНОВАНИЯ ДЛЯ ГЛУБОКОГО ПРОЧТЕНИЯ]\n'+json.dumps(
+        payload, ensure_ascii=False, separators=(',', ':'))
 
 
 def _unique_object(pairs):

@@ -74,13 +74,14 @@ class MachineNatalTest(unittest.TestCase):
                 MN.build(POINTS, cusps)
 
     def test_unknown_time_does_not_inherit_supplied_angles_or_houses(self):
-        with patch.object(C, '_спросить', side_effect=editor):
+        with patch.object(C, '_спросить', return_value='## Сценарий\nЧтение личности.'), \
+             patch('engine.razvertka.откорректировать', side_effect=lambda text, fn: (text, 0)):
             result = C.прочитать('', заказ='kosmogramma', точки=POINTS, куспиды=CUSPS,
                                 углы={'ASC': 42, 'MC': 55})
         self.assertEqual(result['machine_natal']['points'], 15)
         self.assertEqual(result['machine_natal']['houses'], 0)
-        self.assertNotIn('p:ASC', result['machine_natal']['rendered_ids'])
-        self.assertNotIn('p:MC', result['machine_natal']['rendered_ids'])
+        self.assertNotIn('p:ASC', MN.reader_packet(MN.build(POINTS, CUSPS, known=False)))
+        self.assertNotIn('p:MC', MN.reader_packet(MN.build(POINTS, CUSPS, known=False)))
         self.assertNotIn('дом 1', result['tekst'])
         for r in MN.aspect_records(POINTS, CUSPS, known=False):
             self.assertFalse({'ASC', 'MC'} & {r['A'], r['B']})
@@ -130,19 +131,21 @@ class MachineNatalTest(unittest.TestCase):
     def test_optional_editor_has_one_bounded_attempt_without_retry_sleep(self):
         with patch.object(C, '_спросить_раз', side_effect=TimeoutError('offline')) as ask, \
              patch('time.sleep', side_effect=AssertionError('retry should not sleep')):
-            result = C.прочитать('', точки=POINTS, куспиды=CUSPS)
+            result = MN.read(POINTS, CUSPS, ask=C._спросить)
         self.assertEqual(ask.call_count, 1)
         self.assertEqual(ask.call_args.kwargs['timeout'], 45)
         self.assertEqual(result['machine_natal']['aspects'], 41)
 
-    def test_natal_never_runs_prose_guard_or_free_ai_corrector(self):
-        with patch.object(C, '_спросить', side_effect=editor) as ask, \
+    def test_natal_restores_reading_without_heuristic_owner_guard(self):
+        with patch.object(C, '_спросить', return_value='## Сценарий\nСодержательное прочтение.') as ask, \
              patch('engine.storozh_faktov.сторожить', side_effect=AssertionError('old guard called')), \
-             patch('engine.razvertka.откорректировать', side_effect=AssertionError('free prose called')):
+             patch('engine.sverka.сверить', side_effect=AssertionError('old coordinate guess called')), \
+             patch('engine.razvertka.откорректировать', side_effect=lambda text, fn: (text, 0)):
             result = C.прочитать('', точки=POINTS, куспиды=CUSPS)
-        self.assertEqual(ask.call_count, 1)
+        self.assertEqual(ask.call_count, 5)
         self.assertEqual(result['storozh'], [])
-        self.assertEqual(result['razbor'], result['tekst'])
+        self.assertIn('Содержательное прочтение.', result['tekst'])
+        self.assertEqual(result['machine_natal']['mode'], 'two_pass_narrative')
 
     def test_linked_aspects_are_explicit_not_exact_or_direct(self):
         points = copy.deepcopy(POINTS)
@@ -206,7 +209,8 @@ class MachineNatalTest(unittest.TestCase):
                            'место': 'Россия, Москва', '_shirota': 55.75204, '_dolgota': 37.61781, '_gmt': 3}}
         with patch.object(api_vhod, 'расчёт', return_value=snapshot), \
              patch.object(arhiv, 'положить_карту', return_value='preview/natal.html'), \
-             patch.object(C, '_спросить', side_effect=editor), \
+             patch.object(C, '_спросить', return_value='## Сценарий\nСодержательное прочтение.'), \
+             patch('engine.razvertka.откорректировать', side_effect=lambda text, fn: (text, 0)), \
              patch('engine.storozh_faktov.сторожить', side_effect=AssertionError('old guard called')):
             html, filename = kl._построить_натал_или_соляр(card, lambda *a: None)
         self.assertIn('<svg', html)

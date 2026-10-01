@@ -110,7 +110,7 @@ class CompletionTest(unittest.TestCase):
         space['_спросить']=lambda *a,**kw:'Уран в секстиле к Плутону.'
         with self.assertRaises(ValueError): space[fn.name]('Уран в секстиле к Плутону.',p)
 
-    def test_prose_audit_reports_without_blocking_or_llm(self):
+    def test_legacy_prose_audit_utility_reports_without_blocking_or_llm(self):
         tree=ast.parse((ROOT/'engine/chitatel.py').read_text(encoding='utf-8-sig'))
         fn=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='_аудит_аспектов')
         messages=[]
@@ -121,7 +121,9 @@ class CompletionTest(unittest.TestCase):
         self.assertEqual(space[fn.name](text,p),text)
         self.assertEqual(len(messages),1)
         self.assertIn('не блокирует',messages[0][0])
-        self.assertIn('текст = _аудит_аспектов(', (ROOT/'engine/chitatel.py').read_text(encoding='utf-8-sig'))
+        # The legacy utility is retained for callers outside this pipeline.
+        # Delivered natal prose uses the identity-bound check after grammar;
+        # that behavior is exercised in test_natal_facts and test_natal_delivery.
 
     def test_known_and_unknown_passport_labels(self):
         kw=dict(дата_р='09.11.1981',место_р='Москва',пояс_р='GMT+3',солнечный_час='03:15',расхождение_сек=None)

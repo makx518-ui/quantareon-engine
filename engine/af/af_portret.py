@@ -32,7 +32,7 @@ def natal_portrait(machine, name):
         "знак": SIGN[sn], "градус_н": int(pis)+1, "дом": dom,
         "владеет_домами": vladeet,
         "диспозитор": RULER[sn],
-        "код": code['tag'], "суть": code.get('sut','')[:90],
+        "код": code['tag'], "суть": code['суть'],
         "ядро": f"{core['sign_name']} {core['sabian']}° [{core_code['tag']}]",
     }
 
