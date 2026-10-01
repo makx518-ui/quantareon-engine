@@ -81,6 +81,14 @@ class CompletionTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'Уран–Плутон'):
             проверить_аспекты_строго('Уран в секстиле к Нептуну и Плутону.',points)
 
+    def test_coordinated_aspects_keep_subject(self):
+        points={n:K.точка(n,d,False) for n,d in [('Солнце',0),('Луна',120),('Марс',300)]}
+        проверить_аспекты_строго('Солнце в трине к Луне и в секстиле к Марсу.',points)
+        with self.assertRaisesRegex(ValueError,'Солнце–Марс'):
+            проверить_аспекты_строго('Солнце в трине к Луне и в трине к Марсу.',points)
+        with self.assertRaisesRegex(ValueError,'Луна–Марс'):
+            проверить_аспекты_строго('Солнце в трине к Луне, а Луна в секстиле к Марсу.',points)
+
     def test_completed_age_before_and_on_birthday(self):
         points={'Солнце':K.точка('Солнце',226,False),'Луна':K.точка('Луна',5,False)}
         for today,age in [(date(2026,10,1),44),(date(2026,11,9),45)]:
