@@ -164,5 +164,87 @@ class NatalReadingTest(unittest.TestCase):
             self.assertNotIn('вход → потребность → действие', request)
 
 
+class NatalContinuityTest(unittest.TestCase):
+    def _read(self, first_chapter=None, order='natal'):
+        calls = []
+        chapters = [first_chapter or '## Начало\nВнешняя сдержанность сочетается с прямой потребностью.',
+                    '## Инструменты\nСпособ действовать уточняет первоначальный портрет.',
+                    '## Связи\nПротиворечие получает собственный способ согласования.',
+                    '## Итог\nСквозное прочтение сохраняет различия личности.']
+        def plan(system, messages, *args, **kwargs):
+            calls.append(('plan', system, messages[0]['content']))
+            return 'ПОРТРЕТ: согласование самостоятельности и близости. Основание: Луна.'
+        def chapter(system, messages, *args, **kwargs):
+            number = sum(call[0] == 'chapter' for call in calls)
+            calls.append(('chapter', system, messages[0]['content']))
+            return chapters[number]
+        with patch.object(C, '_спросить', side_effect=plan), \
+             patch.object(C, '_спросить_целиком', side_effect=chapter), \
+             patch('engine.razvertka.откорректировать', side_effect=lambda text, fn: (text, 0)):
+            result = C.прочитать('', заказ=order, точки=POINTS, куспиды=N['cusps'], углы=ANGLES)
+        return calls, chapters, result
+
+    def test_all_chapters_receive_portrait_and_preserve_complete_prose(self):
+        calls, chapters, result = self._read()
+        self.assertEqual([call[0] for call in calls], ['plan'] + ['chapter'] * 4)
+        self.assertIn('нюансы, усложняющие портрет', calls[0][2])
+        for call in calls[1:]:
+            self.assertIn('ПОРТРЕТ: согласование самостоятельности и близости.', call[2])
+            self.assertIn('ЗАДАЧА ПО МАТЕРИАЛУ ВЫШЕ', call[2])
+            self.assertIn('Сохрани развёрнутый объём', call[2])
+        self.assertNotIn('[УЖЕ НАПИСАННЫЕ ГЛАВЫ', calls[1][2])
+        self.assertIn(chapters[0], calls[2][2])
+        self.assertIn(chapters[0], calls[3][2])
+        self.assertIn(chapters[1], calls[3][2])
+        for chapter in chapters[:3]:
+            self.assertIn(chapter, calls[4][2])
+        for chapter in chapters:
+            self.assertIn(chapter, result['tekst'])
+        self.assertEqual(result['machine_natal']['aspects'], 41)
+        self.assertEqual(result['gologramma'], calls[1][2].split('[ГОЛОГРАММА прохода-1]\n', 1)[1].split('\n\n', 1)[0])
+
+    def test_continuity_uses_checked_chapter_and_hides_service_text(self):
+        wrong = f'Меркурий: код [{CODES["MC"][0]}].'
+        original = ('<служебное>ВНУТРЕННИЙ СЧЁТ ПОКРЫТИЯ</служебное>\n'
+                    '## Мышление\n' + wrong + '\n\nЖивой вывод о способе принимать решения.')
+        calls, _, result = self._read(first_chapter=original)
+        context = calls[2][2].split('[УЖЕ НАПИСАННЫЕ ГЛАВЫ — контекст преемственности]\n', 1)[1]
+        context = context.split('\n\nЭти главы показывают', 1)[0]
+        self.assertNotIn(wrong, context)
+        self.assertNotIn('ВНУТРЕННИЙ СЧЁТ ПОКРЫТИЯ', context)
+        self.assertIn('Меркурий — Весы', context)
+        self.assertIn('Живой вывод о способе принимать решения.', context)
+        self.assertEqual(result['machine_natal']['fact_repairs'], 1)
+        self.assertNotIn('ВНУТРЕННИЙ СЧЁТ ПОКРЫТИЯ', result['tekst'])
+        self.assertNotIn(wrong, result['tekst'])
+
+    def test_continuity_does_not_add_calls_or_context_to_solar(self):
+        calls, _, _ = self._read(order='solar')
+        self.assertEqual([call[0] for call in calls], ['plan'] + ['chapter'] * 3)
+        for _, system, request in calls:
+            self.assertNotIn('[УЖЕ НАПИСАННЫЕ ГЛАВЫ', request)
+            self.assertNotIn('ЗАДАЧА ПО МАТЕРИАЛУ ВЫШЕ', request)
+            self.assertNotIn('Первое прочтение: целостное заключение', system)
+
+    def test_gemini_transport_keeps_system_rules_and_full_chapter_context(self):
+        calls, _, _ = self._read()
+        from io import BytesIO
+        response = {'candidates': [{'content': {'parts': [
+            {'text': 'Скрытый ход размышления', 'thought': True},
+            {'text': '## Глава\nГотовая глубокая трактовка.'}], 'role': 'model'},
+            'finishReason': 'STOP'}]}
+        with patch.dict(C.os.environ, {'GEMINI_API_KEY': 'offline-test'}), \
+             patch.object(C.urllib.request, 'urlopen', return_value=BytesIO(json.dumps(response).encode('utf-8'))) as send, \
+             patch.dict(C._ПОТРАЧЕНО, {'$': 0, 'вызовов': 0}), \
+             patch.object(C, '_ОБРЫВ', {'было': False}):
+            answer = C._спросить_gemini(calls[3][1], [{'role': 'user', 'content': calls[3][2]}], 32000)
+            payload = json.loads(send.call_args.args[0].data.decode('utf-8'))
+        self.assertEqual(payload['systemInstruction']['parts'][0]['text'], calls[3][1])
+        self.assertEqual(payload['contents'][0]['parts'][0]['text'], calls[3][2])
+        self.assertEqual(payload['generationConfig']['maxOutputTokens'], 32000)
+        self.assertNotIn('Скрытый ход размышления', answer)
+        self.assertIn('Готовая глубокая трактовка.', answer)
+
+
 if __name__ == '__main__':
     unittest.main()
