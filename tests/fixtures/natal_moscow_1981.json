@@ -1,0 +1,897 @@
+{
+  "utc": "1981-11-09T00:15:00+00:00",
+  "moscow": {
+    "jd": 2444917.5104166665,
+    "planets": {
+      "Солнце": {
+        "id": 0,
+        "name": "Солнце",
+        "symbol": "☉",
+        "abs_degree": 226.510434,
+        "speed": 1.004243,
+        "retrograde": false,
+        "sign": {
+          "abs_degree": 226.510434,
+          "sign_index": 7,
+          "sign_name": "Скорпион",
+          "sign_symbol": "♏",
+          "element": "Вода",
+          "modality": "Фиксированный",
+          "degree": 16,
+          "minute": 30,
+          "second": 37.56,
+          "sabian": 17,
+          "formatted": "16°30'37.6\" Скорпион"
+        },
+        "house": 2,
+        "house_part": 3
+      },
+      "Луна": {
+        "id": 1,
+        "name": "Луна",
+        "symbol": "☽",
+        "abs_degree": 5.723635,
+        "speed": 14.397027,
+        "retrograde": false,
+        "sign": {
+          "abs_degree": 5.723635,
+          "sign_index": 0,
+          "sign_name": "Овен",
+          "sign_symbol": "♈",
+          "element": "Огонь",
+          "modality": "Кардинальный",
+          "degree": 5,
+          "minute": 43,
+          "second": 25.09,
+          "sabian": 6,
+          "formatted": "5°43'25.1\" Овен"
+        },
+        "house": 7,
+        "house_part": 1
+      },
+      "Меркурий": {
+        "id": 2,
+        "name": "Меркурий",
+        "symbol": "☿",
+        "abs_degree": 209.235066,
+        "speed": 1.403306,
+        "retrograde": false,
+        "sign": {
+          "abs_degree": 209.235066,
+          "sign_index": 6,
+          "sign_name": "Весы",
+          "sign_symbol": "♎",
+          "element": "Воздух",
+          "modality": "Кардинальный",
+          "degree": 29,
+          "minute": 14,
+          "second": 6.24,
+          "sabian": 30,
+          "formatted": "29°14'06.2\" Весы"
+        },
+        "house": 2,
+        "house_part": 1
+      },
+      "Венера": {
+        "id": 3,
+        "name": "Венера",
+        "symbol": "♀",
+        "abs_degree": 273.579614,
+        "speed": 1.017752,
+        "retrograde": false,
+        "sign": {
+          "abs_degree": 273.579614,
+          "sign_index": 9,
+          "sign_name": "Козерог",
+          "sign_symbol": "♑",
+          "element": "Земля",
+          "modality": "Кардинальный",
+          "degree": 3,
+          "minute": 34,
+          "second": 46.61,
+          "sabian": 4,
+          "formatted": "3°34'46.6\" Козерог"
+        },
+        "house": 4,
+        "house_part": 1
+      },
+      "Марс": {
+        "id": 4,
+        "name": "Марс",
+        "symbol": "♂",
+        "abs_degree": 160.819988,
+        "speed": 0.556793,
+        "retrograde": false,
+        "sign": {
+          "abs_degree": 160.819988,
+          "sign_index": 5,
+          "sign_name": "Дева",
+          "sign_symbol": "♍",
+          "element": "Земля",
+          "modality": "Мутабельный",
+          "degree": 10,
+          "minute": 49,
+          "second": 11.96,
+          "sabian": 11,
+          "formatted": "10°49'12.0\" Дева"
+        },
+        "house": 12,
+        "house_part": 1
+      },
+      "Юпитер": {
+        "id": 5,
+        "name": "Юпитер",
+        "symbol": "♃",
+        "abs_degree": 206.304281,
+        "speed": 0.210485,
+        "retrograde": false,
+        "sign": {
+          "abs_degree": 206.304281,
+          "sign_index": 6,
+          "sign_name": "Весы",
+          "sign_symbol": "♎",
+          "element": "Воздух",
+          "modality": "Кардинальный",
+          "degree": 26,
+          "minute": 18,
+          "second": 15.41,
+          "sabian": 27,
+          "formatted": "26°18'15.4\" Весы"
+        },
+        "house": 2,
+        "house_part": 1
+      },
+      "Сатурн": {
+        "id": 6,
+        "name": "Сатурн",
+        "symbol": "♄",
+        "abs_degree": 196.870806,
+        "speed": 0.112145,
+        "retrograde": false,
+        "sign": {
+          "abs_degree": 196.870806,
+          "sign_index": 6,
+          "sign_name": "Весы",
+          "sign_symbol": "♎",
+          "element": "Воздух",
+          "modality": "Кардинальный",
+          "degree": 16,
+          "minute": 52,
+          "second": 14.9,
+          "sabian": 17,
+          "formatted": "16°52'14.9\" Весы"
+        },
+        "house": 1,
+        "house_part": 3
+      },
+      "Уран": {
+        "id": 7,
+        "name": "Уран",
+        "symbol": "♅",
+        "abs_degree": 239.541242,
+        "speed": 0.060657,
+        "retrograde": false,
+        "sign": {
+          "abs_degree": 239.541242,
+          "sign_index": 7,
+          "sign_name": "Скорпион",
+          "sign_symbol": "♏",
+          "element": "Вода",
+          "modality": "Фиксированный",
+          "degree": 29,
+          "minute": 32,
+          "second": 28.47,
+          "sabian": 30,
+          "formatted": "29°32'28.5\" Скорпион"
+        },
+        "house": 3,
+        "house_part": 1
+      },
+      "Нептун": {
+        "id": 8,
+        "name": "Нептун",
+        "symbol": "♆",
+        "abs_degree": 263.228012,
+        "speed": 0.03165,
+        "retrograde": false,
+        "sign": {
+          "abs_degree": 263.228012,
+          "sign_index": 8,
+          "sign_name": "Стрелец",
+          "sign_symbol": "♐",
+          "element": "Огонь",
+          "modality": "Мутабельный",
+          "degree": 23,
+          "minute": 13,
+          "second": 40.84,
+          "sabian": 24,
+          "formatted": "23°13'40.8\" Стрелец"
+        },
+        "house": 3,
+        "house_part": 3
+      },
+      "Плутон": {
+        "id": 9,
+        "name": "Плутон",
+        "symbol": "♇",
+        "abs_degree": 205.148144,
+        "speed": 0.037938,
+        "retrograde": false,
+        "sign": {
+          "abs_degree": 205.148144,
+          "sign_index": 6,
+          "sign_name": "Весы",
+          "sign_symbol": "♎",
+          "element": "Воздух",
+          "modality": "Кардинальный",
+          "degree": 25,
+          "minute": 8,
+          "second": 53.32,
+          "sabian": 26,
+          "formatted": "25°08'53.3\" Весы"
+        },
+        "house": 2,
+        "house_part": 1
+      },
+      "Сев.Узел": {
+        "id": 11,
+        "name": "Сев.Узел",
+        "symbol": "☊",
+        "abs_degree": 115.18221,
+        "speed": -0.140171,
+        "retrograde": true,
+        "sign": {
+          "abs_degree": 115.18221,
+          "sign_index": 3,
+          "sign_name": "Рак",
+          "sign_symbol": "♋",
+          "element": "Вода",
+          "modality": "Кардинальный",
+          "degree": 25,
+          "minute": 10,
+          "second": 55.95,
+          "sabian": 26,
+          "formatted": "25°10'56.0\" Рак"
+        },
+        "house": 10,
+        "house_part": 3
+      },
+      "Лилит": {
+        "id": 12,
+        "name": "Лилит",
+        "symbol": "⚸",
+        "abs_degree": 245.135752,
+        "speed": 0.111511,
+        "retrograde": false,
+        "sign": {
+          "abs_degree": 245.135752,
+          "sign_index": 8,
+          "sign_name": "Стрелец",
+          "sign_symbol": "♐",
+          "element": "Огонь",
+          "modality": "Мутабельный",
+          "degree": 5,
+          "minute": 8,
+          "second": 8.71,
+          "sabian": 6,
+          "formatted": "5°08'08.7\" Стрелец"
+        },
+        "house": 3,
+        "house_part": 2
+      },
+      "Хирон": {
+        "id": 15,
+        "name": "Хирон",
+        "symbol": "⚷",
+        "abs_degree": 50.566327,
+        "speed": -0.051494,
+        "retrograde": true,
+        "sign": {
+          "abs_degree": 50.566327,
+          "sign_index": 1,
+          "sign_name": "Телец",
+          "sign_symbol": "♉",
+          "element": "Земля",
+          "modality": "Фиксированный",
+          "degree": 20,
+          "minute": 33,
+          "second": 58.78,
+          "sabian": 21,
+          "formatted": "20°33'58.8\" Телец"
+        },
+        "house": 8,
+        "house_part": 3
+      },
+      "Юж.Узел": {
+        "id": -1,
+        "name": "Юж.Узел",
+        "symbol": "☋",
+        "abs_degree": 295.18221,
+        "speed": 0,
+        "retrograde": true,
+        "sign": {
+          "abs_degree": 295.18221,
+          "sign_index": 9,
+          "sign_name": "Козерог",
+          "sign_symbol": "♑",
+          "element": "Земля",
+          "modality": "Кардинальный",
+          "degree": 25,
+          "minute": 10,
+          "second": 55.96,
+          "sabian": 26,
+          "formatted": "25°10'56.0\" Козерог"
+        },
+        "house": 4,
+        "house_part": 3,
+        "computed": true
+      },
+      "Фортуна": {
+        "id": -1,
+        "name": "Фортуна",
+        "symbol": "⊕",
+        "abs_degree": 40.424845,
+        "speed": 0,
+        "retrograde": false,
+        "sign": {
+          "abs_degree": 40.424845,
+          "sign_index": 1,
+          "sign_name": "Телец",
+          "sign_symbol": "♉",
+          "element": "Земля",
+          "modality": "Фиксированный",
+          "degree": 10,
+          "minute": 25,
+          "second": 29.44,
+          "sabian": 11,
+          "formatted": "10°25'29.4\" Телец"
+        },
+        "house": 8,
+        "house_part": 2,
+        "computed": true
+      },
+      "Селена": {
+        "id": -1,
+        "name": "Селена",
+        "symbol": "⚜",
+        "abs_degree": 29.062804,
+        "speed": 0,
+        "retrograde": false,
+        "sign": {
+          "abs_degree": 29.062804,
+          "sign_index": 0,
+          "sign_name": "Овен",
+          "sign_symbol": "♈",
+          "element": "Огонь",
+          "modality": "Кардинальный",
+          "degree": 29,
+          "minute": 3,
+          "second": 46.09,
+          "sabian": 30,
+          "formatted": "29°03'46.1\" Овен"
+        },
+        "house": 8,
+        "house_part": 1,
+        "computed": true
+      },
+      "Вертекс": {
+        "id": -1,
+        "name": "Вертекс",
+        "symbol": "Vx",
+        "abs_degree": 359.159418,
+        "speed": 0,
+        "retrograde": false,
+        "sign": {
+          "abs_degree": 359.159418,
+          "sign_index": 11,
+          "sign_name": "Рыбы",
+          "sign_symbol": "♓",
+          "element": "Вода",
+          "modality": "Мутабельный",
+          "degree": 29,
+          "minute": 9,
+          "second": 33.91,
+          "sabian": 30,
+          "formatted": "29°09'33.9\" Рыбы"
+        },
+        "house": 6,
+        "house_part": 3,
+        "computed": true
+      },
+      "ТЖ": {
+        "id": -1,
+        "name": "ТЖ",
+        "symbol": "⊙",
+        "abs_degree": 192.400704,
+        "speed": 0,
+        "retrograde": false,
+        "sign": {
+          "abs_degree": 192.400704,
+          "sign_index": 6,
+          "sign_name": "Весы",
+          "sign_symbol": "♎",
+          "element": "Воздух",
+          "modality": "Кардинальный",
+          "degree": 12,
+          "minute": 24,
+          "second": 2.53,
+          "sabian": 13,
+          "formatted": "12°24'02.5\" Весы"
+        },
+        "house": 1,
+        "house_part": 2,
+        "computed": true
+      }
+    },
+    "cusps": [
+      179.63804590985987,
+      202.44792790390022,
+      232.17412237257042,
+      269.5012873828715,
+      306.90309685505747,
+      336.7299349115873,
+      359.6380459098599,
+      22.447927903900222,
+      52.17412237257042,
+      89.50128738287148,
+      126.90309685505748,
+      156.7299349115873
+    ],
+    "angles": {
+      "ASC": {
+        "abs_degree": 179.638046,
+        "sign_index": 5,
+        "sign_name": "Дева",
+        "sign_symbol": "♍",
+        "element": "Земля",
+        "modality": "Мутабельный",
+        "degree": 29,
+        "minute": 38,
+        "second": 16.97,
+        "sabian": 30,
+        "formatted": "29°38'17.0\" Дева"
+      },
+      "MC": {
+        "abs_degree": 89.501287,
+        "sign_index": 2,
+        "sign_name": "Близнецы",
+        "sign_symbol": "♊",
+        "element": "Воздух",
+        "modality": "Мутабельный",
+        "degree": 29,
+        "minute": 30,
+        "second": 4.63,
+        "sabian": 30,
+        "formatted": "29°30'04.6\" Близнецы"
+      },
+      "DSC": {
+        "abs_degree": 359.638046,
+        "sign_index": 11,
+        "sign_name": "Рыбы",
+        "sign_symbol": "♓",
+        "element": "Вода",
+        "modality": "Мутабельный",
+        "degree": 29,
+        "minute": 38,
+        "second": 16.97,
+        "sabian": 30,
+        "formatted": "29°38'17.0\" Рыбы"
+      },
+      "IC": {
+        "abs_degree": 269.501287,
+        "sign_index": 8,
+        "sign_name": "Стрелец",
+        "sign_symbol": "♐",
+        "element": "Огонь",
+        "modality": "Мутабельный",
+        "degree": 29,
+        "minute": 30,
+        "second": 4.63,
+        "sabian": 30,
+        "formatted": "29°30'04.6\" Стрелец"
+      }
+    },
+    "houses": {
+      "1": {
+        "cusp": 179.638046,
+        "cusp_sign": {
+          "abs_degree": 179.638046,
+          "sign_index": 5,
+          "sign_name": "Дева",
+          "sign_symbol": "♍",
+          "element": "Земля",
+          "modality": "Мутабельный",
+          "degree": 29,
+          "minute": 38,
+          "second": 16.97,
+          "sabian": 30,
+          "formatted": "29°38'17.0\" Дева"
+        },
+        "ruler_modern": "Меркурий",
+        "ruler_traditional": "Меркурий"
+      },
+      "2": {
+        "cusp": 202.447928,
+        "cusp_sign": {
+          "abs_degree": 202.447928,
+          "sign_index": 6,
+          "sign_name": "Весы",
+          "sign_symbol": "♎",
+          "element": "Воздух",
+          "modality": "Кардинальный",
+          "degree": 22,
+          "minute": 26,
+          "second": 52.54,
+          "sabian": 23,
+          "formatted": "22°26'52.5\" Весы"
+        },
+        "ruler_modern": "Венера",
+        "ruler_traditional": "Венера"
+      },
+      "3": {
+        "cusp": 232.174122,
+        "cusp_sign": {
+          "abs_degree": 232.174122,
+          "sign_index": 7,
+          "sign_name": "Скорпион",
+          "sign_symbol": "♏",
+          "element": "Вода",
+          "modality": "Фиксированный",
+          "degree": 22,
+          "minute": 10,
+          "second": 26.84,
+          "sabian": 23,
+          "formatted": "22°10'26.8\" Скорпион"
+        },
+        "ruler_modern": "Плутон",
+        "ruler_traditional": "Марс"
+      },
+      "4": {
+        "cusp": 269.501287,
+        "cusp_sign": {
+          "abs_degree": 269.501287,
+          "sign_index": 8,
+          "sign_name": "Стрелец",
+          "sign_symbol": "♐",
+          "element": "Огонь",
+          "modality": "Мутабельный",
+          "degree": 29,
+          "minute": 30,
+          "second": 4.63,
+          "sabian": 30,
+          "formatted": "29°30'04.6\" Стрелец"
+        },
+        "ruler_modern": "Юпитер",
+        "ruler_traditional": "Юпитер"
+      },
+      "5": {
+        "cusp": 306.903097,
+        "cusp_sign": {
+          "abs_degree": 306.903097,
+          "sign_index": 10,
+          "sign_name": "Водолей",
+          "sign_symbol": "♒",
+          "element": "Воздух",
+          "modality": "Фиксированный",
+          "degree": 6,
+          "minute": 54,
+          "second": 11.15,
+          "sabian": 7,
+          "formatted": "6°54'11.1\" Водолей"
+        },
+        "ruler_modern": "Уран",
+        "ruler_traditional": "Сатурн"
+      },
+      "6": {
+        "cusp": 336.729935,
+        "cusp_sign": {
+          "abs_degree": 336.729935,
+          "sign_index": 11,
+          "sign_name": "Рыбы",
+          "sign_symbol": "♓",
+          "element": "Вода",
+          "modality": "Мутабельный",
+          "degree": 6,
+          "minute": 43,
+          "second": 47.77,
+          "sabian": 7,
+          "formatted": "6°43'47.8\" Рыбы"
+        },
+        "ruler_modern": "Нептун",
+        "ruler_traditional": "Юпитер"
+      },
+      "7": {
+        "cusp": 359.638046,
+        "cusp_sign": {
+          "abs_degree": 359.638046,
+          "sign_index": 11,
+          "sign_name": "Рыбы",
+          "sign_symbol": "♓",
+          "element": "Вода",
+          "modality": "Мутабельный",
+          "degree": 29,
+          "minute": 38,
+          "second": 16.97,
+          "sabian": 30,
+          "formatted": "29°38'17.0\" Рыбы"
+        },
+        "ruler_modern": "Нептун",
+        "ruler_traditional": "Юпитер"
+      },
+      "8": {
+        "cusp": 22.447928,
+        "cusp_sign": {
+          "abs_degree": 22.447928,
+          "sign_index": 0,
+          "sign_name": "Овен",
+          "sign_symbol": "♈",
+          "element": "Огонь",
+          "modality": "Кардинальный",
+          "degree": 22,
+          "minute": 26,
+          "second": 52.54,
+          "sabian": 23,
+          "formatted": "22°26'52.5\" Овен"
+        },
+        "ruler_modern": "Марс",
+        "ruler_traditional": "Марс"
+      },
+      "9": {
+        "cusp": 52.174122,
+        "cusp_sign": {
+          "abs_degree": 52.174122,
+          "sign_index": 1,
+          "sign_name": "Телец",
+          "sign_symbol": "♉",
+          "element": "Земля",
+          "modality": "Фиксированный",
+          "degree": 22,
+          "minute": 10,
+          "second": 26.84,
+          "sabian": 23,
+          "formatted": "22°10'26.8\" Телец"
+        },
+        "ruler_modern": "Венера",
+        "ruler_traditional": "Венера"
+      },
+      "10": {
+        "cusp": 89.501287,
+        "cusp_sign": {
+          "abs_degree": 89.501287,
+          "sign_index": 2,
+          "sign_name": "Близнецы",
+          "sign_symbol": "♊",
+          "element": "Воздух",
+          "modality": "Мутабельный",
+          "degree": 29,
+          "minute": 30,
+          "second": 4.63,
+          "sabian": 30,
+          "formatted": "29°30'04.6\" Близнецы"
+        },
+        "ruler_modern": "Меркурий",
+        "ruler_traditional": "Меркурий"
+      },
+      "11": {
+        "cusp": 126.903097,
+        "cusp_sign": {
+          "abs_degree": 126.903097,
+          "sign_index": 4,
+          "sign_name": "Лев",
+          "sign_symbol": "♌",
+          "element": "Огонь",
+          "modality": "Фиксированный",
+          "degree": 6,
+          "minute": 54,
+          "second": 11.15,
+          "sabian": 7,
+          "formatted": "6°54'11.1\" Лев"
+        },
+        "ruler_modern": "Солнце",
+        "ruler_traditional": "Солнце"
+      },
+      "12": {
+        "cusp": 156.729935,
+        "cusp_sign": {
+          "abs_degree": 156.729935,
+          "sign_index": 5,
+          "sign_name": "Дева",
+          "sign_symbol": "♍",
+          "element": "Земля",
+          "modality": "Мутабельный",
+          "degree": 6,
+          "minute": 43,
+          "second": 47.77,
+          "sabian": 7,
+          "formatted": "6°43'47.8\" Дева"
+        },
+        "ruler_modern": "Меркурий",
+        "ruler_traditional": "Меркурий"
+      }
+    },
+    "aspects": [
+      {
+        "planet1": "Плутон",
+        "planet2": "Сев.Узел",
+        "aspect": "Квадрат",
+        "aspect_symbol": "□",
+        "aspect_degree": 90,
+        "orb": 0.03,
+        "exact": true
+      },
+      {
+        "planet1": "Луна",
+        "planet2": "Лилит",
+        "aspect": "Трин",
+        "aspect_symbol": "△",
+        "aspect_degree": 120,
+        "orb": 0.59,
+        "exact": true
+      },
+      {
+        "planet1": "Юпитер",
+        "planet2": "Сев.Узел",
+        "aspect": "Квадрат",
+        "aspect_symbol": "□",
+        "aspect_degree": 90,
+        "orb": 1.12,
+        "exact": false
+      },
+      {
+        "planet1": "Юпитер",
+        "planet2": "Плутон",
+        "aspect": "Соединение",
+        "aspect_symbol": "☌",
+        "aspect_degree": 0,
+        "orb": 1.16,
+        "exact": false
+      },
+      {
+        "planet1": "Нептун",
+        "planet2": "Плутон",
+        "aspect": "Секстиль",
+        "aspect_symbol": "⚹",
+        "aspect_degree": 60,
+        "orb": 1.92,
+        "exact": false
+      },
+      {
+        "planet1": "Луна",
+        "planet2": "Венера",
+        "aspect": "Квадрат",
+        "aspect_symbol": "□",
+        "aspect_degree": 90,
+        "orb": 2.14,
+        "exact": false
+      },
+      {
+        "planet1": "Меркурий",
+        "planet2": "Юпитер",
+        "aspect": "Соединение",
+        "aspect_symbol": "☌",
+        "aspect_degree": 0,
+        "orb": 2.93,
+        "exact": false
+      },
+      {
+        "planet1": "Юпитер",
+        "planet2": "Нептун",
+        "aspect": "Секстиль",
+        "aspect_symbol": "⚹",
+        "aspect_degree": 60,
+        "orb": 3.08,
+        "exact": false
+      },
+      {
+        "planet1": "Меркурий",
+        "planet2": "Сев.Узел",
+        "aspect": "Квадрат",
+        "aspect_symbol": "□",
+        "aspect_degree": 90,
+        "orb": 4.05,
+        "exact": false
+      },
+      {
+        "planet1": "Солнце",
+        "planet2": "Хирон",
+        "aspect": "Оппозиция",
+        "aspect_symbol": "☍",
+        "aspect_degree": 180,
+        "orb": 4.06,
+        "exact": false
+      },
+      {
+        "planet1": "Меркурий",
+        "planet2": "Плутон",
+        "aspect": "Соединение",
+        "aspect_symbol": "☌",
+        "aspect_degree": 0,
+        "orb": 4.09,
+        "exact": false
+      },
+      {
+        "planet1": "Меркурий",
+        "planet2": "Венера",
+        "aspect": "Секстиль",
+        "aspect_symbol": "⚹",
+        "aspect_degree": 60,
+        "orb": 4.34,
+        "exact": false
+      },
+      {
+        "planet1": "Уран",
+        "planet2": "Сев.Узел",
+        "aspect": "Трин",
+        "aspect_symbol": "△",
+        "aspect_degree": 120,
+        "orb": 4.36,
+        "exact": false
+      },
+      {
+        "planet1": "Сев.Узел",
+        "planet2": "Хирон",
+        "aspect": "Секстиль",
+        "aspect_symbol": "⚹",
+        "aspect_degree": 60,
+        "orb": 4.62,
+        "exact": false
+      },
+      {
+        "planet1": "Уран",
+        "planet2": "Лилит",
+        "aspect": "Соединение",
+        "aspect_symbol": "☌",
+        "aspect_degree": 0,
+        "orb": 5.59,
+        "exact": false
+      },
+      {
+        "planet1": "Марс",
+        "planet2": "Лилит",
+        "aspect": "Квадрат",
+        "aspect_symbol": "□",
+        "aspect_degree": 90,
+        "orb": 5.68,
+        "exact": false
+      },
+      {
+        "planet1": "Солнце",
+        "planet2": "Марс",
+        "aspect": "Секстиль",
+        "aspect_symbol": "⚹",
+        "aspect_degree": 60,
+        "orb": 5.69,
+        "exact": false
+      },
+      {
+        "planet1": "Луна",
+        "planet2": "Уран",
+        "aspect": "Трин",
+        "aspect_symbol": "△",
+        "aspect_degree": 120,
+        "orb": 6.18,
+        "exact": false
+      },
+      {
+        "planet1": "Венера",
+        "planet2": "Марс",
+        "aspect": "Трин",
+        "aspect_symbol": "△",
+        "aspect_degree": 120,
+        "orb": 7.24,
+        "exact": false
+      }
+    ],
+    "is_day_chart": false,
+    "house_system": "Плацидус",
+    "polar_fallback": false,
+    "input": {
+      "date": "09.11.1981",
+      "time": "03:15:00.0",
+      "timezone": "GMT+3",
+      "latitude": 55.75204,
+      "longitude": 37.61781,
+      "house_system": "P"
+    }
+  }
+}

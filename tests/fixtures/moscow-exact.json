@@ -1,0 +1,786 @@
+{
+  "totalResultsCount": 7,
+  "geonames": [
+    {
+      "timezone": {
+        "gmtOffset": 3,
+        "timeZoneId": "Europe/Moscow",
+        "dstOffset": 3
+      },
+      "bbox": {
+        "east": 38.36907772614858,
+        "south": 55.33378962290333,
+        "north": 56.170295657096666,
+        "west": 36.86653325385142,
+        "accuracyLevel": 2
+      },
+      "asciiName": "Moscow",
+      "astergdem": 156,
+      "countryId": "2017370",
+      "fcl": "P",
+      "srtm3": -32768,
+      "score": 295.02642822265625,
+      "countryCode": "RU",
+      "adminCodes1": {
+        "ISO3166_2": "MOW"
+      },
+      "adminId1": "524894",
+      "lat": "55.75204",
+      "fcode": "PPLC",
+      "continentCode": "EU",
+      "adminCode1": "48",
+      "lng": "37.61781",
+      "geonameId": 524901,
+      "toponymName": "Moscow",
+      "population": 10381222,
+      "adminName5": "",
+      "adminName4": "",
+      "adminName3": "",
+      "alternateNames": [
+        {
+          "name": "Moskou",
+          "lang": "af"
+        },
+        {
+          "name": "Moskau",
+          "lang": "als"
+        },
+        {
+          "name": "ሞስኮ",
+          "lang": "am"
+        },
+        {
+          "name": "Moscú",
+          "lang": "an"
+        },
+        {
+          "name": "Moscoƿ",
+          "lang": "ang"
+        },
+        {
+          "name": "موسكو",
+          "lang": "ar"
+        },
+        {
+          "name": "ܡܘܣܩܒܐ",
+          "lang": "arc"
+        },
+        {
+          "name": "Moscú",
+          "lang": "ast"
+        },
+        {
+          "isColloquial": true,
+          "isShortName": true,
+          "isPreferredName": true,
+          "name": "Moskva",
+          "lang": "az",
+          "isHistoric": true
+        },
+        {
+          "name": "Масква",
+          "lang": "be"
+        },
+        {
+          "name": "Москва",
+          "lang": "bg"
+        },
+        {
+          "name": "মস্কো",
+          "lang": "bn"
+        },
+        {
+          "name": "མོ་སི་ཁོ།",
+          "lang": "bo"
+        },
+        {
+          "name": "Moskov",
+          "lang": "br"
+        },
+        {
+          "name": "Moskva",
+          "lang": "bs"
+        },
+        {
+          "name": "Moscou",
+          "lang": "ca"
+        },
+        {
+          "name": "Москох",
+          "lang": "ce"
+        },
+        {
+          "name": "Moscù",
+          "lang": "co"
+        },
+        {
+          "name": "Moskva",
+          "lang": "cs"
+        },
+        {
+          "name": "Mòskwa",
+          "lang": "csb"
+        },
+        {
+          "name": "Москъва",
+          "lang": "cu"
+        },
+        {
+          "name": "Мускав",
+          "lang": "cv"
+        },
+        {
+          "name": "Moscfa",
+          "lang": "cy"
+        },
+        {
+          "name": "Moskva",
+          "lang": "da"
+        },
+        {
+          "name": "Moskau",
+          "lang": "de"
+        },
+        {
+          "name": "Moskowa",
+          "lang": "diq"
+        },
+        {
+          "name": "Μόσχα",
+          "lang": "el"
+        },
+        {
+          "isShortName": true,
+          "isPreferredName": true,
+          "name": "Moscow",
+          "lang": "en"
+        },
+        {
+          "name": "Moskvo",
+          "lang": "eo"
+        },
+        {
+          "isPreferredName": true,
+          "name": "Moscú",
+          "lang": "es"
+        },
+        {
+          "name": "Moskva",
+          "lang": "et"
+        },
+        {
+          "name": "Mosku",
+          "lang": "eu"
+        },
+        {
+          "name": "مسکو",
+          "lang": "fa"
+        },
+        {
+          "name": "Moskova",
+          "lang": "fi"
+        },
+        {
+          "isShortName": true,
+          "isPreferredName": true,
+          "name": "Moscou",
+          "lang": "fr"
+        },
+        {
+          "name": "Moscou",
+          "lang": "frp"
+        },
+        {
+          "name": "Moskou",
+          "lang": "fy"
+        },
+        {
+          "name": "Moscó",
+          "lang": "ga"
+        },
+        {
+          "name": "Moscova",
+          "lang": "gl"
+        },
+        {
+          "name": "Moskva",
+          "lang": "hbs"
+        },
+        {
+          "name": "מוסקבה",
+          "lang": "he"
+        },
+        {
+          "name": "मास्को",
+          "lang": "hi"
+        },
+        {
+          "name": "Moskva",
+          "lang": "hr"
+        },
+        {
+          "name": "Moskwa",
+          "lang": "hsb"
+        },
+        {
+          "name": "Moszkva",
+          "lang": "hu"
+        },
+        {
+          "name": "Մոսկվա",
+          "lang": "hy"
+        },
+        {
+          "name": "Մոսկուա",
+          "lang": "hyw"
+        },
+        {
+          "name": "Moscova",
+          "lang": "ia"
+        },
+        {
+          "name": "MOW",
+          "lang": "iata"
+        },
+        {
+          "name": "Moskwa",
+          "lang": "id"
+        },
+        {
+          "name": "Moskva",
+          "lang": "io"
+        },
+        {
+          "name": "Moskva",
+          "lang": "is"
+        },
+        {
+          "name": "Mosca",
+          "lang": "it"
+        },
+        {
+          "name": "モスクワ",
+          "lang": "ja"
+        },
+        {
+          "name": "Moskuas",
+          "lang": "jbo"
+        },
+        {
+          "name": "მოსკოვი",
+          "lang": "ka"
+        },
+        {
+          "name": "Мәскеу",
+          "lang": "kk"
+        },
+        {
+          "name": "모스크바",
+          "lang": "ko"
+        },
+        {
+          "name": "Moskow",
+          "lang": "ku"
+        },
+        {
+          "name": "Moscua",
+          "lang": "la"
+        },
+        {
+          "name": "Moskau",
+          "lang": "lb"
+        },
+        {
+          "name": "Moskou",
+          "lang": "li"
+        },
+        {
+          "name": "https://en.wikipedia.org/wiki/Moscow",
+          "lang": "link"
+        },
+        {
+          "name": "Maskva",
+          "lang": "lt"
+        },
+        {
+          "name": "Maskava",
+          "lang": "lv"
+        },
+        {
+          "name": "Москва",
+          "lang": "mk"
+        },
+        {
+          "name": "मॉस्को",
+          "lang": "mr"
+        },
+        {
+          "name": "Moskau",
+          "lang": "nds"
+        },
+        {
+          "name": "Moskou",
+          "lang": "nl"
+        },
+        {
+          "name": "Moskva",
+          "lang": "nn"
+        },
+        {
+          "name": "Moskva",
+          "lang": "no"
+        },
+        {
+          "name": "Moscou",
+          "lang": "nrm"
+        },
+        {
+          "name": "Moscòu",
+          "lang": "oc"
+        },
+        {
+          "name": "Moskovu",
+          "lang": "olo"
+        },
+        {
+          "name": "Мæскуы",
+          "lang": "os"
+        },
+        {
+          "name": "Moskwa",
+          "lang": "pl"
+        },
+        {
+          "name": "مسکو",
+          "lang": "ps"
+        },
+        {
+          "isPreferredName": true,
+          "name": "Moscovo",
+          "lang": "pt"
+        },
+        {
+          "isPreferredName": true,
+          "name": "Moscou",
+          "lang": "pt-BR"
+        },
+        {
+          "isPreferredName": true,
+          "name": "Moscova",
+          "lang": "ro"
+        },
+        {
+          "isPreferredName": true,
+          "name": "Москва",
+          "lang": "ru"
+        },
+        {
+          "name": "Mosca",
+          "lang": "scn"
+        },
+        {
+          "name": "Moskva",
+          "lang": "sk"
+        },
+        {
+          "name": "Moskva",
+          "lang": "sl"
+        },
+        {
+          "name": "Moska",
+          "lang": "sq"
+        },
+        {
+          "name": "Москва",
+          "lang": "sr"
+        },
+        {
+          "name": "Moskva",
+          "lang": "sv"
+        },
+        {
+          "name": "மாஸ்கோ",
+          "lang": "ta"
+        },
+        {
+          "name": "Маскав",
+          "lang": "tg"
+        },
+        {
+          "name": "มอสโก",
+          "lang": "th"
+        },
+        {
+          "name": "Moskova",
+          "lang": "tr"
+        },
+        {
+          "name": "Мәскәү",
+          "lang": "tt"
+        },
+        {
+          "name": "Муско",
+          "lang": "udm"
+        },
+        {
+          "name": "موسكۋا",
+          "lang": "ug"
+        },
+        {
+          "name": "Москва",
+          "lang": "uk"
+        },
+        {
+          "name": "RUMOW",
+          "lang": "unlc"
+        },
+        {
+          "name": "ماسکو",
+          "lang": "ur"
+        },
+        {
+          "name": "Moskva",
+          "lang": "uz"
+        },
+        {
+          "name": "Matxcơva",
+          "lang": "vi"
+        },
+        {
+          "name": "Moskva",
+          "lang": "vo"
+        },
+        {
+          "name": "Moscou",
+          "lang": "wa"
+        },
+        {
+          "name": "Q649",
+          "lang": "wkdt"
+        },
+        {
+          "name": "מאָסקװע",
+          "lang": "yi"
+        },
+        {
+          "name": "莫斯科",
+          "lang": "zh"
+        },
+        {
+          "name": "莫斯科",
+          "lang": "zh-TW"
+        },
+        {
+          "name": "莫斯科",
+          "lang": "zh-Hant"
+        }
+      ],
+      "adminName2": "",
+      "name": "Москва",
+      "fclName": "city, village,...",
+      "countryName": "Россия",
+      "fcodeName": "столица политического образования",
+      "adminName1": "Москва"
+    },
+    {
+      "timezone": {
+        "gmtOffset": 3,
+        "timeZoneId": "Europe/Kirov",
+        "dstOffset": 3
+      },
+      "bbox": {
+        "east": 49.123145923118415,
+        "south": 57.95918635124857,
+        "north": 57.977173648751425,
+        "west": 49.08922407688159,
+        "accuracyLevel": 1
+      },
+      "asciiName": "Moskva",
+      "astergdem": 189,
+      "countryId": "2017370",
+      "fcl": "P",
+      "srtm3": 204,
+      "score": 72.57324981689453,
+      "countryCode": "RU",
+      "adminCodes1": {
+        "ISO3166_2": "KIR"
+      },
+      "adminId1": "548389",
+      "lat": "57.96818",
+      "fcode": "PPL",
+      "continentCode": "EU",
+      "adminCode1": "33",
+      "lng": "49.10619",
+      "geonameId": 524898,
+      "toponymName": "Moskva",
+      "population": 0,
+      "adminName5": "",
+      "adminName4": "",
+      "adminName3": "",
+      "alternateNames": [
+        {
+          "name": "Moskva",
+          "lang": "en"
+        },
+        {
+          "isPreferredName": true,
+          "name": "Moskva",
+          "lang": "no"
+        },
+        {
+          "name": "Москва",
+          "lang": "uk"
+        }
+      ],
+      "adminName2": "",
+      "name": "Moskva",
+      "fclName": "city, village,...",
+      "countryName": "Россия",
+      "fcodeName": "населенный пункт",
+      "adminName1": "Кировская Область"
+    },
+    {
+      "timezone": {
+        "gmtOffset": 3,
+        "timeZoneId": "Europe/Moscow",
+        "dstOffset": 3
+      },
+      "bbox": {
+        "east": 32.16743770403611,
+        "south": 56.91685563512489,
+        "north": 56.91865436487511,
+        "west": 32.16414229596389,
+        "accuracyLevel": 2
+      },
+      "asciiName": "Moskva",
+      "astergdem": 242,
+      "countryId": "2017370",
+      "fcl": "P",
+      "srtm3": 245,
+      "score": 68.57036590576172,
+      "adminId2": "511588",
+      "countryCode": "RU",
+      "adminCodes1": {
+        "ISO3166_2": "TVE"
+      },
+      "adminId1": "480041",
+      "lat": "56.91775",
+      "fcode": "PPL",
+      "continentCode": "EU",
+      "adminCode2": "511588",
+      "adminCode1": "77",
+      "lng": "32.16579",
+      "geonameId": 524900,
+      "toponymName": "Moskva",
+      "population": 17,
+      "adminName5": "",
+      "adminName4": "",
+      "adminName3": "",
+      "alternateNames": [
+        {
+          "name": "https://en.wikipedia.org/wiki/Moskva%2C_Tver_Oblast",
+          "lang": "link"
+        },
+        {
+          "name": "Москва",
+          "lang": "ru"
+        }
+      ],
+      "adminName2": "Пеновский Район",
+      "name": "Москва",
+      "fclName": "city, village,...",
+      "countryName": "Россия",
+      "fcodeName": "населенный пункт",
+      "adminName1": "Тверская Область"
+    },
+    {
+      "timezone": {
+        "gmtOffset": 5,
+        "timeZoneId": "Asia/Yekaterinburg",
+        "dstOffset": 5
+      },
+      "bbox": {
+        "east": 65.71269414897982,
+        "south": 57.46136335124857,
+        "north": 57.47935064875143,
+        "west": 65.67923585102018,
+        "accuracyLevel": 1
+      },
+      "asciiName": "Moskovka",
+      "astergdem": 84,
+      "countryId": "2017370",
+      "fcl": "P",
+      "srtm3": 82,
+      "score": 36.0262336730957,
+      "countryCode": "RU",
+      "adminCodes1": {
+        "ISO3166_2": "TYU"
+      },
+      "adminId1": "1488747",
+      "lat": "57.47036",
+      "fcode": "PPL",
+      "continentCode": "EU",
+      "adminCode1": "78",
+      "lng": "65.69597",
+      "geonameId": 1498362,
+      "toponymName": "Moskovka",
+      "population": 0,
+      "adminName5": "",
+      "adminName4": "",
+      "adminName3": "",
+      "alternateNames": [
+        {
+          "name": "Moskovka",
+          "lang": "en"
+        },
+        {
+          "isPreferredName": true,
+          "name": "Moskovka",
+          "lang": "no"
+        },
+        {
+          "name": "Московка",
+          "lang": "ru"
+        }
+      ],
+      "adminName2": "",
+      "name": "Московка",
+      "fclName": "city, village,...",
+      "countryName": "Россия",
+      "fcodeName": "населенный пункт",
+      "adminName1": "Тюмень"
+    },
+    {
+      "timezone": {
+        "gmtOffset": 3,
+        "timeZoneId": "Europe/Moscow",
+        "dstOffset": 3
+      },
+      "bbox": {
+        "east": 45.31532200234897,
+        "south": 44.17822855124792,
+        "north": 44.19621584875208,
+        "west": 45.29023359765103,
+        "accuracyLevel": 1
+      },
+      "asciiName": "Terek-Kuyu",
+      "astergdem": 82,
+      "countryId": "2017370",
+      "fcl": "P",
+      "srtm3": 78,
+      "score": 34.40998840332031,
+      "countryCode": "RU",
+      "adminCodes1": {
+        "ISO3166_2": "DA"
+      },
+      "adminId1": "567293",
+      "lat": "44.18722",
+      "fcode": "PPL",
+      "continentCode": "EU",
+      "adminCode1": "17",
+      "lng": "45.30278",
+      "geonameId": 483444,
+      "toponymName": "Terek-Kuyu",
+      "population": 0,
+      "adminName5": "",
+      "adminName4": "",
+      "adminName3": "",
+      "adminName2": "",
+      "name": "Terek-Kuyu",
+      "fclName": "city, village,...",
+      "countryName": "Россия",
+      "fcodeName": "населенный пункт",
+      "adminName1": "Дагестан"
+    },
+    {
+      "timezone": {
+        "gmtOffset": 3,
+        "timeZoneId": "Europe/Kirov",
+        "dstOffset": 3
+      },
+      "bbox": {
+        "east": 50.6676080013489,
+        "south": 59.26683935124857,
+        "north": 59.28482664875143,
+        "west": 50.632391998651094,
+        "accuracyLevel": 1
+      },
+      "asciiName": "Moskvyata",
+      "astergdem": 158,
+      "countryId": "2017370",
+      "fcl": "P",
+      "srtm3": 165,
+      "score": 31.118892669677734,
+      "countryCode": "RU",
+      "adminCodes1": {
+        "ISO3166_2": "KIR"
+      },
+      "adminId1": "548389",
+      "lat": "59.27583",
+      "fcode": "PPL",
+      "continentCode": "EU",
+      "adminCode1": "33",
+      "lng": "50.65",
+      "geonameId": 524878,
+      "toponymName": "Moskvyata",
+      "population": 0,
+      "adminName5": "",
+      "adminName4": "",
+      "adminName3": "",
+      "alternateNames": [
+        {
+          "name": "Москвята",
+          "lang": "ru"
+        }
+      ],
+      "adminName2": "",
+      "name": "Москвята",
+      "fclName": "city, village,...",
+      "countryName": "Россия",
+      "fcodeName": "населенный пункт",
+      "adminName1": "Кировская Область"
+    },
+    {
+      "timezone": {
+        "gmtOffset": 3,
+        "timeZoneId": "Europe/Moscow",
+        "dstOffset": 3
+      },
+      "bbox": {
+        "east": 40.434519640427666,
+        "south": 45.57628415124857,
+        "north": 45.59427144875143,
+        "west": 40.40881375957234,
+        "accuracyLevel": 1
+      },
+      "asciiName": "Krasnaya Moskva",
+      "astergdem": 80,
+      "countryId": "2017370",
+      "fcl": "P",
+      "srtm3": 89,
+      "score": 24.595306396484375,
+      "countryCode": "RU",
+      "adminCodes1": {
+        "ISO3166_2": "KDA"
+      },
+      "adminId1": "542415",
+      "lat": "45.58528",
+      "fcode": "PPL",
+      "continentCode": "EU",
+      "adminCode1": "38",
+      "lng": "40.42167",
+      "geonameId": 542708,
+      "toponymName": "Krasnaya Moskva",
+      "population": 0,
+      "adminName5": "",
+      "adminName4": "",
+      "adminName3": "",
+      "adminName2": "",
+      "name": "Krasnaya Moskva",
+      "fclName": "city, village,...",
+      "countryName": "Россия",
+      "fcodeName": "населенный пункт",
+      "adminName1": "Краснодарский край"
+    }
+  ]
+}

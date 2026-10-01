@@ -1,0 +1,145 @@
+{
+  "totalResultsCount": 7,
+  "geonames": [
+    {
+      "adminCode1": "48",
+      "lng": "37.61781",
+      "geonameId": 524901,
+      "toponymName": "Moscow",
+      "countryId": "2017370",
+      "fcl": "P",
+      "population": 10381222,
+      "countryCode": "RU",
+      "name": "Moscow",
+      "fclName": "city, village,...",
+      "adminCodes1": {
+        "ISO3166_2": "MOW"
+      },
+      "countryName": "Russia",
+      "fcodeName": "capital of a political entity",
+      "adminName1": "Moscow",
+      "lat": "55.75204",
+      "fcode": "PPLC"
+    },
+    {
+      "adminCode1": "33",
+      "lng": "49.10619",
+      "geonameId": 524898,
+      "toponymName": "Moskva",
+      "countryId": "2017370",
+      "fcl": "P",
+      "population": 0,
+      "countryCode": "RU",
+      "name": "Moskva",
+      "fclName": "city, village,...",
+      "adminCodes1": {
+        "ISO3166_2": "KIR"
+      },
+      "countryName": "Russia",
+      "fcodeName": "populated place",
+      "adminName1": "Kirov Oblast",
+      "lat": "57.96818",
+      "fcode": "PPL"
+    },
+    {
+      "adminCode1": "77",
+      "lng": "32.16579",
+      "geonameId": 524900,
+      "toponymName": "Moskva",
+      "countryId": "2017370",
+      "fcl": "P",
+      "population": 17,
+      "countryCode": "RU",
+      "name": "Moskva",
+      "fclName": "city, village,...",
+      "adminCodes1": {
+        "ISO3166_2": "TVE"
+      },
+      "countryName": "Russia",
+      "fcodeName": "populated place",
+      "adminName1": "Tver Oblast",
+      "lat": "56.91775",
+      "fcode": "PPL"
+    },
+    {
+      "adminCode1": "78",
+      "lng": "65.69597",
+      "geonameId": 1498362,
+      "toponymName": "Moskovka",
+      "countryId": "2017370",
+      "fcl": "P",
+      "population": 0,
+      "countryCode": "RU",
+      "name": "Moskovka",
+      "fclName": "city, village,...",
+      "adminCodes1": {
+        "ISO3166_2": "TYU"
+      },
+      "countryName": "Russia",
+      "fcodeName": "populated place",
+      "adminName1": "Tyumen Oblast",
+      "lat": "57.47036",
+      "fcode": "PPL"
+    },
+    {
+      "adminCode1": "17",
+      "lng": "45.30278",
+      "geonameId": 483444,
+      "toponymName": "Terek-Kuyu",
+      "countryId": "2017370",
+      "fcl": "P",
+      "population": 0,
+      "countryCode": "RU",
+      "name": "Terek-Kuyu",
+      "fclName": "city, village,...",
+      "adminCodes1": {
+        "ISO3166_2": "DA"
+      },
+      "countryName": "Russia",
+      "fcodeName": "populated place",
+      "adminName1": "Dagestan",
+      "lat": "44.18722",
+      "fcode": "PPL"
+    },
+    {
+      "adminCode1": "33",
+      "lng": "50.65",
+      "geonameId": 524878,
+      "toponymName": "Moskvyata",
+      "countryId": "2017370",
+      "fcl": "P",
+      "population": 0,
+      "countryCode": "RU",
+      "name": "Moskvyata",
+      "fclName": "city, village,...",
+      "adminCodes1": {
+        "ISO3166_2": "KIR"
+      },
+      "countryName": "Russia",
+      "fcodeName": "populated place",
+      "adminName1": "Kirov Oblast",
+      "lat": "59.27583",
+      "fcode": "PPL"
+    },
+    {
+      "adminCode1": "38",
+      "lng": "40.42167",
+      "geonameId": 542708,
+      "toponymName": "Krasnaya Moskva",
+      "countryId": "2017370",
+      "fcl": "P",
+      "population": 0,
+      "countryCode": "RU",
+      "name": "Krasnaya Moskva",
+      "fclName": "city, village,...",
+      "adminCodes1": {
+        "ISO3166_2": "KDA"
+      },
+      "countryName": "Russia",
+      "fcodeName": "populated place",
+      "adminName1": "Krasnodar Krai",
+      "lat": "45.58528",
+      "fcode": "PPL"
+    }
+  ]
+}

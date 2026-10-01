@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional
 import swisseph as swe
 
@@ -369,7 +369,7 @@ def _прочитать_в_фоне(номер, тело):
             з_м = dict(з)
             if (посчитано or {}).get("moment"):
                 з_м["moment"] = посчитано["moment"]
-            карта = карта_файлом(з_м, [(з_, т_) for з_, т_ in итог["razdely"]])
+            карта = карта_файлом(з_м, [(з_, т_) for з_, т_ in итог["razdely"]], посчитано)
             ответ.update({"fayl": карта.get("fayl"), "imya_fayla": карта.get("imya_fayla")})
         зд.update({"gotovo": True, "itog": ответ, "etap": "готово"})
     except Exception as e:
@@ -444,7 +444,7 @@ async def api_prochitat(тело: dict):
             з_м = dict(з)
             if (посчитано or {}).get("moment"):
                 з_м["moment"] = посчитано["moment"]
-            карта = карта_файлом(з_м, [(з_, т_) for з_, т_ in итог["razdely"]])
+            карта = карта_файлом(з_м, [(з_, т_) for з_, т_ in итог["razdely"]], посчитано)
             ответ.update({"fayl": карта.get("fayl"), "imya_fayla": карта.get("imya_fayla")})
         return ответ
     except Exception as e:
@@ -783,6 +783,12 @@ def _translit_ru(s: str) -> str:
     }
     return ''.join(table.get(c, c) for c in s.lower())
 
+def _geo_admin_key(value: str) -> str:
+    import re
+    value = (value or "").lower().replace("ё", "е")
+    value = re.sub(r"\b(?:область|области|район|района|край|округ|region|oblast|krai|district)\b", " ", value)
+    return " ".join(_translit_ru(value).replace(".", " ").split())
+
 def _geonames_api_fuzzy(place_str: str, force_cc: str = None):
     """
     Прямой запрос к GeoNames API.
@@ -799,7 +805,6 @@ def _geonames_api_fuzzy(place_str: str, force_cc: str = None):
         import urllib.request as _urlreq
         import urllib.parse as _urlparse
         import json as _json
-        import difflib as _dl
 
         raw = place_str.strip()
         low = raw.lower()
@@ -810,13 +815,12 @@ def _geonames_api_fuzzy(place_str: str, force_cc: str = None):
                 country_code = country_code or cc
                 country_phrase = nm
                 break
+        if raw.split(",")[-1].strip().upper() in set(_COUNTRY_ISO.values()):
+            country_phrase = raw.split(",")[-1].strip().lower()
+            country_code = country_code or country_phrase.upper()
 
         # ИМЯ МЕСТА — всё до запятой целиком, а не первое слово.
-        q = raw.split(",")[0].strip()
-        for pref in ("с.", "п.", "г.", "пос.", "село", "посёлок", "поселок", "город", "деревня", "ст."):
-            if q.lower().startswith(pref):
-                q = q[len(pref):].strip()
-                break
+        q = _strip_place_prefix(raw.split(",")[0].strip())
         if not q:
             return None
 
@@ -832,13 +836,16 @@ def _geonames_api_fuzzy(place_str: str, force_cc: str = None):
         region_translit = _translit_ru(region_text) if region_text else ""
 
         rows = []
-        # два захода: сначала точно, потом нечётко
-        for fz in ("0.9", "0.6"):
-            params = {"q": q, "fuzzy": fz, "maxRows": "20",
+        # Ищем название, а не похожие слова в любых атрибутах места.
+        # FULL содержит альтернативные/исторические имена; lang=ru не
+        # позволяет английскому Moscow проиграть деревне Moskva.
+        for fz in ("1",):
+            params = {"name_equals": q, "fuzzy": fz, "maxRows": "100",
+                      "lang": "ru", "style": "FULL",
                       "featureClass": "P", "username": _user}
             if country_code:
                 params["country"] = country_code
-            url = "http://api.geonames.org/searchJSON?" + _urlparse.urlencode(params)
+            url = "https://secure.geonames.org/searchJSON?" + _urlparse.urlencode(params)
             req = _urlreq.Request(url, headers={"User-Agent": "Quantarion/1.0"})
             with _urlreq.urlopen(req, timeout=8) as resp:
                 data = _json.loads(resp.read().decode("utf-8"))
@@ -848,7 +855,23 @@ def _geonames_api_fuzzy(place_str: str, force_cc: str = None):
         if not rows:
             return None
 
-        q_tr = (_translit_ru(q) or q).lower()
+        def _norm(name):
+            return " ".join(_translit_ru(name or "").split())
+
+        q_tr = _norm(q)
+
+        def _names(row):
+            names = [row.get("name"), row.get("toponymName"), row.get("asciiName")]
+            names.extend(a.get("name") for a in row.get("alternateNames", [])
+                         if isinstance(a, dict) and a.get("lang") != "link")
+            return {_norm(n) for n in names if n}
+
+        # Даже name_equals может вернуть расширенные результаты: не
+        # подменяем Москва на Московка или Красная Москва.
+        rows = [r for r in rows if q_tr in _names(r)
+                and (not country_code or r.get("countryCode") == country_code)]
+        if not rows:
+            return None
 
         def _admin_match(row):
             adm = (row.get("adminName1") or "").lower()
@@ -860,17 +883,19 @@ def _geonames_api_fuzzy(place_str: str, force_cc: str = None):
             words = (region_text + " " + region_translit).split()
             return any(w in adm for w in words if len(w) > 3)
 
+        if parts:
+            def _matches_parts(row):
+                admins = [_geo_admin_key(row.get(f"adminName{i}")) for i in range(1, 5)]
+                return all(any(_geo_admin_key(p) == a for a in admins if a)
+                           for p in parts)
+
+            rows = [r for r in rows if _matches_parts(r)]
+            if not rows:
+                return None
+
         def _score(row):
             """Чем больше — тем вернее. Имя важнее населения."""
-            nm = (row.get("name") or "").lower()
-            best = 0.0
-            for cand in {nm, (row.get("toponymName") or "").lower()}:
-                if not cand:
-                    continue
-                best = max(best,
-                           _dl.SequenceMatcher(None, q_tr, cand).ratio(),
-                           _dl.SequenceMatcher(None, q.lower(), cand).ratio())
-            s = best * 100                       # схожесть имени: 0..100
+            s = 100.0  # Все оставшиеся места точно совпали по одному из имён.
             if _admin_match(row):
                 s += 40                          # совпала область
             pop = int(row.get("population") or 0)
@@ -878,7 +903,7 @@ def _geonames_api_fuzzy(place_str: str, force_cc: str = None):
                 s += min(pop / 5000.0, 10)       # населённость — слабый довесок
             return s
 
-        ranked = sorted(rows, key=_score, reverse=True)
+        ranked = sorted(rows, key=lambda r: (_score(r), int(r.get("population") or 0)), reverse=True)
         hit = ranked[0]
         lat = float(hit["lat"])
         lng = float(hit["lng"])
@@ -886,15 +911,15 @@ def _geonames_api_fuzzy(place_str: str, force_cc: str = None):
         # Зона: сначала локально (timezonefinder — офлайн, лимитов нет),
         # GeoNames только запасным. Их timezone API упирается в суточный лимит
         # бесплатного аккаунта и молча отдаёт UTC -> GMT+0 вместо +6.
-        tz = None
+        tz = (hit.get("timezone") or {}).get("timeZoneId")
         try:
             from timezonefinder import TimezoneFinder
-            tz = TimezoneFinder().timezone_at(lat=lat, lng=lng)
+            tz = TimezoneFinder().timezone_at(lat=lat, lng=lng) or tz
         except Exception:
-            tz = None
+            pass
         if not tz:
             try:
-                tz_url = ("http://api.geonames.org/timezoneJSON?"
+                tz_url = ("https://secure.geonames.org/timezoneJSON?"
                           + _urlparse.urlencode({"lat": lat, "lng": lng, "username": _user}))
                 tz_req = _urlreq.Request(tz_url, headers={"User-Agent": "Quantarion/1.0"})
                 with _urlreq.urlopen(tz_req, timeout=8) as tz_resp:
@@ -902,7 +927,8 @@ def _geonames_api_fuzzy(place_str: str, force_cc: str = None):
                 tz = tz_data.get("timezoneId")
             except Exception:
                 pass
-        tz = tz or "UTC"
+        if not tz:
+            return None  # Не выдаём неизвестный пояс за GMT+0.
 
         def _brief(r):
             bits = [r.get("name") or "?"]
@@ -1056,13 +1082,14 @@ def _geocode_once(query: str, on_date: Optional[str] = None,
     try:
         fz = _geonames_api_fuzzy(query, force_cc=expect_cc)
         if fz and (not expect_cc or not fz.get("cc") or fz["cc"] == expect_cc):
+            admin = _admin_at(fz["lat"], fz["lng"])
             return {
                 "latitude": fz["lat"],
                 "longitude": fz["lng"],
                 "timezone_name": fz["tz"] or "UTC",
                 "utc_offset": tz_offset_at(fz["tz"], on_date),
-                "address": _addr_from_admin(_admin_at(fz["lat"], fz["lng"]), fz["found"]["name"]),
-                "admin": _admin_at(fz["lat"], fz["lng"]),
+                "address": _addr_from_admin(admin, fz["found"]["name"]),
+                "admin": admin,
                 "candidates": fz["candidates"],
                 "source": "geonames",
             }
@@ -1071,16 +1098,23 @@ def _geocode_once(query: str, on_date: Optional[str] = None,
     try:
         from geopy.geocoders import Nominatim
         from timezonefinder import TimezoneFinder
-        kw = {"addressdetails": True, "language": "ru"}
+        kw = {"addressdetails": True, "namedetails": True, "language": "ru"}
         if expect_cc:
             kw["country_codes"] = expect_cc.lower()
         loc = Nominatim(user_agent="quantarion-astrofractal").geocode(query, **kw)
         if not loc:
             return None
         got_cc = ((loc.raw.get("address") or {}).get("country_code") or "").upper()
-        if expect_cc and got_cc and got_cc != expect_cc:
+        if expect_cc and got_cc != expect_cc:
             return None
         _a = loc.raw.get("address") or {}
+        names = list((loc.raw.get("namedetails") or {}).values())
+        names.extend(_a.get(k) for k in ("city", "town", "village", "hamlet", "municipality"))
+        asked = " ".join(_translit_ru(_strip_place_prefix(query.split(",")[0])).split())
+        if not any(asked == " ".join(_translit_ru(n).split()) for n in names if isinstance(n, str)):
+            return None
+        if loc.raw.get("addresstype") not in ("city", "town", "village", "hamlet", "municipality"):
+            return None  # Улица или область не являются местом рождения.
         admin = {
             "place": (_a.get("village") or _a.get("town") or _a.get("hamlet")
                       or _a.get("city") or ""),
@@ -1088,7 +1122,16 @@ def _geocode_once(query: str, on_date: Optional[str] = None,
             "region": _a.get("state") or _a.get("region") or "",
             "country": _a.get("country") or "",
         }
+        refinements = [p.strip() for p in query.split(",")[1:] if p.strip()]
+        if refinements and (refinements[-1].lower() in _COUNTRY_ISO
+                            or refinements[-1].upper() in set(_COUNTRY_ISO.values())):
+            refinements.pop()
+        admins = [_geo_admin_key(v) for v in _a.values() if isinstance(v, str)]
+        if any(_geo_admin_key(p) not in admins for p in refinements):
+            return None
         tz_name = TimezoneFinder().timezone_at(lat=loc.latitude, lng=loc.longitude)
+        if not tz_name:
+            return None
         return {
             "latitude": round(loc.latitude, 6),
             "longitude": round(loc.longitude, 6),
@@ -1109,9 +1152,8 @@ def geocode(city: str, country: str = "", on_date: Optional[str] = None) -> dict
     city может быть «Село, Район, Область» — уточнения через запятую.
     on_date: 'ГГГГ-ММ-ДД' — дата, НА КОТОРУЮ считать смещение пояса.
 
-    ПРОГРЕССИВНОЕ ОСЛАБЛЕНИЕ: если полный запрос не нашёлся, уточнения
-    отбрасываются по одному справа налево. Старое название района
-    («Возвышенский» вместо «Магжана Жумабаева») больше не убивает поиск.
+    Район и область не отбрасываются молча. Если справочник не знает
+    исторического уточнения, нужно уточнить название или координаты.
 
     ИСТОРИЧЕСКАЯ СТРАНА: «Казахская ССР» -> «Казахстан». «СССР» — не страна,
     отбрасывается с предупреждением.
@@ -1120,6 +1162,10 @@ def geocode(city: str, country: str = "", on_date: Optional[str] = None) -> dict
     """
     country, note = _normalize_country(country)
     cc = _COUNTRY_ISO.get((country or "").lower().strip()) if country else None
+    if country and country.upper() in set(_COUNTRY_ISO.values()):
+        cc = country.upper()
+    if country and not cc:
+        return {"error": "Страна не распознана. Укажите современное название или ISO-код страны."}
 
     # Страна вписана, но неразрешима («СССР») — ОТКАЗ, а не догадка.
     # Без страны «Зерносовхоз Советский» находит Вилючинск на Камчатке
@@ -1133,7 +1179,9 @@ def geocode(city: str, country: str = "", on_date: Optional[str] = None) -> dict
         return {"error": "Не указан населённый пункт"}
 
     tried = []
-    for n in range(len(parts), 0, -1):
+    # Не выбрасываем район/область ради первого удачного ответа:
+    # это меняет место рождения без согласия пользователя.
+    for n in (len(parts),):
         q = ", ".join(parts[:n])
         for full in ([f"{q}, {country}", q] if country else [q]):
             tried.append(full)
@@ -1178,16 +1226,16 @@ class ChatRequest(BaseModel):
 
 
 class NatalRequest(BaseModel):
-    year: int
-    month: int
-    day: int
-    hour: int = 12
-    minute: int = 0
-    second: float = 0
-    timezone: float = 0
+    year: int = Field(..., ge=1, le=9999)
+    month: int = Field(..., ge=1, le=12)
+    day: int = Field(..., ge=1, le=31)
+    hour: int = Field(12, ge=0, le=23)
+    minute: int = Field(0, ge=0, le=59)
+    second: float = Field(0, ge=0, lt=60, allow_inf_nan=False)
+    timezone: float = Field(0, ge=-14, le=14, allow_inf_nan=False)
     timezone_str: Optional[str] = None
-    latitude: float = 0
-    longitude: float = 0
+    latitude: float = Field(0, ge=-90, le=90, allow_inf_nan=False)
+    longitude: float = Field(0, ge=-180, le=180, allow_inf_nan=False)
     asc_degree: Optional[float] = Field(
         None, description="Если известен точный ASC (абсолютный градус)"
     )
@@ -1219,26 +1267,35 @@ async def natal_chart(req: NatalRequest):
     lon = req.longitude
     tz = req.timezone
 
-    # Историческое смещение по именованной зоне (как kerykeion), если передана
-    if req.timezone_str:
-        try:
-            import pytz, datetime as _dt
-            _zone = pytz.timezone(req.timezone_str)
-            _naive = _dt.datetime(req.year, req.month, req.day, req.hour, req.minute)
-            _off = _zone.utcoffset(_naive)
-            if _off is not None:
-                tz = _off.total_seconds() / 3600.0
-        except Exception:
-            pass
+    try:
+        local_birth = datetime(req.year, req.month, req.day, req.hour, req.minute)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Неверная дата/время рождения: {e}")
+    zone_name = req.timezone_str
 
     # Геокодинг если указан город
     if req.city and (lat == 0 and lon == 0):
-        geo = geocode(req.city, req.country or "")
+        geo = geocode(req.city, req.country or "", local_birth.date().isoformat())
         if "error" in geo:
             raise HTTPException(status_code=400, detail=geo["error"])
         lat = geo["latitude"]
         lon = geo["longitude"]
         tz = geo["utc_offset"]
+        zone_name = geo["timezone_name"]
+
+    # После поиска города считаем пояс в момент рождения, а не сегодня
+    # и не в полдень: это важно в дни перевода часов.
+    if zone_name:
+        try:
+            import pytz
+            aware = pytz.timezone(zone_name).localize(local_birth, is_dst=None)
+            tz = aware.utcoffset().total_seconds() / 3600.0
+        except pytz.AmbiguousTimeError:
+            raise HTTPException(status_code=400, detail="Время рождения попало в повторённый час при переводе часов. Уточните GMT вручную без именованной зоны.")
+        except pytz.NonExistentTimeError:
+            raise HTTPException(status_code=400, detail="Такого местного времени не было из-за перевода часов. Проверьте время рождения.")
+        except pytz.UnknownTimeZoneError:
+            raise HTTPException(status_code=400, detail="Неизвестный часовой пояс места рождения")
 
     try:
         chart = calculate_natal(
@@ -1386,6 +1443,11 @@ async def geocode_city(city: str, country: str = "", on_date: Optional[str] = No
     on_date='ГГГГ-ММ-ДД' — вернуть смещение пояса НА ЭТУ ДАТУ (декретное время и т.п.),
     а не текущее. Без неё — как раньше, по сегодняшнему дню.
     """
+    if on_date:
+        try:
+            datetime.strptime(on_date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Неверная дата рождения. Нужна существующая дата в формате ГГГГ-ММ-ДД.")
     result = geocode(city, country, on_date)
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
@@ -1431,13 +1493,27 @@ class KerykeionRequest(BaseModel):
     hour: int = 12
     minute: int = 0
     second: int = 0          # 06.09: секунды рождения доходят до колеса
-    timezone_str: str = 'UTC'
+    timezone_str: Optional[str] = 'UTC'
+    timezone: float = Field(0, ge=-14, le=14, allow_inf_nan=False)
     latitude: float = 0
     longitude: float = 0
     solar_year: int = 2026
     tr_lat: float | None = None
     tr_lon: float | None = None
     tr_tz: str | None = None
+
+    @model_validator(mode='after')
+    def fixed_offset_to_utc(self):
+        # Etc/GMT поддерживает лишь целые часы. Ручной дробный GMT
+        # передаётся без имени зоны и переводится точно в UTC один раз.
+        if not self.timezone_str:
+            from datetime import timedelta
+            birth = datetime(self.year, self.month, self.day, self.hour,
+                             self.minute, self.second) - timedelta(hours=self.timezone)
+            self.year, self.month, self.day = birth.year, birth.month, birth.day
+            self.hour, self.minute, self.second = birth.hour, birth.minute, birth.second
+            self.timezone, self.timezone_str = 0, 'UTC'
+        return self
 
 
 class КосмограммаЗапрос(BaseModel):
@@ -2627,7 +2703,8 @@ async def chart_wheel_zakaz(req: КолесоЗаказа):
             суб = KerykeionRequest(
                 year=req.year, month=req.month, day=req.day,
                 hour=req.hour, minute=req.minute, second=req.second,
-                timezone_str=req.timezone_str or зона_р,
+                timezone_str=req.timezone_str,
+                timezone=req.gmt,
                 latitude=req.latitude, longitude=req.longitude)
             рождение_utc = datetime(req.year, req.month, req.day, req.hour, req.minute,
                                     req.second, tzinfo=timezone.utc) - _td(hours=req.gmt)
@@ -2640,9 +2717,9 @@ async def chart_wheel_zakaz(req: КолесоЗаказа):
                 точно = datetime(req.year, req.month, req.day, 12, 0) - _td(hours=req.gmt)
             мест = точно + _td(hours=req.gmt)
             суб = KerykeionRequest(
-                year=мест.year, month=мест.month, day=мест.day,
-                hour=мест.hour, minute=мест.minute, second=мест.second,
-                timezone_str=зона_р, latitude=req.latitude, longitude=req.longitude)
+                year=точно.year, month=точно.month, day=точно.day,
+                hour=точно.hour, minute=точно.minute, second=точно.second,
+                timezone_str='UTC', latitude=req.latitude, longitude=req.longitude)
             рождение_utc = точно.replace(tzinfo=timezone.utc)
             солнечный_час = мест.strftime("%H:%M:%S")
         натал = _make_kerykeion_subject('natal', суб)
