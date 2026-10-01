@@ -193,9 +193,10 @@ def карта_файлом(запрос, трактовка_по_раздела
             посчитано = {"tochki": итог_натала["точки"], "kuspidy": итог_натала.get("куспиды"),
                          "vremya_izvestno": итог_натала["время_известно"],
                          "rozhdenie": итог_натала["рождение"]}
-        from engine import kosmogramma as K
+        from engine.machine_natal import chart_aspects
         снимок = dict(посчитано)
-        снимок["aspekty"] = K.аспекты_космограммы(снимок["tochki"])
+        снимок["aspekty"] = chart_aspects(снимок["tochki"], снимок.get("kuspidy"),
+                                        known=bool(снимок.get("vremya_izvestno")))
 
     html = karta_html.карта_клиенту(
         трактовка_по_разделам, имя,

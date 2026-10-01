@@ -109,6 +109,31 @@ class DeliveryTest(unittest.TestCase):
         self.assertEqual(self.files[0][-1],response.text)
         self.assertIsNotNone(reader.call_args.kwargs['точки'])
 
+    def test_real_calculation_machine_reading_delivered_when_editor_is_invalid(self):
+        import swisseph as swe
+        from engine import arhiv
+        original = swe.houses
+        def compatible(*args, **kwargs):
+            cusps, angles = original(*args, **kwargs)
+            return (cusps[1:] if len(cusps) == 13 else cusps), angles
+        self.card['dannye'] = dict(тип='натал', дата='09.11.1981', время='03:15',
+            место='Москва, Россия', пол='M', _shirota=55.75204, _dolgota=37.61781, _gmt=3)
+        with patch.object(swe, 'houses', compatible), \
+             patch.object(arhiv, 'положить_кухню', return_value='test/kitchen.json'), \
+             patch.object(arhiv, 'положить_карту', return_value='test/chart.html'), \
+             patch.object(chitatel, '_спросить', return_value='Выдуманный аспект Уран—Нептун: трин'):
+            self.worker()
+        self.assertEqual(self.card['состояние'], 'готово', self.card.get('ошибка'))
+        self.assertEqual(self.card['machine_natal']['aspects'], 41)
+        self.assertEqual(self.card['machine_natal']['mode'], 'machine')
+        self.assertEqual(self.card['storozh'], [])
+        response = self.client.get('/api/klassika/fayl', params={'nomer': self.number})
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('Выдуманный аспект', response.text)
+        self.assertIn('Меркурий — Белая Луна: оппозиция', response.text)
+        self.assertEqual(self.files[0][-1], response.text)
+        self.assertIn('Дева 29°38′17″', response.text)
+
     def test_chat_confirmation_admin_order_actual_cash_worker_and_file(self):
         import os
         import swisseph as swe

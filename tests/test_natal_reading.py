@@ -127,7 +127,7 @@ class NatalReadingTest(unittest.TestCase):
         self.assertIn('Учебный образец: Уран', natal)
         self.assertTrue(natal.endswith(C._правила_машинных_фактов()))
 
-    def test_five_reader_calls_receive_current_data_and_natal_rules(self):
+    def test_natal_calls_only_order_editor_and_rejects_free_prose(self):
         calls = []
         def model(system, messages, *args, **kwargs):
             calls.append((system, messages[0]['content']))
@@ -136,15 +136,14 @@ class NatalReadingTest(unittest.TestCase):
              patch.object(C, '_спросить_целиком', side_effect=model), \
              patch('engine.razvertka.откорректировать', side_effect=lambda text, fn: (text, 0)):
             result = C.прочитать('', заказ='natal', точки=POINTS, куспиды=N['cusps'], углы=ANGLES)
-        self.assertEqual(len(calls), 5)
-        self.assertEqual(len(result['razdely']), 8)
-        for i, (system, request) in enumerate(calls):
-            self.assertIn('Учебный образец: Уран', system)
-            self.assertIn('ДАННЫЕ СМЫСЛОВОГО ПРОЧТЕНИЯ', request)
-            if i != 2: # Instruments receive only their own point cards.
-                self.assertIn('29°30′ Близнецов', request)
-        self.assertIn('вход → потребность → действие', calls[0][1])
-        self.assertIn('вход → потребность → действие', calls[-1][1].lower())
+        self.assertEqual(len(calls), 1)
+        self.assertIn('Верни только JSON', calls[0][0])
+        packet = json.loads(calls[0][1])
+        self.assertEqual(len(packet['cards']), 17)
+        self.assertEqual(len(packet['aspects']), 41)
+        self.assertNotIn('Содержательный текст без расчётных утверждений.', result['tekst'])
+        self.assertEqual(result['machine_natal']['mode'], 'machine')
+        self.assertEqual(result['machine_natal']['aspects'], 41)
 
     def test_solar_reader_does_not_receive_natal_contract_or_new_scenario(self):
         calls = []

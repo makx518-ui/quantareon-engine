@@ -69,13 +69,19 @@ def render_chart(snapshot, birth):
             if angular:
                 svg.append(label(start,130,{0:'ASC',3:'IC',6:'DSC',9:'MC'}[i],'#f4c85d',20))
     # Aspect list supplied by the same engine; no aspects inferred by the language model.
+    coordinates = {name: p['градус'] for name, p in points.items()}
+    coordinates.update({'Чёрная Луна': coordinates.get('Лилит'), 'Белая Луна': coordinates.get('Селена')})
+    if cusps:
+        coordinates.update({'ASC': cusps[0], 'MC': cusps[9]})
     for aspect in snapshot.get('aspekty', []):
-        if not aspect.get('точный'):
+        # New natal list draws every direct adopted aspect. Older callers retain
+        # the exact-only convention; propagated links are explained in text.
+        if not aspect.get('прямой', aspect.get('точный', False)):
             continue
         a,b=aspect['а'],aspect['б']
-        if a not in points or b not in points:
+        if coordinates.get(a) is None or coordinates.get(b) is None:
             continue
-        x1,y1=xy(points[a]['градус'],160); x2,y2=xy(points[b]['градус'],160)
+        x1,y1=xy(coordinates[a],160); x2,y2=xy(coordinates[b],160)
         color='#f46a85' if aspect['аспект'] in ('квадрат','оппозиция') else '#40cab7'
         svg.append(f'<line x1="{x1:.2f}" y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}" stroke="{color}" opacity=".65"/>')
     rows=[]
@@ -111,6 +117,9 @@ def render_chart(snapshot, birth):
     metadata.append(f'<p><b>Система домов:</b> {"Плацидус" if cusps else "не используется — время неизвестно"}</p>')
     note='' if known else '<p>Время рождения неизвестно: условная космограмма от Солнца. Дома и углы не показаны.</p>'
     heading = 'Натальная карта и положения планет' if known else 'Космограмма и положения планет'
-    return f'<section class="razdel natal-visual" id="natal-facts"><h2>{heading}</h2>'+''.join(metadata)+note+''.join(svg)+'<p>R — ретроградное движение. Линии — точные аспекты по правилам расчёта; красные — квадрат и оппозиция, зелёные — остальные. Положения построены из числового расчёта.</p><div class="natal-table"><table><thead><tr><th>Планета / точка</th><th>Знак и положение</th><th>Дом</th><th>Движение</th></tr></thead><tbody>'+''.join(rows)+'</tbody></table></div></section>'
+    aspect_note = ('Линии — прямые аспекты в принятых орбисах натала; связи через соединения описаны в тексте.'
+                   if any('прямой' in a for a in snapshot.get('aspekty', [])) else
+                   'Линии — точные аспекты по правилам расчёта.')
+    return f'<section class="razdel natal-visual" id="natal-facts"><h2>{heading}</h2>'+''.join(metadata)+note+''.join(svg)+f'<p>R — ретроградное движение. {aspect_note} Красные — квадрат и оппозиция, зелёные — остальные. Положения построены из числового расчёта.</p><div class="natal-table"><table><thead><tr><th>Планета / точка</th><th>Знак и положение</th><th>Дом</th><th>Движение</th></tr></thead><tbody>'+''.join(rows)+'</tbody></table></div></section>'
 
 STYLE = '.natal-visual svg{display:block;width:100%;height:auto;margin:24px 0}.natal-table{overflow-x:auto}.natal-table table{width:100%;border-collapse:collapse;font-size:15px}.natal-table th,.natal-table td{text-align:left;padding:9px;border-bottom:1px solid #424c69;white-space:nowrap}.natal-visual p{font-size:14px}@media print{.natal-visual svg{max-height:170mm}.natal-table{overflow:visible}}'

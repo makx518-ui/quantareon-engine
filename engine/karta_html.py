@@ -109,6 +109,7 @@ body {
   display:flex; align-items:center; gap:9px;
 }
 .razdel p { margin-bottom: 15px; font-size: 16.5px; }
+.razdel h3 { margin:26px 0 14px; color:#E8B23A; font-size:19px; line-height:1.4; }
 .razdel p:last-child { margin-bottom: 0; }
 .razdel b, .razdel strong { color:#E8B23A; font-weight:600; }
 .razdel em { color:#9aa2c4; }
@@ -319,7 +320,9 @@ def _абзацы(текст):
         т = _re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", т)
         т = _re.sub(r"(?<!\*)\*([^*\n]+?)\*(?!\*)", r"<em>\1</em>", т)
         т = т.replace("\n", "<br>")
-        if если_врез:
+        if к.startswith('## ') and '\n' not in к:
+            куски.append(f'<h3>{_html.escape(к[3:])}</h3>')
+        elif если_врез:
             куски.append(f'<div class="vrez">{т}</div>')
         elif "·" in к and _re.search(r"\d{1,2}\s+(янв|фев|мар|апр|ма|июн|июл|авг|сен|окт|ноя|дек)", к):
             # лента ключевых дат
