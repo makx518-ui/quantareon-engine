@@ -170,6 +170,31 @@ class PassportGuardTest(unittest.TestCase):
         self.assertEqual(result['facts']['machine:balance:0'], 'равенство')
         json.dumps(result)
 
+    def test_long_reading_checks_every_group_and_repairs_global_address(self):
+        original = '\n\n'.join(f'Абзац {i}.' for i in range(10))
+        calls = []
+        incomplete = [True]
+        def ask(system, messages):
+            payload = json.loads(messages[0]['content'])
+            if system != AUDIT_RULE:
+                self.assertEqual(payload['fragment'], 'Абзац 8.')
+                return 'Исправленный смысл.'
+            batch = payload['paragraphs']
+            self.assertLessEqual(len(batch), 4)
+            calls.append(tuple(batch))
+            if incomplete[0]:
+                incomplete[0] = False
+                return self.report(batch[:-1])
+            rows = json.loads(self.report(batch))
+            for row, text in zip(rows['paragraphs'], batch):
+                if text == 'Абзац 8.':
+                    row['issues'] = [{'quote': text, 'reason': 'Ошибка', 'basis': ['p:Нептун:house']}]
+            return json.dumps(rows, ensure_ascii=False)
+        result, changes = guard(original, self.document, ask)
+        self.assertEqual(result, original.replace('Абзац 8.', 'Исправленный смысл.'))
+        self.assertEqual(calls[0], calls[1])
+        self.assertEqual(len(changes), 1)
+
     def test_balance_tie_is_not_a_single_leader(self):
         from types import SimpleNamespace
         from engine import klassika_natal as KN

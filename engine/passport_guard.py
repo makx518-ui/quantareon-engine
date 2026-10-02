@@ -155,17 +155,25 @@ def guard(text, document, ask, max_repairs=2, detect=None, initial_coordinates=F
         raise ValueError('Пустая трактовка')
     repairs = []
     for attempt in range(max_repairs + 1):
-        request = json.dumps({'passport': document, 'paragraphs': paragraphs,
-                              'initial_coordinates': initial_coordinates, 'previous_text': previous_text}, ensure_ascii=False)
-        for format_attempt in range(2):
-            try:
-                rows = validate(ask(AUDIT_RULE, [{'role': 'user', 'content': request}]),
-                                paragraphs, document['facts'])
-                break
-            except (json.JSONDecodeError, AuditResponseError) as error:
-                if format_attempt == 1:
-                    raise AuditResponseError('Сторож не вернул читаемый JSON после повторной проверки') from error
-                print('ПАСПОРТНЫЙ СТОРОЖ: повторяю только проверку формата, текст сохранён', flush=True)
+        rows = []
+        # Long audit replies skipped paragraphs in production. Keep each reply
+        # small, but still validate every paragraph against the full passport.
+        for offset in range(0, len(paragraphs), 4):
+            batch = paragraphs[offset:offset + 4]
+            request = json.dumps({'passport': document, 'paragraphs': batch,
+                                  'initial_coordinates': initial_coordinates, 'previous_text': previous_text}, ensure_ascii=False)
+            for format_attempt in range(2):
+                raw = ask(AUDIT_RULE, [{'role': 'user', 'content': request}])
+                try:
+                    checked = validate(raw, batch, document['facts'])
+                    break
+                except ValueError as error:
+                    if format_attempt == 1:
+                        raise AuditResponseError('Сторож не вернул полный корректный отчёт после повторной проверки') from error
+                    print('ПАСПОРТНЫЙ СТОРОЖ: повторяю только проверку группы, текст сохранён', flush=True)
+            for row in checked:
+                row['index'] += offset
+            rows.extend(checked)
         if detect is not None:
             for row in rows:
                 row['issues'].extend(detect(paragraphs[row['index']]))
