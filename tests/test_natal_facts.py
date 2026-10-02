@@ -139,6 +139,32 @@ class NatalFactsTest(unittest.TestCase):
         self.assertEqual(result['machine_natal']['mode'], 'two_pass_narrative')
         self.assertTrue(result['storozh'])
 
+    def test_saved_reading_is_reused_when_only_guard_format_failed(self):
+        from engine.passport_guard import AUDIT_RULE, AuditResponseError
+        checkpoint = {}
+        generation = []
+        broken = [True]
+        def ask(system, messages, **kwargs):
+            if system == AUDIT_RULE:
+                if broken[0]:
+                    return 'Не JSON'
+                paragraphs = json.loads(messages[0]['content'])['paragraphs']
+                return json.dumps({'paragraphs': [{'index': i, 'claims': [], 'issues': []}
+                                                 for i in range(len(paragraphs))]})
+            generation.append(system)
+            return '## Прочтение\nСвязный смысловой рассказ.'
+        with patch.object(C, '_спросить', side_effect=ask), \
+             patch('engine.razvertka.откорректировать', side_effect=lambda text, fn: (text, 0)):
+            with self.assertRaises(AuditResponseError):
+                C.прочитать('', точки=POINTS, куспиды=N['cusps'], checkpoint=checkpoint)
+            first_count = len(generation)
+            self.assertTrue(checkpoint['drafts']['кармика'])
+            broken[0] = False
+            result = C.прочитать('', точки=POINTS, куспиды=N['cusps'], checkpoint=checkpoint)
+        self.assertEqual(first_count, 2)  # hologram + first chapter, both saved
+        self.assertEqual(len(generation), 5)  # remaining three chapters only
+        self.assertIn('Связный смысловой рассказ.', result['tekst'])
+
 
 if __name__ == '__main__':
     unittest.main()

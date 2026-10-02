@@ -16,6 +16,25 @@ class PassportGuardTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate(self.report(['a']), ['a', 'b'], self.document['facts'])
 
+    def test_markdown_wrapped_json_is_validated_with_same_strict_rules(self):
+        raw = self.report(['Смысл.'])
+        self.assertEqual(validate('```json\n'+raw+'\n```', ['Смысл.'], self.document['facts']),
+                         validate(raw, ['Смысл.'], self.document['facts']))
+        with self.assertRaises(ValueError):
+            validate('Вступление\n```json\n'+raw+'\n```', ['Смысл.'], self.document['facts'])
+
+    def test_format_retry_does_not_rewrite_or_regenerate_reading(self):
+        calls = []
+        def ask(system, messages):
+            self.assertEqual(system, AUDIT_RULE)
+            calls.append(json.loads(messages[0]['content']))
+            return 'Не JSON' if len(calls) == 1 else self.report(['Живой текст.'])
+        result, repairs = guard('Живой текст.', self.document, ask)
+        self.assertEqual(result, 'Живой текст.')
+        self.assertEqual(repairs, [])
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0]['paragraphs'], calls[1]['paragraphs'])
+
     def test_wrong_provenance_blocks(self):
         for evidence in ([{'id': 'foreign', 'value': '3'}],
                          [{'id': 'p:Нептун:house', 'value': '4'}], []):

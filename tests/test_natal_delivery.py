@@ -1,5 +1,6 @@
 """Exercise the actual worker and HTTP delivery; external transports are replaced."""
 import importlib
+import json
 import sys
 import threading
 import unittest
@@ -85,6 +86,21 @@ class DeliveryTest(unittest.TestCase):
         self.assertIn('повтор_после',self.card)
         self.assertEqual(len(self.mails),1)
         self.assertEqual(self.files,[])
+
+    def test_guard_format_failure_persists_draft_and_reports_real_cause(self):
+        from engine.passport_guard import AuditResponseError
+        draft = {'fingerprint': 'machine', 'drafts': {'кармика': 'Сохранённая глава'}}
+        def build(card, stage, save_checkpoint=None):
+            save_checkpoint(draft)
+            raise AuditResponseError('Нечитаемый ответ проверки')
+        with patch.object(KL, '_построить_натал_или_соляр', side_effect=build):
+            self.worker()
+        reloaded = json.loads(json.dumps(self.saved[-1], ensure_ascii=False))
+        self.assertEqual(reloaded['черновик_чтения'], draft)
+        self.assertEqual(reloaded['состояние'], 'ждёт повтора')
+        self.assertIn('ответ проверки', KL.ЗАДАЧИ[self.number]['etap'])
+        self.assertNotIn('сбой связи', KL.ЗАДАЧИ[self.number]['etap'])
+        self.assertEqual(self.files, [])
 
     def test_transport_failure_does_not_release_invalid_file(self):
         with patch.dict(sys.modules,{'pochta':SimpleNamespace(отправить_текст=lambda *a:False)}):

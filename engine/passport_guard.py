@@ -6,6 +6,10 @@ still depends on the auditor model, so this is not a proof of arbitrary prose.
 import json
 import re
 
+
+class AuditResponseError(ValueError):
+    """Audit output format failed; not a connection error or rejected chart."""
+
 READING_RULE = """ПАСПОРТ — ЕДИНСТВЕННЫЙ ИСТОЧНИК ФАКТОВ ЭТОЙ КАРТЫ.
 Раскрывай свободно и подробно смысл только существующих машинных фактов.
 Не рассчитывай, не округляй и не добавляй координаты, дома, связи или признаки.
@@ -93,6 +97,13 @@ def _object(pairs):
 
 def validate(raw, paragraphs, facts):
     """Reject incomplete audits, fabricated provenance and malformed responses."""
+    if not isinstance(raw, str):
+        raise AuditResponseError('Сторож вернул неверный формат ответа')
+    # Models often wrap valid JSON in Markdown. Accept only a complete fence;
+    # never extract a convenient object from arbitrary surrounding prose.
+    fence = re.fullmatch(r'\s*```(?:json)?\s*\n(.*?)\n```\s*', raw, re.S | re.I)
+    if fence:
+        raw = fence.group(1)
     report = json.loads(raw, object_pairs_hook=_object)
     if not isinstance(report, dict) or set(report) != {'paragraphs'}:
         raise ValueError('Нарушен контракт сторожа')
@@ -146,8 +157,15 @@ def guard(text, document, ask, max_repairs=2, detect=None, initial_coordinates=F
     for attempt in range(max_repairs + 1):
         request = json.dumps({'passport': document, 'paragraphs': paragraphs,
                               'initial_coordinates': initial_coordinates, 'previous_text': previous_text}, ensure_ascii=False)
-        rows = validate(ask(AUDIT_RULE, [{'role': 'user', 'content': request}]),
-                        paragraphs, document['facts'])
+        for format_attempt in range(2):
+            try:
+                rows = validate(ask(AUDIT_RULE, [{'role': 'user', 'content': request}]),
+                                paragraphs, document['facts'])
+                break
+            except (json.JSONDecodeError, AuditResponseError) as error:
+                if format_attempt == 1:
+                    raise AuditResponseError('Сторож не вернул читаемый JSON после повторной проверки') from error
+                print('ПАСПОРТНЫЙ СТОРОЖ: повторяю только проверку формата, текст сохранён', flush=True)
         if detect is not None:
             for row in rows:
                 row['issues'].extend(detect(paragraphs[row['index']]))

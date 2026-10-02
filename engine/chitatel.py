@@ -695,7 +695,8 @@ def _система(доп="", натал=False):
 
 def прочитать(слой1, слой2=None, заказ="natal", имя="человек",
               данные_рождения=None, полочка=None, точки=None, куспиды=None, углы=None,
-              рождение=None, местное=None, место="", пояс=None, широта=None, долгота=None):
+              рождение=None, местное=None, место="", пояс=None, широта=None, долгота=None,
+              checkpoint=None, save_checkpoint=None):
     """Натал по исходной схеме: чтение всей карты → раскрытие блоков.
 
     Возвращает {'razdely': [...], 'tekst': '...', 'gologramma': '...'}.
@@ -764,8 +765,19 @@ def прочитать(слой1, слой2=None, заказ="natal", имя="ч
         import json as _passport_json
         доп_полки += "\n\nПАСПОРТ МАШИНЫ:\n" + _passport_json.dumps(паспорт_сторожа, ensure_ascii=False)
 
+    контроль = checkpoint if isinstance(checkpoint, dict) and полный else {}
+    if полный:
+        import hashlib, json as _checkpoint_json
+        отпечаток = hashlib.sha256(_checkpoint_json.dumps(
+            {'passport': паспорт_сторожа, 'person': кто}, ensure_ascii=False, sort_keys=True).encode('utf-8')).hexdigest()
+        if контроль.get('fingerprint') != отпечаток:
+            контроль.clear()
+            контроль.update({'fingerprint': отпечаток, 'drafts': {}})
+    def _сохранить_чтение():
+        if полный and save_checkpoint is not None:
+            save_checkpoint(контроль)
     # ── ПРОХОД 1 · чтение молча, наружу ни слова
-    голограмма = _спросить(
+    голограмма = контроль.get('gologramma') or _спросить(
         _система("═══ БИБЛИОТЕКА ПАТТЕРНОВ ГРАДУСОВ ═══\n" + паттерны, натал=полный),
         [{"role": "user", "content":
             f"Карта: {кто}.\n\nПОЛНАЯ ПОЛОЧКА МАШИНЫ:\n\n{полка}{доп_полки}\n\n"
@@ -781,6 +793,8 @@ def прочитать(слой1, слой2=None, заказ="natal", имя="ч
         максимум=6000)
 
     # ── ПРОХОД 2 · блоками, один блок за вызов
+    контроль['gologramma'] = голограмма
+    _сохранить_чтение()
     разделы, куски = [], []
     сторож_правки = []                 # 28.09 · что сторож фактов поправил — в Telegram владельцу
     шаги = [(б, о, None) for б, о in БЛОКИ_НАТАЛА]
@@ -1039,7 +1053,12 @@ def прочитать(слой1, слой2=None, заказ="natal", имя="ч
         if паспорт_сторожа is not None:
             import json as _passport_json
             задание += "\n\n" + READING_RULE + "\n" + _passport_json.dumps(паспорт_сторожа, ensure_ascii=False)
-        текст = _спросить_целиком(_система(натал=полный), [{"role": "user", "content": задание}], предел)
+        текст = контроль.get('drafts', {}).get(блок) if полный else None
+        if not текст:
+            текст = _спросить_целиком(_система(натал=полный), [{"role": "user", "content": задание}], предел)
+            if полный:
+                контроль.setdefault('drafts', {})[блок] = текст
+                _сохранить_чтение()
         текст = _без_служебного(текст)
         # 10.09 · СВЕРКА ЧИСЕЛ (engine/sverka.py). Строка «Хирон — Телец 14°»
         # лежала в блоке перед глазами, а читатель написал «в 25° Тельца».
