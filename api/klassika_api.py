@@ -817,6 +817,9 @@ def _в_фоне(номер, к):
 
 
 def _пустить(номер, к):
+    from api.maintenance import enabled
+    if enabled():
+        return False
     with _замок:
         if номер in _работают or len(_работают) >= ОДНОВРЕМЕННО:
             return False
@@ -826,6 +829,9 @@ def _пустить(номер, к):
 
 
 def _обход():
+    from api.maintenance import enabled
+    if enabled():
+        return False
     try:
         from engine import arhiv as A
         номера = [к.split("/")[-1] for к in A.перечислить(_префикс() + "/открытые/")]

@@ -333,6 +333,9 @@ def _ждущие_для_сигнала(заказы):
 
 
 def _круг_сторожа():
+    from api.maintenance import enabled
+    if enabled():
+        return 0
     """Один проход. Возвращает, сколько TON-заказов в окне (0 — к TonCenter даже не ходили)."""
     сейчас = _O._сейчас()
     with _O.ЗАМОК:

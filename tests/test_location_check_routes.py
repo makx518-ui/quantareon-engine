@@ -54,7 +54,8 @@ class Gate(unittest.TestCase):
             if isinstance(node,ast.AsyncFunctionDef) and node.name=='gate':
                 node.decorator_list=[];nodes.append(node)
         ns=dict(Request=routes.Request,RedirectResponse=RedirectResponse,Response=Response,
-                _СЧЁТЧИК_БЕЗ_ПАРОЛЯ=(),_ПОЧТА_БЕЗ_ПАРОЛЯ=(),_РЕНДЕР_БЕЗ_ПАРОЛЯ=(),_ok=lambda token:False,COOKIE='qtok')
+                _СЧЁТЧИК_БЕЗ_ПАРОЛЯ=(),_ПОЧТА_БЕЗ_ПАРОЛЯ=(),_РЕНДЕР_БЕЗ_ПАРОЛЯ=(),_ok=lambda token:False,COOKIE='qtok',
+                maintenance_enabled=lambda:False)
         exec(compile(ast.Module(body=nodes,type_ignores=[]),'api/main.py','exec'),ns)
         app=FastAPI();app.include_router(routes.router);app.middleware('http')(ns['gate'])
         routes._calls.clear();self.client=TestClient(app,follow_redirects=False)

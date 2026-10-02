@@ -42,6 +42,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from api.maintenance import MaintenanceGate, enabled as maintenance_enabled
+app.add_middleware(MaintenanceGate)
+
+
 # Isolated location preview; existing orders and chart calculation are unchanged.
 from api.location_check.routes import router as location_check_router
 app.include_router(location_check_router)
@@ -165,6 +169,8 @@ _LOCATION_CHECK_PUBLIC = frozenset(("/location-check", "/api/location-check/coun
 
 @app.middleware("http")
 async def gate(request: Request, call_next):
+    if maintenance_enabled():
+        return await call_next(request)
     p = request.url.path
     if p in _LOCATION_CHECK_PUBLIC:
         return await call_next(request)
@@ -192,7 +198,8 @@ try:
 
     @app.on_event("startup")
     async def _warm_voice_greetings():
-        await warm_greetings()
+        if not maintenance_enabled():
+            await warm_greetings()
 
     print("🎙 Голосовой Квантареон: подключён")
 except Exception as _e:
