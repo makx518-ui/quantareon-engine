@@ -42,6 +42,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Isolated location preview; existing orders and chart calculation are unchanged.
+from api.location_check.routes import router as location_check_router
+app.include_router(location_check_router)
+
 # ============================================================
 # ПАРОЛЬ И РАЗДАЧА ФРОНТЕНДА  (для Render)
 # ============================================================

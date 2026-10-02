@@ -1,0 +1,34 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
+const html=fs.readFileSync(__dirname+'/../api/location_check/index.html','utf8');
+const script=html.match(/<script>([\s\S]*?)<\/script>/)[1];new vm.Script(script);
+function node(){return {value:'',hidden:false,disabled:false,textContent:'',innerHTML:'',children:[],events:{},addEventListener(k,f){this.events[k]=f},replaceChildren(){this.children=[];this.innerHTML=''},append(n){this.children.push(n)},querySelector(){return this.radio??=node()}}}
+const ids=['place','country','region','district','date','time','countries','form','results','final','confirm','status','search'];
+const nodes=Object.fromEntries(ids.map(id=>[id,node()]));let pending=[];
+const context=vm.createContext({document:{getElementById:id=>nodes[id],createElement:()=>node()},fetch:(url,args)=>url==='/api/location-check/countries'?Promise.resolve({json:async()=>['Казахстан']}):new Promise((resolve,reject)=>pending.push({url,args,resolve,reject})),console});
+vm.runInContext(script,context);
+const answer=(i,data)=>pending[i].resolve({json:async()=>data});
+const candidate=id=>({id,address:'Советское · район Магжана Жумабаева',latitude:54.42957,longitude:70.34393,changes:[]});
+const searchResult={token:'test',message:'Выберите',candidates:[candidate('first'),candidate('second')]};
+(async()=>{
+ nodes.time.value='21:00';nodes.date.value='1961-01-30';nodes.place.value='Советское';nodes.country.value='KZ';
+ let search=nodes.form.events.submit({preventDefault(){}});answer(0,searchResult);await search;
+ assert.equal(nodes.confirm.disabled,true);
+ nodes.results.children[0].radio.events.change();assert.equal(nodes.confirm.disabled,false);
+ let confirmation=nodes.confirm.events.click();
+ nodes.results.children[1].radio.events.change();
+ answer(1,{status:'confirmed',message:'OLD',address:'OLD',latitude:54,longitude:70,gmt:6,time_known:true});await confirmation;
+ assert.equal(nodes.final.innerHTML,'','Stale confirmation must not restore old choice');
+ assert.equal(nodes.confirm.hidden,false);assert.equal(nodes.confirm.disabled,false);
+ confirmation=nodes.confirm.events.click();answer(2,{status:'confirmed',message:'OK',address:'SECOND',latitude:54,longitude:70,gmt:6,time_known:true});await confirmation;
+ assert.match(nodes.final.innerHTML,/SECOND/);assert.equal(nodes.confirm.hidden,true);
+ nodes.results.children[0].radio.events.change();assert.equal(nodes.confirm.hidden,false,'Switching a confirmed choice must re-open confirmation');
+ assert.equal(nodes.final.innerHTML,'');
+ nodes.place.value='Другое';nodes.place.events.input();assert.equal(nodes.confirm.hidden,true);assert.equal(nodes.results.children.length,0);
+ search=nodes.form.events.submit({preventDefault(){}});nodes.country.value='RU';nodes.country.events.input();answer(3,searchResult);await search;assert.equal(nodes.results.children.length,0);
+ search=nodes.form.events.submit({preventDefault(){}});pending[4].reject(Error('offline'));await search;assert.equal(nodes.place.value,'Другое');assert.match(nodes.status.textContent,/сохранены/);
+ for(const lat of [78,-78,66.5001,-66.5001])assert.match(vm.runInContext(`polarNotice(${lat},true)`,context),/Региомонтану/);
+ for(const lat of [66.5,-66.5,55,0])assert.equal(vm.runInContext(`polarNotice(${lat},true)`,context),'');
+ assert.match(vm.runInContext('polarNotice(78,false)',context),/без домов и углов/);
+ assert.equal(vm.runInContext("escape('<img src=x onerror=alert(1)>')",context),'&lt;img src=x onerror=alert(1)&gt;');
+ console.log('UI: choice, stale confirmation, repeated choice, input change, stale search, network failure, polar boundary and escaping passed');
+})().catch(e=>{console.error(e);process.exitCode=1});
