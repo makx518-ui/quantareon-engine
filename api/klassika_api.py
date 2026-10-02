@@ -146,23 +146,24 @@ def _исторический_пояс(гео, дата, время):
         raise _ОшибкаМеста("Не удалось подтвердить исторический часовой пояс места рождения. Уточни место.")
 
 
-async def _собрать_dannye(метка):
+async def _собрать_dannye(метка, места=None):
     """Метка из чата → структурные данные с геокодингом. Формат — как ждёт фронт
     (razbor-ru.html, показатьСводку) плюс скрытые поля _shirota/_dolgota/_gmt для расчёта."""
     тип = метка["тип"]
+    выбранные = iter(места) if места is not None else None
     if тип in ("натал", "соляр"):
         место = (метка.get("место") or "").strip()
         if not место:
             raise _ОшибкаМеста("Не назвал(а) город рождения — уточни, пожалуйста, где ты родился(-ась).")
         _момент_рождения(метка["дата"], метка.get("время"))
-        гео = dict(await _геокод(место, on_date=_дата_в_iso(метка["дата"])))
+        гео = dict(next(выбранные) if выбранные is not None else await _геокод(место, on_date=_дата_в_iso(метка["дата"])))
         гео["utc_offset"] = _исторический_пояс(гео, метка["дата"], метка.get("время"))
         итог = {"тип": тип, "дата": метка["дата"], "время": метка.get("время"),
                 "место": _по_русски(гео, место), "пол": (метка.get("пол") or ""),
-                "_shirota": гео["latitude"], "_dolgota": гео["longitude"], "_gmt": гео["utc_offset"]}
+                "_shirota": гео["latitude"], "_dolgota": гео["longitude"], "_gmt": гео["utc_offset"], "_place_changes": гео.get("changes",[])}
         if тип == "соляр":
             текущее = (метка.get("текущее_место") or место).strip()
-            гео2 = await _геокод(текущее, on_date=None)
+            гео2 = next(выбранные) if выбранные is not None else await _геокод(текущее, on_date=None)
             итог.update({"текущее_место": _по_русски(гео2, текущее),
                         "_shirota_seychas": гео2["latitude"], "_dolgota_seychas": гео2["longitude"],
                         "_gmt_seychas": гео2["utc_offset"]})
@@ -181,11 +182,11 @@ async def _собрать_dannye(метка):
             чей = "первого" if ключ == "первый" else "второго"
             raise _ОшибкаМеста(f"Не хватает города рождения {чей} человека — уточни, пожалуйста.")
         _момент_рождения(ч["дата"], ч.get("время"))
-        гео = dict(await _геокод(место, on_date=_дата_в_iso(ч["дата"])))
+        гео = dict(next(выбранные) if выбранные is not None else await _геокод(место, on_date=_дата_в_iso(ч["дата"])))
         гео["utc_offset"] = _исторический_пояс(гео, ч["дата"], ч.get("время"))
         люди.append({"дата": ч["дата"], "время": ч.get("время"), "место": _по_русски(гео, место),
                     "пол": (ч.get("пол") or ""),
-                    "_shirota": гео["latitude"], "_dolgota": гео["longitude"], "_gmt": гео["utc_offset"]})
+                    "_shirota": гео["latitude"], "_dolgota": гео["longitude"], "_gmt": гео["utc_offset"], "_place_changes": гео.get("changes",[])})
     return {"тип": "синастрия", "первый": люди[0], "второй": люди[1]}
 
 
@@ -210,6 +211,18 @@ async def klassika_chat(request: Request):
         return {"ok": True, "reply": "Слишком много сообщений подряд — передохни минуту и напиши ещё раз."}
     from engine import chat_klassika as ЧК
     нужный_тип = ТИП_ПО_ТАРИФУ[тариф]
+    from api.location_check.collection import collection
+    if т.get("location_token"):
+        try:
+            выбор = await run_in_threadpool(collection.choose, т["location_token"], т.get("selected"), нужный_тип)
+            if "_ready" not in выбор:
+                return выбор
+            данные = await _собрать_dannye(выбор["_ready"], выбор["_places"])
+        except _ОшибкаМеста as e:
+            return {"ok":True,"reply":str(e)}
+        except Exception:
+            return JSONResponse({"ok":False,"reason":"location_confirmation_error"},status_code=503)
+        return {"ok":True,"gotovo":True,"dannye":данные}
     try:
         ответ = await ЧК.klassika_chat_reply(история, текст, тип=нужный_тип)
     except Exception as e:
@@ -226,7 +239,10 @@ async def klassika_chat(request: Request):
         return {"ok": True, "reply": f"Сейчас выбран тариф «{НАЗВАНИЕ[тариф]}». Если нужен другой разбор — "
                                      f"выбери его в списке тарифов выше, и я соберу данные под него."}
     try:
-        данные = await _собрать_dannye(метка)
+        выбор = await run_in_threadpool(collection.start, метка)
+        if "_ready" not in выбор:
+            return выбор
+        данные = await _собрать_dannye(выбор["_ready"], выбор["_places"])
     except _ОшибкаМеста as e:
         # адрес не нашёлся — не прерываем диалог, просто просим уточнить тем же чатом
         return {"ok": True, "reply": str(e)}

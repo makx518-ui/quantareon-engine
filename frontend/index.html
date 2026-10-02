@@ -186,17 +186,54 @@ function invalidatePlace(who){
    var box=document.getElementById(me?'geo':'geoP');if(box)box.style.display='none';
   });
  });
- var date=document.getElementById(me?'dt':'pd');if(date)date.addEventListener('input',function(){geoRequestVersion[who]++;});
+ [me?'dt':'pd',me?'tm':'pt'].forEach(function(id){var el=document.getElementById(id);if(el)el.addEventListener('input',function(){invalidatePlace(who);});});
 });
-async function geoFind(who){invalidatePlace(who);var requestVersion=geoRequestVersion[who];var cityId=who==='me'?'pl':'ppl',cnId=who==='me'?'cn':'pcn',crId=who==='me'?'cr':'pcr',cdId=who==='me'?'cd':'pcd',laId=who==='me'?'la':'py',loId=who==='me'?'lo':'px',tzId=who==='me'?'tz':'pz',dtId=who==='me'?'dt':'pd';var city=document.getElementById(cityId).value.trim(),country=document.getElementById(cnId).value.trim();var _v=function(i){var e=document.getElementById(i);return e&&e.value?e.value.trim():''};var _reg=_v(crId),_dis=_v(cdId);var cityQ=[city,_dis,_reg].filter(Boolean).join(', ');if(!city){document.getElementById('st').textContent='Впиши населённый пункт';return}
-var _dp=(document.getElementById(dtId).value||'').split('.');var _od=(_dp.length===3)?(_dp[2]+'-'+String(_dp[1]).padStart(2,'0')+'-'+String(_dp[0]).padStart(2,'0')):'';
-document.getElementById('st').textContent='Ищу «'+city+'»...';try{var r=await fetch(QAPI+'/geocode?city='+encodeURIComponent(cityQ)+'&country='+encodeURIComponent(country)+(_od?('&on_date='+_od):''));if(requestVersion!==geoRequestVersion[who])return;if(!r.ok){var e=await r.json();if(requestVersion!==geoRequestVersion[who])return;document.getElementById('st').textContent='Не найдено: '+(e.detail||city)+' — введи координаты вручную';return}var j=await r.json();if(requestVersion!==geoRequestVersion[who])return;j._asked={district:_dis,region:_reg,place:city};applyPlace(who,j,_od);}catch(e){if(requestVersion===geoRequestVersion[who])document.getElementById('st').textContent='Ошибка поиска: '+e.message}}
+function geoEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+var geoSelection={me:null,partner:null};
+async function geoFind(who){
+ who=who==='me'?'me':'partner';
+ invalidatePlace(who);geoSelection[who]=null;var version=geoRequestVersion[who],me=who==='me';
+ var val=id=>(document.getElementById(id).value||'').trim();
+ var payload={place:val(me?'pl':'ppl'),country:val(me?'cn':'pcn'),region:val(me?'cr':'pcr'),district:val(me?'cd':'pcd')};
+ if(!payload.place||!payload.country){document.getElementById('st').textContent='Укажи населённый пункт и страну';return;}
+ document.getElementById('st').textContent='Проверяю место по мировым справочникам…';
+ try{
+  var r=await fetch(QAPI+'/api/location-check/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),j=await r.json();
+  if(version!==geoRequestVersion[who])return;
+  document.getElementById('st').textContent=j.message;
+  if(!j.candidates)return;
+  geoSelection[who]={version:version,result:j};
+  var box=document.getElementById(me?'geo':'geoP');box.innerHTML='';box.style.display='block';
+  j.candidates.forEach(function(c){
+   var card=document.createElement('div');card.style.cssText='padding:10px;border:1px solid #657096;margin:6px 0;border-radius:7px';
+   card.innerHTML='<div>'+geoEscape(c.address)+'</div><small>'+geoEscape(c.latitude)+' / '+geoEscape(c.longitude)+'</small>'+c.changes.map(t=>'<p style="color:#e8c060">'+geoEscape(t)+'</p>').join('')+polarWarn(c.latitude,Boolean(document.getElementById(me?'tm':'pt').value.trim()));
+   var button=document.createElement('button');button.className='b';button.textContent='Да, это нужное место';button.addEventListener('click',()=>geoConfirmChoice(who,c));card.appendChild(button);box.appendChild(card);
+  });
+ }catch(e){if(version===geoRequestVersion[who])document.getElementById('st').textContent='Связь с картами прервалась. Данные сохранены; повтори поиск.';}
+}
+async function geoConfirmChoice(who,c){
+ var selection=geoSelection[who];if(!selection||selection.version!==geoRequestVersion[who])return;
+ var version=++geoRequestVersion[who];selection.version=version;var me=who==='me';
+ var dateValue=(document.getElementById(me?'dt':'pd').value||'').trim(),parts=dateValue.split('.');
+ var date=parts.length===3?parts[2]+'-'+parts[1].padStart(2,'0')+'-'+parts[0].padStart(2,'0'):new Date().toISOString().slice(0,10);
+ var birthTime=(document.getElementById(me?'tm':'pt').value||'').trim();
+ document.getElementById('st').textContent='Подтверждаю место и исторический часовой пояс…';
+ try{
+  var r=await fetch(QAPI+'/api/location-check/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:selection.result.token,selected:c.id,date:date,birth_time:dateValue?birthTime:''})}),j=await r.json();
+  if(version!==geoRequestVersion[who])return;
+  if(j.status!=='confirmed'){document.getElementById('st').textContent=j.message;return;}
+  geoSelection[who]=null;
+  applyPlace(who,{latitude:j.latitude,longitude:j.longitude,utc_offset:j.gmt,timezone_name:j.timezone_name,address:j.address,changes:c.changes},date);
+  if(!dateValue||!birthTime)document.getElementById('st').textContent+=' · GMT справочный на '+date+' (12:00); время рождения не подменяется.';
+ }catch(e){if(version===geoRequestVersion[who])document.getElementById('st').textContent='Связь прервалась. Подтверждение не завершено; выбери место повторно.';}
+}
 function normPlace(x){return (x||'').toLowerCase().replace(/ё/g,'е')
  .replace(/район|ауданы|tumani|туман|область|облысы|viloyati|вилоят|округ|сельский|г\.|с\./g,'')
  .replace(/[^а-яa-z]/g,'').trim();}
-function polarWarn(la){if(Math.abs(la)<=66.5)return '';
+function polarWarn(la,timeKnown){if(Math.abs(la)<=66.5)return '';
+if(timeKnown===false)return '<div style="color:#e8c060">Заполярные координаты. Время неизвестно: космограмма без домов и углов.</div>';
 return '<div style="color:#ff4030;font-size:12px;font-weight:600;padding-top:4px">\u26a0 '+Math.abs(la).toFixed(2)+'\u00b0'+(la>0?'N':'S')+' \u2014 за полярным кругом. Плацидус здесь не строится. ДОМА ПО РЕГИОНМОНТАНУ.</div>';}
-function explainDropped(j){var a=j.admin||{},ask=j._asked||{},o='';
+function explainDropped(j){if(j.changes)return j.changes.map(t=>'<p style="color:#e8c060">'+geoEscape(t)+'</p>').join('');var a=j.admin||{},ask=j._asked||{},o='';
 function cmp(was,now,lbl){if(!was)return '';
  var A=normPlace(was),B=normPlace(now);
  if(!B)return '<span style="color:#e0a040;font-size:10px">\u26a0 «'+was+'» не найдено</span>';
@@ -211,10 +248,10 @@ var off=j.utc_offset>=0?'+'+j.utc_offset:''+j.utc_offset;document.getElementById
 document.getElementById(cityId).dataset.tz=j.timezone_name;
 var h='<div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">'
  +'<span style="color:#50c050;font-size:10px">\u2713</span>'
- +'<span style="color:#e0e4f0;font-size:12px;font-weight:600">'+j.address+'</span>'
+ +'<span style="color:#e0e4f0;font-size:12px;font-weight:600">'+geoEscape(j.address)+'</span>'
  +'<span style="color:#7078a0;font-size:11px">'+j.latitude+' / '+j.longitude+'</span>'
  +'<span style="color:#e8c060;font-size:11px">GMT'+off+'</span>'
- +explainDropped(j)+'</div>'+polarWarn(j.latitude);
+ +explainDropped(j)+'</div>'+polarWarn(j.latitude,Boolean(document.getElementById(who==='me'?'tm':'pt').value.trim()));
 var g=document.getElementById(who==='me'?'geo':'geoP');g.innerHTML=h;g.style.display='block';
 document.getElementById('st').textContent='Место: '+j.address+' (GMT'+off+')';}
 

@@ -152,10 +152,16 @@ class DeliveryTest(unittest.TestCase):
             return (cusps[1:] if len(cusps)==13 else cusps),angles
         geo={'latitude':55.75204,'longitude':37.61781,'timezone_name':'Europe/Moscow',
              'address':'Москва · Россия','candidates':[{'population':12000000}]}
+        from api.location_check.collection import Collection
+        from api.location_check.world_search import Service
+        def lookup(source,params):
+            if source=='geonames':return {'geonames':[dict(name='Москва',lat='55.75204',lng='37.61781',countryCode='RU',countryName='Россия',adminName1='Москва',adminName2='Москва')]}
+            return []
         with ExitStack() as stack:
             stack.enter_context(patch.dict(sys.modules,{'klassika_api':KL,'main':SimpleNamespace(geocode=lambda *a:geo)}))
             stack.enter_context(patch.dict(os.environ,{'QUANTAREON_ADMIN_KEY':'local-test-key-0001'}))
             stack.enter_context(patch.object(chat_klassika,'klassika_chat_reply',reply))
+            stack.enter_context(patch('api.location_check.collection.collection',Collection(Service(lookup))))
             stack.enter_context(patch.object(PA,'_читать',return_value=database))
             stack.enter_context(patch.object(PA,'_писать'))
             stack.enter_context(patch.object(PA,'_в_телеграм',return_value=True))
@@ -167,6 +173,11 @@ class DeliveryTest(unittest.TestCase):
             stack.enter_context(patch.object(arhiv,'положить_карту',return_value='test/chart.html'))
             stack.enter_context(patch.object(chitatel,'прочитать',return_value={'razdely':[('Проверка','Контрольный текст')]}))
             r=self.client.post('/api/klassika/chat',json={'tarif':'klassika_natal','text':'Данные Александра','history':[]})
+            self.assertEqual(r.status_code,200,r.text)
+            choice=r.json()['location_choice']
+            self.assertNotIn('dannye',r.json())
+            self.assertEqual(database['заказы'],[])
+            r=self.client.post('/api/klassika/chat',json={'tarif':'klassika_natal','text':'Подтверждаю место','location_token':choice['token'],'selected':choice['candidates'][0]['id'],'history':[]})
             self.assertEqual(r.status_code,200,r.text)
             d=r.json()['dannye']
             payload={'pochta':'test@example.invalid','tarif':'klassika_natal','admin':'local-test-key-0001','astro_dannye':d}

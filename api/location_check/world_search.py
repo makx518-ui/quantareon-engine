@@ -160,7 +160,7 @@ class Service:
             from datetime import datetime
             import pytz
             from timezonefinder import TimezoneFinder
-            local=datetime.strptime(date+' '+(birth_time or '12:00'),'%Y-%m-%d %H:%M')
+            local=datetime.strptime(date+' '+(birth_time or '12:00'),'%Y-%m-%d %H:%M:%S' if birth_time.count(':')==2 else '%Y-%m-%d %H:%M')
             zone=TimezoneFinder().timezone_at(lat=candidate['latitude'],lng=candidate['longitude'])
             if not zone:raise ValueError('timezone')
             offset=pytz.timezone(zone).localize(local,is_dst=None).utcoffset().total_seconds()/3600
