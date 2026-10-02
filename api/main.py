@@ -160,9 +160,14 @@ _РЕНДЕР_БЕЗ_ПАРОЛЯ = ("/api/render-dnya",
                       "/api/vladelec/pravka", "/api/vladelec/otpravit")
 
 
+_LOCATION_CHECK_PUBLIC = frozenset(("/location-check", "/api/location-check/countries",
+                                    "/api/location-check/search", "/api/location-check/confirm"))
+
 @app.middleware("http")
 async def gate(request: Request, call_next):
     p = request.url.path
+    if p in _LOCATION_CHECK_PUBLIC:
+        return await call_next(request)
     if p.startswith(_СЧЁТЧИК_БЕЗ_ПАРОЛЯ) or p.startswith(_ПОЧТА_БЕЗ_ПАРОЛЯ) or p.startswith(_РЕНДЕР_БЕЗ_ПАРОЛЯ):
         return await call_next(request)
     if p.startswith("/login") or p.startswith("/health") or p.startswith("/chat") or p.startswith("/transcribe") or p.startswith("/tts") or p.startswith("/quantareon-chat.js") or p.startswith("/ws/voice") or p.startswith("/api/greeting") or p.startswith("/api/voice-health") or p.startswith("/api/voice-model") or p.startswith("/api/voice-image-mode"):

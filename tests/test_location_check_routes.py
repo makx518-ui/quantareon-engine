@@ -1,7 +1,10 @@
 import unittest
+import ast
+from pathlib import Path
 from unittest.mock import patch
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from fastapi.responses import RedirectResponse, Response
 from api.location_check import routes
 
 class Routes(unittest.TestCase):
@@ -39,6 +42,31 @@ class Routes(unittest.TestCase):
     def test_rate_limit(self):
         with patch.object(routes.service,'search',return_value={'status':'confirmation'}):
             for _ in range(30):self.client.post('/api/location-check/search',json={'place':'x','country':'RU'})
-            self.assertEqual(self.client.post('/api/location-check/search',json={'place':'x','country':'RU'}).status_code,429)
+        self.assertEqual(self.client.post('/api/location-check/search',json={'place':'x','country':'RU'}).status_code,429)
+
+class Gate(unittest.TestCase):
+    def setUp(self):
+        # Execute the actual production gate without starting unrelated voice models.
+        tree=ast.parse((Path(__file__).parents[1]/'api/main.py').read_text(encoding='utf-8'))
+        nodes=[]
+        for node in tree.body:
+            if isinstance(node,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='_LOCATION_CHECK_PUBLIC' for t in node.targets):nodes.append(node)
+            if isinstance(node,ast.AsyncFunctionDef) and node.name=='gate':
+                node.decorator_list=[];nodes.append(node)
+        ns=dict(Request=routes.Request,RedirectResponse=RedirectResponse,Response=Response,
+                _СЧЁТЧИК_БЕЗ_ПАРОЛЯ=(),_ПОЧТА_БЕЗ_ПАРОЛЯ=(),_РЕНДЕР_БЕЗ_ПАРОЛЯ=(),_ok=lambda token:False,COOKIE='qtok')
+        exec(compile(ast.Module(body=nodes,type_ignores=[]),'api/main.py','exec'),ns)
+        app=FastAPI();app.include_router(routes.router);app.middleware('http')(ns['gate'])
+        routes._calls.clear();self.client=TestClient(app,follow_redirects=False)
+    def test_preview_and_search_available_without_engine_password(self):
+        self.assertEqual(self.client.get('/location-check',headers={'accept':'text/html'}).status_code,200)
+        self.assertEqual(self.client.get('/api/location-check/countries').status_code,200)
+        with patch.object(routes.service,'search',return_value={'status':'confirmation'}):
+            self.assertEqual(self.client.post('/api/location-check/search',json={'place':'x','country':'RU'}).status_code,200)
+        with patch.object(routes.service,'confirm',return_value={'status':'confirmed'}):
+            self.assertEqual(self.client.post('/api/location-check/confirm',json={'token':'x','selected':'x','date':'2000-01-01','birth_time':''}).status_code,200)
+    def test_other_paths_and_similar_prefixes_remain_protected(self):
+        for path in ['/','/natal','/geocode','/location-check-private','/api/location-check/search-private']:
+            self.assertEqual(self.client.get(path).status_code,401)
 
 if __name__=='__main__':unittest.main()
