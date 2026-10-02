@@ -122,6 +122,9 @@ class DeliveryTest(unittest.TestCase):
              patch.object(arhiv, 'положить_кухню', return_value='test/kitchen.json'), \
              patch.object(arhiv, 'положить_карту', return_value='test/chart.html'), \
              patch.object(chitatel, '_спросить', return_value='## Чтение\nУран в трине к Нептуну, что обещает успех. Содержательный рассказ.'), \
+             patch('engine.passport_guard.guard', side_effect=lambda text, doc, ask, **kwargs:
+                   (text.replace('Уран в трине к Нептуну, что обещает успех. ', ''),
+                    ['Неподтверждённая связь исключена'])), \
              patch('engine.razvertka.откорректировать', side_effect=lambda text, fn: (text, 0)):
             self.worker()
         self.assertEqual(self.card['состояние'], 'готово', self.card.get('ошибка'))

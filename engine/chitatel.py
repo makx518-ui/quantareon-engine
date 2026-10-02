@@ -687,6 +687,8 @@ def _система(доп="", натал=False):
         if not правила.strip():
             raise RuntimeError("на полке нет NATAL_READING.md")
         сис += "\n\n" + правила
+        from engine.passport_guard import READING_RULE
+        сис += "\n\n" + READING_RULE
     сис += "\n\n" + _правила_машинных_фактов()
     return сис
 
@@ -754,6 +756,13 @@ def прочитать(слой1, слой2=None, заказ="natal", имя="ч
                 + _кл("дома", "баланс", "цепи", "фигуры", "связки")
                 + ("\n\n" + смысловые_данные if смысловые_данные else "")
                 + ("\n\n" + библиотека_прочтения if библиотека_прочтения else ""))
+    паспорт_сторожа = None
+    if полный and машинные_записи is not None:
+        from engine.passport_guard import passport, READING_RULE
+        паспорт_сторожа = passport(машинные_записи, {
+            'calculation_shelf': полка, 'receptions': рецепции, **кл})
+        import json as _passport_json
+        доп_полки += "\n\nПАСПОРТ МАШИНЫ:\n" + _passport_json.dumps(паспорт_сторожа, ensure_ascii=False)
 
     # ── ПРОХОД 1 · чтение молча, наружу ни слова
     голограмма = _спросить(
@@ -1027,6 +1036,9 @@ def прочитать(слой1, слой2=None, заказ="natal", имя="ч
                         "печатать код и все координаты каждой точки. Имена планет и аспектов сохраняй там, где "
                         "они объясняют смысл; числовой факт при необходимости бери дословно из записи. "
                         "Не выдумывай биографию, даты событий и отсутствующие связи. Пиши связный рассказ.")
+        if паспорт_сторожа is not None:
+            import json as _passport_json
+            задание += "\n\n" + READING_RULE + "\n" + _passport_json.dumps(паспорт_сторожа, ensure_ascii=False)
         текст = _спросить_целиком(_система(натал=полный), [{"role": "user", "content": задание}], предел)
         текст = _без_служебного(текст)
         # 10.09 · СВЕРКА ЧИСЕЛ (engine/sverka.py). Строка «Хирон — Телец 14°»
@@ -1080,15 +1092,27 @@ def прочитать(слой1, слой2=None, заказ="natal", имя="ч
             # Check the final, grammar-corrected text. Never infer the owner
             # of a degree/aspect from a neighbouring ruler or section heading.
             if машинные_записи is not None:
+                from engine.passport_guard import guard as _паспортный_сторож
                 from engine.natal_facts import check as _проверка_натала
-                текст, _пр_сф = _проверка_натала(текст, машинные_записи)
-                if _пр_сф:
-                    print("СТОРОЖ ФАКТОВ:", "; ".join(_пр_сф[:8]))
-                    сторож_правки.extend(_пр_сф)
-                # A repair is not considered verified until checked again.
+                def _явные_ошибки(абзац):
+                    from engine.storozh_faktov import _упоминания
+                    _, ошибки = _проверка_натала(абзац, машинные_записи)
+                    if not ошибки:
+                        return []
+                    имена = {имя for _, _, имя in _упоминания(абзац)}
+                    основания = [ключ for ключ in паспорт_сторожа['facts']
+                                 if any(ключ.startswith('p:' + имя + ':') for имя in имена)]
+                    основания += [строка['id'] for строка in машинные_записи['aspects']
+                                   if {строка['A'], строка['B']} <= имена]
+                    return [{'quote': абзац, 'reason': '; '.join(ошибки), 'basis': основания}]
+                текст, _последние_правки = _паспортный_сторож(
+                    текст, паспорт_сторожа,
+                    lambda с, м: _спросить(с, м, максимум=24000), detect=_явные_ошибки)
+                сторож_правки.extend(_последние_правки)
+                # Never replace the verified final prose with technical cards.
                 _, остаток = _проверка_натала(текст, машинные_записи)
                 if остаток:
-                    raise ValueError("Повторная сверка явных фактов натала не прошла")
+                    raise ValueError("Сторож пропустил противоречие явных фактов: " + "; ".join(остаток))
             import re as _re2
             лат = sorted(set(_re2.findall(r"\b(?!ASC\b|MC\b|DSC\b|IC\b)[A-Za-z]{3,}\b", текст)))
             if лат:
@@ -1102,6 +1126,7 @@ def прочитать(слой1, слой2=None, заказ="natal", имя="ч
     if машинные_записи is not None:
         итог["machine_natal"] = {
             "version": машинные_записи['version'], "mode": "two_pass_narrative",
+            "passport_control": "natal-passport/1",
             "points": len(машинные_записи['points']),
             "houses": 12 if машинные_записи['known'] else 0,
             "aspects": len(машинные_записи['aspects']),

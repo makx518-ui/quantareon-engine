@@ -75,6 +75,7 @@ class MachineNatalTest(unittest.TestCase):
 
     def test_unknown_time_does_not_inherit_supplied_angles_or_houses(self):
         with patch.object(C, '_спросить', return_value='## Сценарий\nЧтение личности.'), \
+             patch('engine.passport_guard.guard', side_effect=lambda text, doc, ask, **kwargs: (text, [])), \
              patch('engine.razvertka.откорректировать', side_effect=lambda text, fn: (text, 0)):
             result = C.прочитать('', заказ='kosmogramma', точки=POINTS, куспиды=CUSPS,
                                 углы={'ASC': 42, 'MC': 55})
@@ -138,6 +139,7 @@ class MachineNatalTest(unittest.TestCase):
 
     def test_natal_restores_reading_without_heuristic_owner_guard(self):
         with patch.object(C, '_спросить', return_value='## Сценарий\nСодержательное прочтение.') as ask, \
+             patch('engine.passport_guard.guard', side_effect=lambda text, doc, ask, **kwargs: (text, [])), \
              patch('engine.storozh_faktov.сторожить', side_effect=AssertionError('old guard called')), \
              patch('engine.sverka.сверить', side_effect=AssertionError('old coordinate guess called')), \
              patch('engine.razvertka.откорректировать', side_effect=lambda text, fn: (text, 0)):
@@ -210,6 +212,7 @@ class MachineNatalTest(unittest.TestCase):
         with patch.object(api_vhod, 'расчёт', return_value=snapshot), \
              patch.object(arhiv, 'положить_карту', return_value='preview/natal.html'), \
              patch.object(C, '_спросить', return_value='## Сценарий\nСодержательное прочтение.'), \
+             patch('engine.passport_guard.guard', side_effect=lambda text, doc, ask, **kwargs: (text, [])), \
              patch('engine.razvertka.откорректировать', side_effect=lambda text, fn: (text, 0)), \
              patch('engine.storozh_faktov.сторожить', side_effect=AssertionError('old guard called')):
             html, filename = kl._построить_натал_или_соляр(card, lambda *a: None)

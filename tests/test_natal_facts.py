@@ -118,7 +118,20 @@ class NatalFactsTest(unittest.TestCase):
     def test_facts_are_checked_after_last_grammar_correction(self):
         def correct(text, fn):
             return text.replace('оппозиции', 'секстиле'), 1
-        with patch.object(C, '_спросить', return_value='## Связь\nМеркурий в оппозиции к Белой Луне.'), \
+        from engine.passport_guard import AUDIT_RULE, REPAIR_RULE
+        def ask(system, messages, **kwargs):
+            if system == AUDIT_RULE:
+                paragraphs = json.loads(messages[0]['content'])['paragraphs']
+                return json.dumps({'paragraphs': [{'index': i, 'claims': [], 'issues': [
+                    {'quote': 'Меркурий в секстиле к Белой Луне.', 'reason': 'Неверный аспект',
+                     'basis': [r['id'] for r in MACHINE['aspects']
+                               if {r['A'], r['B']} == {'Меркурий', 'Белая Луна'}]}]
+                    if 'Меркурий в секстиле к Белой Луне.' in p else []}
+                    for i, p in enumerate(paragraphs)]}, ensure_ascii=False)
+            if system == REPAIR_RULE:
+                return 'Меркурий — Белая Луна: оппозиция. Их взаимодействие требует осмысленного выбора.'
+            return '## Связь\nМеркурий в оппозиции к Белой Луне.'
+        with patch.object(C, '_спросить', side_effect=ask), \
              patch('engine.razvertka.откорректировать', side_effect=correct):
             result = C.прочитать('', точки=POINTS, куспиды=N['cusps'])
         self.assertIn('Меркурий — Белая Луна: оппозиция', result['tekst'])
