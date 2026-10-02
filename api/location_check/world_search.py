@@ -15,6 +15,26 @@ def key(value):
 def place_key(value):
     return key(re.sub(r'^(?:село|город|деревня|пос[её]лок|зерносовхоз|совхоз|с\.|г\.)\s+', '', str(value),flags=re.I))
 
+def admin_key(value, cc=''):
+    result=key(value).replace(' ','')
+    if cc=='KZ' and result=='ско':return 'североказахстанская'
+    return result
+
+def search_address(request, cc):
+    """Separate an explicitly supplied administrative suffix from the place name."""
+    parts=[p.strip() for p in request['place'].split(',')]
+    query=dict(request)
+    query['place']=re.sub(r'^(?:(?:село|город|деревня|пос[её]лок|зерносовхоз|совхоз)\s+|(?:с\.|г\.)\s*)', '', parts[0],flags=re.I).strip()
+    for suffix in parts[1:]:
+        if not suffix:continue
+        if COUNTRIES.get(suffix.casefold())==cc:continue
+        if cc=='KZ' and admin_key(suffix,cc)=='североказахстанская':
+            if query['region'] and admin_key(query['region'],cc)!=admin_key(suffix,cc):return None
+            query['region']='Северо-Казахстанская область'
+        elif any(query[field] and admin_key(suffix,cc)==admin_key(query[field],cc) for field in ('region','district')):continue
+        else:return None
+    return query if query['place'] else None
+
 def coordinates(lat, lon):
     try:
         lat, lon = float(lat), float(lon)
@@ -70,21 +90,23 @@ class Service:
         if not request['place']:return dict(status='invalid',message='Укажите населённый пункт.')
         cc=COUNTRIES.get(request['country'].casefold())
         if not cc:return dict(status='invalid',message='Страна не распознана. Выберите её из списка.')
+        query_request=search_address(request,cc)
+        if query_request is None:return dict(status='needs_detail',message='Не удалось согласовать части адреса в поле города с областью, районом и страной. Проверьте эти части; введённые данные сохранены.')
         warnings=[]; rows=[]; failed=False
         try:
-            data=self.transport('geonames',dict(name_equals=re.sub(r'^(?:село|город)\s+','',request['place'],flags=re.I),country=cc,lang='ru',style='FULL',featureClass='P',maxRows=100))
+            data=self.transport('geonames',dict(name_equals=query_request['place'],country=cc,lang='ru',style='FULL',featureClass='P',maxRows=100))
             for r in data.get('geonames',[]):
                 if not isinstance(r,dict):failed=True;continue
                 names=[r.get('name'),r.get('toponymName'),r.get('asciiName')]+[a.get('name') for a in r.get('alternateNames',[]) if isinstance(a,dict) and a.get('lang')!='link']
-                if r.get('countryCode')==cc and place_key(request['place']) in {place_key(n) for n in names if n}:
+                if r.get('countryCode')==cc and place_key(query_request['place']) in {place_key(n) for n in names if n}:
                     rows.append(r)
             if data.get('totalResultsCount',0)>100:
                 return dict(status='needs_detail',message='Совпадений слишком много. Укажите область или район; выбор ещё не сделан.')
         except Unavailable:
             failed=True;warnings.append('Основной справочник не ответил; использован запасной поиск.')
         candidates=[]
-        if request['region']:
-            matching=[r for r in rows if key(r.get('adminName1'))==key(request['region'])]
+        if query_request['region']:
+            matching=[r for r in rows if admin_key(r.get('adminName1'),cc)==admin_key(query_request['region'],cc)]
             # Keep all when an administrative name may be historical; never silently choose one.
             if matching:rows=matching
         if len(rows)>8:
@@ -105,7 +127,7 @@ class Service:
                     warnings.append('Не удалось дополнительно проверить район этой находки.')
             candidates.append(dict(latitude=lat,longitude=lon,admin=admin,source='GeoNames',geoname_id=r.get('geonameId'),country_code=cc))
         if not candidates:
-            query=', '.join(v for v in (request['place'],request['district'],request['region'],request['country']) if v)
+            query=', '.join(v for v in (query_request['place'],query_request['district'],query_request['region'],query_request['country']) if v)
             try:
                 data=self.transport('search',dict(q=query,format='jsonv2',addressdetails=1,namedetails=1,countrycodes=cc.lower(),limit=8,**{'accept-language':'ru'}))
                 if len(data)>=8:
@@ -116,7 +138,7 @@ class Service:
                     names=[r.get('name')]+list(named.values())+[a.get(k) for k in ('city','town','village','hamlet')]
                     names=[n for value in names if isinstance(value,str) for n in value.split(';')]
                     if a.get('country_code','').upper()!=cc or r.get('addresstype') not in ('city','town','village','hamlet','municipality'):continue
-                    if place_key(request['place']) not in {place_key(n) for n in names}:continue
+                    if place_key(query_request['place']) not in {place_key(n) for n in names}:continue
                     coords=coordinates(r.get('lat'),r.get('lon'))
                     if coords is None:failed=True;continue
                     candidates.append(dict(latitude=coords[0],longitude=coords[1],source='OpenStreetMap',country_code=cc,
@@ -136,8 +158,8 @@ class Service:
             c['address']=' · '.join(v for v in c['admin'].values() if v)
             c['changes']=[]
             for field,label in [('place','населённый пункт'),('district','район'),('region','область')]:
-                was=request[field];now=c['admin'][field]
-                normalize=place_key if field=='place' else key
+                was=query_request[field] if field=='place' else request[field];now=c['admin'][field]
+                normalize=place_key if field=='place' else lambda value:admin_key(value,cc)
                 if was and normalize(was)!=normalize(now):
                     c['changes'].append(f'Вы указали {label}: «{was}». '+
                         (f'В нынешнем адресе найденного места {label} указан как «{now}». Поэтому адрес отличается от введённого. Подтвердите, что это ваше место рождения. Историческое переименование пока не подтверждено.' if now else 'Справочник не подтвердил нынешнее название этой территории. Требуется ваша проверка места.'))

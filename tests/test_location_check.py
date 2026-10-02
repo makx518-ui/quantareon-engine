@@ -1,7 +1,7 @@
 import unittest
 import io,json,time
 from unittest.mock import patch
-from api.location_check.world_search import Service, COUNTRIES, Unavailable
+from api.location_check.world_search import Service, COUNTRIES, Unavailable, search_address
 
 def row(name='Советское',lon='70.34393',cc='KZ'):
     return dict(name=name,toponymName=name,lat='54.42957',lng=lon,countryCode=cc,countryName='Казахстан',adminName1='Северо-Казахстанская область',geonameId=int(float(lon)*100),alternateNames=[])
@@ -11,6 +11,33 @@ def transport(source,params):
     return []
 
 class Tests(unittest.TestCase):
+    def test_town_name_starting_with_prefix_word_is_preserved(self):
+        self.assertEqual(search_address(dict(place='Городок',country='BY',region='',district=''),'BY')['place'],'Городок')
+    def test_actual_astro_input_with_village_prefix_and_region_suffix(self):
+        calls=[]
+        def exact(source,params):
+            calls.append((source,params))
+            if source=='geonames':
+                self.assertEqual(params['name_equals'],'Советское')
+                return {'geonames':[row(),row(lon='68.41623'),dict(row(lon='75'),adminName1='Другая область')]}
+            return transport(source,params)
+        s=Service(exact)
+        r=s.search('с. Советское, СКО','Казахстан','Североказахстанская','Возвышенский ')
+        self.assertEqual(r['status'],'ambiguous');self.assertEqual(len(r['candidates']),2)
+        self.assertEqual(len(r['candidates'][0]['changes']),1)
+        self.assertIn('Возвышенский',r['candidates'][0]['changes'][0])
+        confirmed=s.confirm(r['token'],r['candidates'][0]['id'],'1961-01-30','20:56:40')
+        self.assertEqual(confirmed['status'],'confirmed');self.assertEqual(confirmed['gmt'],6)
+        self.assertEqual(confirmed['original_address']['place'],'с. Советское, СКО')
+    def test_conflicting_or_unknown_city_suffix_is_not_discarded(self):
+        def no_network(*args):self.fail('Conflicting address must be stopped before network search')
+        s=Service(no_network)
+        for place,region in [('с. Советское, СКО','Алматинская'),('Советское, RU','Североказахстанская'),('Советское, неизвестная область','')]:
+            self.assertEqual(s.search(place,'KZ',region)['status'],'needs_detail')
+    def test_prefix_only_and_modern_region_suffix_select_correct_district(self):
+        for place in ['с. Советское','село Советское, Северо-Казахстанская область, Казахстан']:
+            r=Service(transport).search(place,'KZ','Североказахстанская','Магжана Жумабаева')
+            self.assertEqual(r['status'],'confirmation');self.assertEqual(r['candidates'][0]['changes'],[])
     def test_full_country_registry(self):
         self.assertEqual(len(set(COUNTRIES.values())),250)
         for name,cc in [('Гренландия','GL'),('шпицберген','SJ'),('japan','JP')]:self.assertEqual(COUNTRIES[name.casefold()],cc)
