@@ -91,10 +91,46 @@ class PassportGuardTest(unittest.TestCase):
                     {'quote': 'Верный смысл', 'evidence': [{'id': 'good', 'value': '3'}]}],
                     'issues': [{'quote': 'Ошибка', 'reason': 'Противоречие', 'basis': ['replacement']}]
                     if 'Ошибка' in text else []}]}, ensure_ascii=False)
-            self.assertEqual(payload['machine_basis'], document['facts'])
-            return 'Верный смысл сохранён.'
+            self.assertEqual(payload['fragment'], 'Ошибка')
+            self.assertEqual(payload['machine_basis'], {'replacement': 'false'})
+            return 'Исправленная мысль'
         result, _ = guard('Верный смысл. Ошибка.', document, ask)
-        self.assertEqual(result, 'Верный смысл сохранён.')
+        self.assertEqual(result, 'Верный смысл. Исправленная мысль.')
+
+    def test_repeated_error_quote_blocks_ambiguous_replacement(self):
+        raw = self.report(['Ошибка. Ошибка.'], [
+            {'quote': 'Ошибка.', 'reason': 'Ошибка', 'basis': []}])
+        with self.assertRaisesRegex(ValueError, 'Неоднозначный'):
+            validate(raw, ['Ошибка. Ошибка.'], self.document['facts'])
+
+    def test_aspect_repair_receives_own_meanings_of_both_endpoints(self):
+        row = {'A': 'Солнце', 'B': 'Луна', 'kind': 'квадрат'}
+        facts = {'a:pair': json.dumps(row), 'p:Солнце:code': 'смысл Солнца',
+                 'p:Луна:code': 'смысл Луны'}
+        def ask(system, messages):
+            payload = json.loads(messages[0]['content'])
+            if system == AUDIT_RULE:
+                return self.report(payload['paragraphs'], [
+                    {'quote': 'Ошибка.', 'reason': 'Неверная связь', 'basis': ['a:pair']}]
+                    if 'Ошибка.' in payload['paragraphs'][0] else [])
+            self.assertEqual(payload['machine_basis'], facts)
+            return 'Исправленный смысл.'
+        result, _ = guard('Ошибка. Соседняя мысль.', {'facts': facts}, ask)
+        self.assertEqual(result, 'Исправленный смысл. Соседняя мысль.')
+
+    def test_two_local_edits_preserve_all_surrounding_text(self):
+        def ask(system, messages):
+            payload = json.loads(messages[0]['content'])
+            if system == AUDIT_RULE:
+                text = payload['paragraphs'][0]
+                issues = [{'quote': quote, 'reason': 'Ошибка', 'basis': ['p:Нептун:house']}
+                          for quote in ('Ошибка А', 'Ошибка Б') if quote in text]
+                return self.report([text], issues)
+            return {'Ошибка А': 'Новая мысль А', 'Ошибка Б': 'Новая мысль Б'}[payload['fragment']]
+        original = 'Живая мысль. Ошибка А. Связующий образ. Ошибка Б. Смысловой итог.'
+        result, changes = guard(original, self.document, ask)
+        self.assertEqual(result, original.replace('Ошибка А', 'Новая мысль А').replace('Ошибка Б', 'Новая мысль Б'))
+        self.assertEqual(len(changes), 2)
 
     def test_passport_does_not_recalculate_or_keep_bridge(self):
         machine = {'points': {'Нептун': {'id': 'p:Нептун', 'house': 3}},

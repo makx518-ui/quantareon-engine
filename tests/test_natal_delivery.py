@@ -52,6 +52,19 @@ class DeliveryTest(unittest.TestCase):
             response = self.client.get('/api/klassika/status', params={'nomer': self.number}).json()
         self.assertEqual(response['elapsed_seconds'], 120)
 
+    def test_interrupted_order_can_resume_after_five_minutes(self):
+        card = dict(self.card, состояние='в работе', обновлён=1000)
+        with patch('engine.arhiv.перечислить', return_value=['open/'+self.number]), \
+             patch.object(KL, '_карточка', return_value=card), \
+             patch.object(KL, '_пустить', return_value=True) as start:
+            with patch.object(KL.time, 'time', return_value=1299):
+                KL._обход()
+            start.assert_not_called()
+            with patch.object(KL.time, 'time', return_value=1300):
+                KL._обход()
+            start.assert_called_once()
+        self.assertLessEqual(KL.ОБХОД, 15)
+
     def test_factual_error_stops_without_file_and_notifies(self):
         with patch.object(KL, '_построить_натал_или_соляр', side_effect=ValueError('Неподтверждённые аспекты в тексте: Уран–Нептун')):
             self.worker()

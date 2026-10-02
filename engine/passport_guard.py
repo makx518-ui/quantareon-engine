@@ -12,6 +12,11 @@ READING_RULE = """ПАСПОРТ — ЕДИНСТВЕННЫЙ ИСТОЧНИК �
 Не называй аспект точным, планету на куспиде или крест ведущим без явного
 машинного основания. Связь через связку не называй прямым аспектом.
 Наружу — связная смысловая проза без расчётных чисел, ID и технических карточек.
+Смысл собственного градуса каждой планеты и точки вплетай в её проявление,
+а в аспекте — в совместный смысл обоих концов. Числа и названия кодов не печатай.
+Развёрнуто раскрывай функции, их взаимодействие, жизненные сферы, силу,
+напряжение и возможные способы применения. Паспорт ограничивает факты,
+а не глубину, образы, стиль или свободу смыслового синтеза.
 Образы не должны создавать новые астрологические факты или факты биографии.
 Образцы, предыдущие ответы и знания модели не являются фактами этой карты.
 """
@@ -32,14 +37,23 @@ AUDIT_RULE = """Ты сторож машинного паспорта. Не сч
 должны быть перечислены в claims либо issues. Нельзя подтверждать утверждение
 ссылкой на запись, которая не подтверждает ВСЕ его уточнения. issues.basis
 может быть пустым, если факт отсутствует: тогда его трактовку надо исключить.
+В issues.quote выделяй минимальный самостоятельный ошибочный фрагмент вместе
+с зависимым от ошибки выводом. Не включай правильные соседние мысли. Фрагмент
+должен встречаться в абзаце ровно один раз; несколько ошибок объединяй только
+если они неразделимы. Смысловая интерпретация не требует дословного совпадения
+с паспортом: сверяй её расчётные основания, не запрещай раскрывать их смысл.
 Для чисто смыслового абзаца без расчётных утверждений claims и issues пусты.
 """
 
-REPAIR_RULE = READING_RULE + """\nПеретрактуй только переданный ошибочный абзац.
+REPAIR_RULE = READING_RULE + """\nПеретрактуй только переданный ошибочный фрагмент.
+Абзац передан исключительно как контекст стиля: возвращать или переписывать
+его целиком запрещено. Верни короткую замену fragment, обычно одно-два
+содержательных предложения, без вступления, отчёта и пересказа соседних мыслей.
 Используй переданные машинные основания вместо ошибочных фактов. Сохрани
 глубину и тему там, где они обоснованы. Удали смысл, построенный на отсутствующем
-факте. Не повторяй технические значения и отчёт сторожа. Верни только новый
-абзац; если обоснованного содержания не осталось, верни пустую строку.
+факте. Смысл собственного градуса вплетай в функцию точки и характер связи;
+не заменяй живую мысль сухим перечислением положения. Если оснований нет,
+не придумывай другой факт: верни пустую строку.
 """
 
 
@@ -102,6 +116,8 @@ def validate(raw, paragraphs, facts):
                                 or item['value'] != facts[item['id']]):
                             raise ValueError('Подмена машинного основания')
                 else:
+                    if paragraphs[index].count(quote) != 1:
+                        raise ValueError('Неоднозначный адрес исправления')
                     if not isinstance(claim['reason'], str) or not claim['reason'].strip():
                         raise ValueError('Нет причины исправления')
                     if not isinstance(claim['basis'], list) or any(
@@ -134,17 +150,45 @@ def guard(text, document, ask, max_repairs=2, detect=None):
         if attempt == max_repairs:
             raise ValueError('Трактовка не соответствует машинному паспорту после исправлений')
         for row in rejected:
-            keys = {key for issue in row['issues'] for key in issue['basis']}
-            # A rejected paragraph can also contain correct, meaningful claims.
-            # Keep their original machine bases during reinterpretation.
-            keys.update(item['id'] for claim in row['claims'] for item in claim['evidence'])
-            payload = {'paragraph': paragraphs[row['index']], 'issues': row['issues'],
-                       'machine_basis': {key: document['facts'][key] for key in sorted(keys)}}
-            revised = ask(REPAIR_RULE, [{'role': 'user', 'content': json.dumps(payload, ensure_ascii=False)}])
-            if not isinstance(revised, str):
-                raise ValueError('Неверный ответ перетрактовки')
-            paragraphs[row['index']] = revised.strip()
-            repairs.extend(issue['reason'] for issue in row['issues'])
+            original = paragraphs[row['index']]
+            edits = []
+            for issue in row['issues']:
+                quote = issue['quote']
+                start = original.find(quote)
+                if start < 0 or original.count(quote) != 1:
+                    raise ValueError('Неоднозначный адрес исправления')
+                end = start + len(quote)
+                # Merge duplicate/contained diagnoses into one addressed edit.
+                overlaps = [e for e in edits if start < e['end'] and end > e['start']]
+                if overlaps:
+                    target = overlaps[0]
+                    if len(overlaps) != 1 or not (start >= target['start'] and end <= target['end'] or
+                                                  start <= target['start'] and end >= target['end']):
+                        raise ValueError('Пересекающиеся адреса исправлений')
+                    target['start'], target['end'] = min(start, target['start']), max(end, target['end'])
+                    target['issues'].append(issue)
+                else:
+                    edits.append({'start': start, 'end': end, 'issues': [issue]})
+            for edit in sorted(edits, key=lambda e: e['start'], reverse=True):
+                keys = {key for issue in edit['issues'] for key in issue['basis']}
+                # Include each referenced endpoint's own degree meaning.
+                owners = set()
+                for key in list(keys):
+                    if key.startswith('p:'):
+                        owners.add(key.rsplit(':', 1)[0])
+                    elif key.startswith('a:'):
+                        value = json.loads(document['facts'][key])
+                        owners.update('p:' + value[name] for name in ('A', 'B'))
+                keys.update(key for key in document['facts'] if any(key.startswith(owner + ':') for owner in owners))
+                payload = {'paragraph': original, 'fragment': original[edit['start']:edit['end']],
+                           'issues': edit['issues'],
+                           'machine_basis': {key: document['facts'][key] for key in sorted(keys)}}
+                revised = ask(REPAIR_RULE, [{'role': 'user', 'content': json.dumps(payload, ensure_ascii=False)}])
+                if not isinstance(revised, str) or '\n\n' in revised.strip():
+                    raise ValueError('Неверный ответ локальной перетрактовки')
+                current = paragraphs[row['index']]
+                paragraphs[row['index']] = current[:edit['start']] + revised.strip() + current[edit['end']:]
+                repairs.extend(issue['reason'] for issue in edit['issues'])
         paragraphs = [p for p in paragraphs if p]
         if not paragraphs:
             raise ValueError('В трактовке не осталось подтверждённого содержания')
