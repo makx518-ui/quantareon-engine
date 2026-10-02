@@ -746,7 +746,7 @@ def _построить_синастрию(к, этап):
 
 def _в_фоне(номер, к):
     зд = ЗАДАЧИ.setdefault(номер, {"gotovo": False, "когда": time.time()})
-    зд.update({"gotovo": False, "etap": "в работе"})
+    зд.update({"gotovo": False, "etap": "в работе", "started_at": к.get("создан", зд["когда"])})
     try:
         if к.get("состояние") != "в работе":
             к["состояние"] = "в работе"
@@ -895,8 +895,8 @@ def _из_облака(номер):
     if с == "сбой":
         return {"gotovo": True, "oshibka": к.get("ошибка", "сбой")}
     if с == "в очереди":
-        return {"gotovo": False, "etap": "в очереди — начну, как только закончу предыдущий разбор"}
-    return {"gotovo": False, "etap": "продолжаю после перерыва" if с == "в работе" else "сбой связи, скоро продолжу"}
+        return {"gotovo": False, "etap": "в очереди — начну, как только закончу предыдущий разбор", "started_at": к.get("создан")}
+    return {"gotovo": False, "etap": "продолжаю после перерыва" if с == "в работе" else "сбой связи, скоро продолжу", "started_at": к.get("создан")}
 
 
 @роутер.get("/api/klassika/status")
@@ -907,7 +907,9 @@ def status(nomer: str = Query(...)):
     if зд is None:
         return JSONResponse({"ok": False, "reason": "no_task"}, status_code=404)
     if not зд.get("gotovo"):
-        return {"ok": True, "gotovo": False, "etap": зд.get("etap", "")}
+        начало = зд.get("started_at") or зд.get("когда")
+        return {"ok": True, "gotovo": False, "etap": зд.get("etap", ""),
+                "elapsed_seconds": max(0, int(time.time() - начало)) if isinstance(начало, (int, float)) else None}
     if зд.get("oshibka"):
         return {"ok": True, "gotovo": True, "oshibka": зд["oshibka"]}
     return {"ok": True, "gotovo": True, "imya_fayla": зд.get("imya_fayla"), "html": зд.get("html", ""),

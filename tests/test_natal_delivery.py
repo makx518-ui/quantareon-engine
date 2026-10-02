@@ -41,6 +41,17 @@ class DeliveryTest(unittest.TestCase):
         with patch.object(threading.Thread, 'start'):
             KL._в_фоне(self.number,self.card)
 
+    def test_elapsed_time_uses_server_start_and_survives_cloud_reload(self):
+        for state in ('в работе', 'в очереди'):
+            card = dict(self.card, состояние=state, создан=1000)
+            with patch.object(KL, '_карточка', return_value=card), patch.object(KL.time, 'time', return_value=1091):
+                response = self.client.get('/api/klassika/status', params={'nomer': self.number}).json()
+            self.assertEqual(response['elapsed_seconds'], 91)
+        KL.ЗАДАЧИ[self.number] = {'gotovo': False, 'etap': 'читает', 'started_at': 1000}
+        with patch.object(KL.time, 'time', return_value=1120):
+            response = self.client.get('/api/klassika/status', params={'nomer': self.number}).json()
+        self.assertEqual(response['elapsed_seconds'], 120)
+
     def test_factual_error_stops_without_file_and_notifies(self):
         with patch.object(KL, '_построить_натал_или_соляр', side_effect=ValueError('Неподтверждённые аспекты в тексте: Уран–Нептун')):
             self.worker()
