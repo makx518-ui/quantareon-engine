@@ -130,11 +130,6 @@ class NatalReadingTest(unittest.TestCase):
     def test_five_reader_calls_receive_current_data_and_natal_rules(self):
         calls = []
         def model(system, messages, *args, **kwargs):
-            from engine.passport_guard import AUDIT_RULE
-            if system == AUDIT_RULE:
-                paragraphs = json.loads(messages[0]['content'])['paragraphs']
-                return json.dumps({'paragraphs': [{'index': i, 'claims': [], 'issues': []}
-                                                 for i in range(len(paragraphs))]})
             calls.append((system, messages[0]['content']))
             return '## Проверяемый раздел\nСодержательный текст без расчётных утверждений.'
         with patch.object(C, '_спросить', side_effect=model), \

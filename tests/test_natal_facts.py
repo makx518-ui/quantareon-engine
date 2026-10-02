@@ -115,55 +115,14 @@ class NatalFactsTest(unittest.TestCase):
         self.assertNotIn('другую сферу', fixed)
         self.assertEqual(check(fixed, MACHINE), (fixed, []))
 
-    def test_facts_are_checked_after_last_grammar_correction(self):
-        def correct(text, fn):
-            return text.replace('оппозиции', 'секстиле'), 1
-        from engine.passport_guard import AUDIT_RULE, REPAIR_RULE
-        def ask(system, messages, **kwargs):
-            if system == AUDIT_RULE:
-                paragraphs = json.loads(messages[0]['content'])['paragraphs']
-                return json.dumps({'paragraphs': [{'index': i, 'claims': [], 'issues': [
-                    {'quote': 'Меркурий в секстиле к Белой Луне.', 'reason': 'Неверный аспект',
-                     'basis': [r['id'] for r in MACHINE['aspects']
-                               if {r['A'], r['B']} == {'Меркурий', 'Белая Луна'}]}]
-                    if 'Меркурий в секстиле к Белой Луне.' in p else []}
-                    for i, p in enumerate(paragraphs)]}, ensure_ascii=False)
-            if system == REPAIR_RULE:
-                return 'Меркурий — Белая Луна: оппозиция. Их взаимодействие требует осмысленного выбора.'
-            return '## Связь\nМеркурий в оппозиции к Белой Луне.'
-        with patch.object(C, '_спросить', side_effect=ask), \
-             patch('engine.razvertka.откорректировать', side_effect=correct):
+    def test_reading_has_no_guard_or_reinterpretation_calls(self):
+        with patch.object(C, '_спросить', return_value='## Связь\nСвободная трактовка.') as ask, \
+             patch('engine.razvertka.откорректировать', side_effect=AssertionError('Корректор отключён')), \
+             patch('engine.natal_facts.check', side_effect=AssertionError('Сторож отключён')):
             result = C.прочитать('', точки=POINTS, куспиды=N['cusps'])
-        self.assertIn('Меркурий — Белая Луна: оппозиция', result['tekst'])
-        self.assertNotIn('в секстиле к Белой Луне', result['tekst'])
-        self.assertEqual(result['machine_natal']['mode'], 'two_pass_narrative')
-        self.assertTrue(result['storozh'])
-
-    def test_saved_reading_is_reused_when_only_guard_format_failed(self):
-        from engine.passport_guard import AUDIT_RULE, AuditResponseError
-        checkpoint = {}
-        generation = []
-        broken = [True]
-        def ask(system, messages, **kwargs):
-            if system == AUDIT_RULE:
-                if broken[0]:
-                    return 'Не JSON'
-                paragraphs = json.loads(messages[0]['content'])['paragraphs']
-                return json.dumps({'paragraphs': [{'index': i, 'claims': [], 'issues': []}
-                                                 for i in range(len(paragraphs))]})
-            generation.append(system)
-            return '## Прочтение\nСвязный смысловой рассказ.'
-        with patch.object(C, '_спросить', side_effect=ask), \
-             patch('engine.razvertka.откорректировать', side_effect=lambda text, fn: (text, 0)):
-            with self.assertRaises(AuditResponseError):
-                C.прочитать('', точки=POINTS, куспиды=N['cusps'], checkpoint=checkpoint)
-            first_count = len(generation)
-            self.assertTrue(checkpoint['drafts']['кармика'])
-            broken[0] = False
-            result = C.прочитать('', точки=POINTS, куспиды=N['cusps'], checkpoint=checkpoint)
-        self.assertEqual(first_count, 2)  # hologram + first chapter, both saved
-        self.assertEqual(len(generation), 5)  # remaining three chapters only
-        self.assertIn('Связный смысловой рассказ.', result['tekst'])
+        self.assertEqual(ask.call_count, 5)
+        self.assertIn('Свободная трактовка.', result['tekst'])
+        self.assertEqual(result['storozh'], [])
 
 
 if __name__ == '__main__':

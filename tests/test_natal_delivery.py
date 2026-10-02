@@ -1,6 +1,5 @@
 """Exercise the actual worker and HTTP delivery; external transports are replaced."""
 import importlib
-import json
 import sys
 import threading
 import unittest
@@ -53,19 +52,6 @@ class DeliveryTest(unittest.TestCase):
             response = self.client.get('/api/klassika/status', params={'nomer': self.number}).json()
         self.assertEqual(response['elapsed_seconds'], 120)
 
-    def test_interrupted_order_can_resume_after_five_minutes(self):
-        card = dict(self.card, состояние='в работе', обновлён=1000)
-        with patch('engine.arhiv.перечислить', return_value=['open/'+self.number]), \
-             patch.object(KL, '_карточка', return_value=card), \
-             patch.object(KL, '_пустить', return_value=True) as start:
-            with patch.object(KL.time, 'time', return_value=1299):
-                KL._обход()
-            start.assert_not_called()
-            with patch.object(KL.time, 'time', return_value=1300):
-                KL._обход()
-            start.assert_called_once()
-        self.assertLessEqual(KL.ОБХОД, 15)
-
     def test_factual_error_stops_without_file_and_notifies(self):
         with patch.object(KL, '_построить_натал_или_соляр', side_effect=ValueError('Неподтверждённые аспекты в тексте: Уран–Нептун')):
             self.worker()
@@ -79,28 +65,13 @@ class DeliveryTest(unittest.TestCase):
         self.assertTrue(self.saved[-1]['уведомление_проверка'])
         self.assertEqual(self.client.get('/api/klassika/fayl',params={'nomer':self.number}).status_code,404)
 
-    def test_temporary_failure_keeps_retry(self):
+    def test_failure_stops_without_automatic_retry(self):
         with patch.object(KL, '_построить_натал_или_соляр', side_effect=RuntimeError('temporary provider failure')):
             self.worker()
-        self.assertEqual(self.card['состояние'],'ждёт повтора')
-        self.assertIn('повтор_после',self.card)
+        self.assertEqual(self.card['состояние'],'сбой')
+        self.assertNotIn('повтор_после',self.card)
         self.assertEqual(len(self.mails),1)
         self.assertEqual(self.files,[])
-
-    def test_guard_format_failure_persists_draft_and_reports_real_cause(self):
-        from engine.passport_guard import AuditResponseError
-        draft = {'fingerprint': 'machine', 'drafts': {'кармика': 'Сохранённая глава'}}
-        def build(card, stage, save_checkpoint=None):
-            save_checkpoint(draft)
-            raise AuditResponseError('Нечитаемый ответ проверки')
-        with patch.object(KL, '_построить_натал_или_соляр', side_effect=build):
-            self.worker()
-        reloaded = json.loads(json.dumps(self.saved[-1], ensure_ascii=False))
-        self.assertEqual(reloaded['черновик_чтения'], draft)
-        self.assertEqual(reloaded['состояние'], 'ждёт повтора')
-        self.assertIn('ответ проверки', KL.ЗАДАЧИ[self.number]['etap'])
-        self.assertNotIn('сбой связи', KL.ЗАДАЧИ[self.number]['etap'])
-        self.assertEqual(self.files, [])
 
     def test_transport_failure_does_not_release_invalid_file(self):
         with patch.dict(sys.modules,{'pochta':SimpleNamespace(отправить_текст=lambda *a:False)}):
@@ -149,7 +120,7 @@ class DeliveryTest(unittest.TestCase):
         self.assertEqual(self.files[0][-1],response.text)
         self.assertIsNotNone(reader.call_args.kwargs['точки'])
 
-    def test_real_calculation_narrative_is_delivered_after_explicit_fact_repair(self):
+    def test_real_calculation_narrative_is_delivered_without_guards(self):
         import swisseph as swe
         from engine import arhiv
         original = swe.houses
@@ -161,16 +132,14 @@ class DeliveryTest(unittest.TestCase):
         with patch.object(swe, 'houses', compatible), \
              patch.object(arhiv, 'положить_кухню', return_value='test/kitchen.json'), \
              patch.object(arhiv, 'положить_карту', return_value='test/chart.html'), \
-             patch.object(chitatel, '_спросить', return_value='## Чтение\nУран в трине к Нептуну, что обещает успех. Содержательный рассказ.'), \
-             patch('engine.passport_guard.guard', side_effect=lambda text, doc, ask, **kwargs:
-                   (text.replace('Уран в трине к Нептуну, что обещает успех. ', ''),
-                    ['Неподтверждённая связь исключена'])), \
-             patch('engine.razvertka.откорректировать', side_effect=lambda text, fn: (text, 0)):
+             patch.object(chitatel, '_спросить', return_value='## Чтение\nСодержательный рассказ.') as reader, \
+             patch('engine.razvertka.откорректировать', side_effect=AssertionError('Корректор отключён')):
             self.worker()
         self.assertEqual(self.card['состояние'], 'готово', self.card.get('ошибка'))
         self.assertEqual(self.card['machine_natal']['aspects'], 41)
         self.assertEqual(self.card['machine_natal']['mode'], 'two_pass_narrative')
-        self.assertTrue(self.card['storozh'])
+        self.assertEqual(self.card['storozh'], [])
+        self.assertEqual(reader.call_count, 5)
         response = self.client.get('/api/klassika/fayl', params={'nomer': self.number})
         self.assertEqual(response.status_code, 200)
         self.assertNotIn('что обещает успех', response.text)
