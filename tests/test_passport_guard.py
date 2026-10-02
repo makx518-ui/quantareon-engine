@@ -132,6 +132,17 @@ class PassportGuardTest(unittest.TestCase):
         self.assertEqual(result, original.replace('Ошибка А', 'Новая мысль А').replace('Ошибка Б', 'Новая мысль Б'))
         self.assertEqual(len(changes), 2)
 
+    def test_initial_coordinates_and_previous_reading_are_sent_to_guard(self):
+        for initial in (True, False):
+            def ask(system, messages):
+                payload = json.loads(messages[0]['content'])
+                self.assertEqual(payload['initial_coordinates'], initial)
+                self.assertEqual(payload['previous_text'], 'Ранее представленная точка.')
+                return self.report(payload['paragraphs'])
+            text, _ = guard('Содержательная трактовка.', self.document, ask,
+                            initial_coordinates=initial, previous_text='Ранее представленная точка.')
+            self.assertEqual(text, 'Содержательная трактовка.')
+
     def test_passport_does_not_recalculate_or_keep_bridge(self):
         machine = {'points': {'Нептун': {'id': 'p:Нептун', 'house': 3}},
                    'aspects': [], 'bridge': object()}
