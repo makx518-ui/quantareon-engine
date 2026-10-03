@@ -193,6 +193,57 @@ class _Обрыв:
 _ОБРЫВ = _Обрыв()
 
 
+def _спросить_витрину(система, сообщения, максимум=8000, бесплатно=True):
+    """Only the entrance showcase uses Groq. Explicit Gemini switch is for rollback."""
+    провайдер = os.getenv("DAY_SHOWCASE_PROVIDER", "groq").strip().lower()
+    if провайдер == "gemini":
+        return _спросить(система, сообщения, максимум=максимум, бесплатно=True)
+    if провайдер != "groq":
+        raise RuntimeError("DAY_SHOWCASE_PROVIDER должен быть groq или gemini")
+    ключ = os.getenv("GROQ_API_KEY", "")
+    if not ключ:
+        raise RuntimeError("нет GROQ_API_KEY для короткого прогноза")
+    import asyncio
+    import time
+    import aiohttp
+
+    async def запросить():
+        тело = {
+            "model": "openai/gpt-oss-120b",
+            "messages": [{"role": "system", "content": система}] + сообщения,
+            "max_completion_tokens": максимум,
+            "temperature": ТЕМПЕРАТУРА,
+            "reasoning_effort": "medium",
+        }
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=100)) as с:
+            async with с.post("https://api.groq.com/openai/v1/chat/completions",
+                              json=тело, headers={"Authorization": f"Bearer {ключ}"}) as о:
+                ответ = await о.json(content_type=None)
+                if о.status != 200:
+                    причина = str((ответ.get("error") or {}).get("message", "ошибка API"))
+                    raise RuntimeError(f"Groq HTTP {о.status}: {причина.replace(ключ, '[ключ]')[:250]}")
+                return ответ
+
+    начало = time.monotonic()
+    ответ = asyncio.run(запросить())
+    выбор = (ответ.get("choices") or [{}])[0]
+    текст = ((выбор.get("message") or {}).get("content") or "").strip()
+    завершение = выбор.get("finish_reason")
+    расход = ответ.get("usage") or {}
+    вход = расход.get("prompt_tokens", 0)
+    выход = расход.get("completion_tokens", 0)  # reasoning is already included
+    цена = (вход * 0.15 + выход * 0.60) / 1e6
+    _ПОТРАЧЕНО["$"] += цена
+    _ПОТРАЧЕНО["вызовов"] += 1
+    print(f"GROQ openai/gpt-oss-120b · витрина · вход {вход} · выход {выход} · "
+          f"{time.monotonic() - начало:.1f} с · ${цена:.6f} · {завершение}")
+    if завершение == "length":
+        raise RuntimeError("Groq: короткий прогноз оборван по лимиту ответа")
+    if not текст:
+        raise RuntimeError("Groq: пустой короткий прогноз")
+    return текст
+
+
 def _спросить_целиком(система, сообщения, максимум, дописок=2):
     """Вызов + до двух дописок, если ответ упёрся в лимит: модель продолжает ровно с места обрыва."""
     текст = _спросить(система, сообщения, максимум=максимум)
