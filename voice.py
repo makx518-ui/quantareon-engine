@@ -2784,6 +2784,8 @@ class GroqLLM:
         в разговор и спрашиваем её ещё раз, уже с фактами на руках.
         `на_поиск` — колбэк, чтобы зажечь человеку значок «Ищу…».
         """
+        from engine.audit import event as audit_event
+        audit_event("voice.model_selected", provider="groq_or_fallback", model=current_model(), action="voice_reply")
         session = await self._get_session()
 
         сообщения = self._build_messages(user_input, memory_ctx, web_ctx)

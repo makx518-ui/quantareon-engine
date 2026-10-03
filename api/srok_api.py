@@ -170,6 +170,9 @@ def _письмо_готово(к, имя_файла, html):
         return False
 
 
+from engine.audit import tracked_job, audit_thread
+
+@tracked_job("period_reading")
 def _в_фоне(номер, к):
     """Один заход работы над заказом. Любой исход — в карточку и в задачу."""
     зд = ЗАДАЧИ.setdefault(номер, {"gotovo": False, "когда": time.time()})
@@ -253,7 +256,7 @@ def _пустить(номер, к):
         if номер in _работают or len(_работают) >= ОДНОВРЕМЕННО:
             return False
         _работают.add(номер)
-    threading.Thread(target=_в_фоне, args=(номер, к), daemon=True).start()
+    audit_thread(target=_в_фоне, args=(номер, к), daemon=True).start()
     return True
 
 
@@ -362,7 +365,7 @@ async def zapustit(request: Request):
             _работают.discard(номер)
         ЗАДАЧИ.pop(номер, None)
         return JSONResponse({"ok": False, "reason": "busy"}, status_code=503)
-    threading.Thread(target=_в_фоне, args=(номер, к), daemon=True).start()
+    audit_thread(target=_в_фоне, args=(номер, к), daemon=True).start()
     return {"ok": True, "nomer": номер, "tarif": тариф}
 
 

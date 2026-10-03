@@ -140,6 +140,9 @@ def письмо_с_файлом(з, n, итог, lang):
     return ушло
 
 
+from engine.audit import tracked_job, audit_thread
+
+@tracked_job("book_day")
 def _страница_в_фоне(номер, ключ, n, iso, lat, lon, tz, мухурта, ичзин, lang):
     from engine import kniga as K, karta_dnya as КД, arhiv as A
     зд = ЗАДАЧИ[номер]
@@ -225,7 +228,7 @@ async def stranica(request: Request):
     # корня), иначе — то, что запомнила витрина первого дня
     мухурта = str(з.get("muhurta") or "")[:600] or (к.get("мухурта", "") if n == 1 else "")
     ичзин = str(з.get("iching") or "")[:1500] or (к.get("ичзин", "") if n == 1 else "")
-    threading.Thread(target=_страница_в_фоне,
+    audit_thread(target=_страница_в_фоне,
                      args=(номер, ст["klyuch"], n, к["момент"], к["lat"], к["lon"], к["tz"],
                            мухурта, ичзин, зап.get("lang") or "ru"), daemon=True).start()
     return {"ok": True, "nomer": номер, "n": n}

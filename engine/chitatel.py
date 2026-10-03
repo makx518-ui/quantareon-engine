@@ -22,6 +22,7 @@ chitatel.py — ЧИТАТЕЛЬ · переписан 09.09.2026 под схе�
 Модель зовётся через OpenRouter тем же ключом, что и аудит.
 """
 import os
+from engine.audit import event as audit_event, model_call
 
 import json
 import re
@@ -125,6 +126,7 @@ def _файл(имя):
     return п.read_text(encoding="utf-8") if п.exists() else ""
 
 
+@model_call("gemini", lambda *args, **kwargs: GEMINI_МОДЕЛИ["бесплатная" if kwargs.get("бесплатно", args[3] if len(args) > 3 else False) else "платная"]["модель"])
 def _спросить_gemini(система, сообщения, максимум, бесплатно=False, timeout=900):
     """Один вызов Gemini напрямую. Ключ — из окружения, не из кода.
     В лог: модель, вход, выход, мысли, секунды, цена, сумма с запуска."""
@@ -165,6 +167,7 @@ def _спросить_gemini(система, сообщения, максиму�
     выход = у.get("candidatesTokenCount", 0)
     мысли = у.get("thoughtsTokenCount", 0)
     цена = вход * GEMINI_ЦЕНА_ВХОД / 1e6 + (выход + мысли) * GEMINI_ЦЕНА_ВЫХОД / 1e6
+    audit_event("model.usage", provider="gemini", model=GEMINI_МОДЕЛЬ, input_tokens=вход, output_tokens=выход + мысли, cost_usd=цена, finish=кандидат.get("finishReason", ""))
     _ПОТРАЧЕНО["$"] += цена
     _ПОТРАЧЕНО["вызовов"] += 1
     print(f"GEMINI {GEMINI_МОДЕЛЬ} · вход {вход} · выход {выход} · мысли {мысли} · "
@@ -193,6 +196,7 @@ class _Обрыв:
 _ОБРЫВ = _Обрыв()
 
 
+@model_call("daily_showcase", lambda *args, **kwargs: "openai/gpt-oss-120b" if os.getenv("DAY_SHOWCASE_PROVIDER", "groq").strip().lower() == "groq" else "gemini-3.5-flash-lite")
 def _спросить_витрину(система, сообщения, максимум=8000, бесплатно=True):
     """Only the entrance showcase uses Groq. Explicit Gemini switch is for rollback."""
     провайдер = os.getenv("DAY_SHOWCASE_PROVIDER", "groq").strip().lower()
@@ -233,6 +237,7 @@ def _спросить_витрину(система, сообщения, мак�
     вход = расход.get("prompt_tokens", 0)
     выход = расход.get("completion_tokens", 0)  # reasoning is already included
     цена = (вход * 0.15 + выход * 0.60) / 1e6
+    audit_event("model.usage", provider="groq", model="openai/gpt-oss-120b", input_tokens=вход, output_tokens=выход, cost_usd=цена, finish=завершение)
     _ПОТРАЧЕНО["$"] += цена
     _ПОТРАЧЕНО["вызовов"] += 1
     print(f"GROQ openai/gpt-oss-120b · витрина · вход {вход} · выход {выход} · "

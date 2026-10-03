@@ -40,10 +40,14 @@ app.add_middleware(
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID"],
 )
 
 from api.maintenance import MaintenanceGate, enabled as maintenance_enabled
 app.add_middleware(MaintenanceGate)
+from engine.audit import AuditMiddleware, audit_thread, context as audit_context, event as audit_event
+from api.activity import router as activity_router
+app.include_router(activity_router)
 
 
 # Isolated location preview; existing orders and chart calculation are unchanged.
@@ -135,7 +139,7 @@ _ПОЧТА_БЕЗ_ПАРОЛЯ = ("/api/send-key", "/api/mail-health")
 # ПОЧЕМУ ЭТО БЕЗОПАСНО: адрес принимает только момент и координаты и отдаёт
 # готовый текст суток. Ни дат рождения, ни чужих карт через него не посчитать,
 # сырых раскладов он наружу не отдаёт.
-_РЕНДЕР_БЕЗ_ПАРОЛЯ = ("/api/render-dnya",
+_РЕНДЕР_БЕЗ_ПАРОЛЯ = ("/api/render-dnya", "/api/activity",
                       # 14.09 · карта дня: те же входные данные (момент, координаты),
                       # наружу — только готовый файл по номеру задачи
                       "/api/karta-dnya/zapustit", "/api/karta-dnya/status", "/api/karta-dnya/fayl",
@@ -403,7 +407,7 @@ async def api_zapustit_chteniye(тело: dict):
     номер = uuid.uuid4().hex[:12]
     ЗАДАЧИ_ЧИТАТЕЛЯ[номер] = {"gotovo": False, "etap": "поставлено в работу",
                               "nachato": _dt.utcnow().isoformat()}
-    threading.Thread(target=_прочитать_в_фоне, args=(номер, тело), daemon=True).start()
+    audit_thread(target=_прочитать_в_фоне, args=(номер, тело), daemon=True).start()
     return {"nomer": номер, "etap": "поставлено в работу"}
 
 
@@ -3655,16 +3659,30 @@ except Exception as _e:
 def _карта_дня_в_фоне(номер, з):
     from engine import karta_dnya as КД
     зд = ЗАДАЧИ_КАРТЫ_ДНЯ[номер]
+    audit_token = audit_context.set({**зд.get("audit_context", {}), "job_id": номер})
+    audit_started = time.monotonic()
+    audit_event("forecast.started", action="daily_forecast", mode=з.get("rezhim"), lang=з.get("lang"))
+    def отметить_этап(т):
+        зд["etap"] = т
+        # Stage text may contain generated/user content; log only its ordinal.
+        зд["audit_stage"] = зд.get("audit_stage", 0) + 1
+        stages = {"считаю небо на секунду твоего входа": "machine_calculation",
+                  "читаю карту дня": "interpretation", "собираю карту": "html_assembly"}
+        audit_event("forecast.stage", stage=stages.get(т, "other_stage"))
     try:
         итог = КД.собрать_карту(з["момент"], з["ш"], з["д"], з["пояс"], место=з["место"],
                                 мухурта=з["мухурта"], ичзин=з["ичзин"],
-                                этап=lambda т: зд.__setitem__("etap", т),
+                                этап=отметить_этап,
                                 lang=з.get("lang", "ru"), режим=з.get("rezhim", "витрина"))
         зд.update({"gotovo": True, "html": итог["html_stranicy"], "fayl": итог["fayl"],
                    "razdely": итог["razdely"],
                    "imya_fayla": итог["imya_fayla"], "etap": "готово"})
+        audit_event("forecast.completed", duration_ms=round((time.monotonic() - audit_started) * 1000))
     except Exception as e:
         зд.update({"gotovo": True, "oshibka": str(e)[:300], "etap": "ошибка"})
+        audit_event("forecast.failed", error_type=type(e).__name__, reason="generation_failed")
+    finally:
+        audit_context.reset(audit_token)
 
 
 @app.post("/api/karta-dnya/zapustit")
@@ -3721,8 +3739,9 @@ async def karta_dnya_zapustit(request: Request):
         return JSONResponse({"ok": False, "reason": "busy"}, status_code=429)
     номер = uuid.uuid4().hex[:12]
     ЗАДАЧИ_КАРТЫ_ДНЯ[номер] = {"gotovo": False, "etap": "поставлено в работу",
-                              "когда": сейчас.timestamp()}
-    threading.Thread(target=_карта_дня_в_фоне, args=(номер, данные), daemon=True).start()
+                              "когда": сейчас.timestamp(), "audit_context": dict(audit_context.get())}
+    audit_event("forecast.accepted", job_id=номер, action="daily_forecast", mode=данные["rezhim"], lang=данные["lang"])
+    audit_thread(target=_карта_дня_в_фоне, args=(номер, данные), daemon=True).start()
     # 16.09 · номер секунды витрины: по нему полный разбор возьмёт ТУ ЖЕ секунду с любого устройства
     витрина = ""
     if данные["rezhim"] == "витрина":
@@ -3862,3 +3881,6 @@ async def render_dnya_api(request: Request):
 
 # статика — в самом конце, чтоб не перебивала эндпоинты
 app.mount("/", StaticFiles(directory=str(FRONT), html=True), name="front")
+
+# Outermost: also records authentication and maintenance rejections.
+app.add_middleware(AuditMiddleware)

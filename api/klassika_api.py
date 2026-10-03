@@ -744,6 +744,9 @@ def _построить_синастрию(к, этап):
     return html, имя_файла
 
 
+from engine.audit import tracked_job, audit_thread
+
+@tracked_job("classical_reading")
 def _в_фоне(номер, к):
     зд = ЗАДАЧИ.setdefault(номер, {"gotovo": False, "когда": time.time()})
     зд.update({"gotovo": False, "etap": "в работе", "started_at": к.get("создан", зд["когда"])})
@@ -824,7 +827,7 @@ def _пустить(номер, к):
         if номер in _работают or len(_работают) >= ОДНОВРЕМЕННО:
             return False
         _работают.add(номер)
-    threading.Thread(target=_в_фоне, args=(номер, к), daemon=True).start()
+    audit_thread(target=_в_фоне, args=(номер, к), daemon=True).start()
     return True
 
 
