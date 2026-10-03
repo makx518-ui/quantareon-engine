@@ -668,6 +668,14 @@ def прочитать_день(момент, широта, долгота, по
         максимум = max(максимум, 30000)
     задание = я["задание"].format(имя=имя, когда=д['местное'].strftime('%d.%m.%Y %H:%M'),
                                   полка=(д['полка'] if str(lang).startswith("en") else полка_для_модели(д['полка'])))
+    if витрина:
+        # A compact final reminder separates actual planet placements from angle signs.
+        import json
+        положения = {имя: т["знак"] for имя, т in д["точки"].items()}
+        заголовок = ("ACTUAL PLANET SIGNS FROM THE MACHINE — for internal interpretation, not a list in the answer:"
+                     if str(lang).startswith("en") else
+                     "СОБСТВЕННЫЕ ЗНАКИ ПЛАНЕТ ИЗ МАШИНЫ — для внутренней трактовки, не для перечня в ответе:")
+        задание += "\n\n" + заголовок + "\n" + json.dumps(положения, ensure_ascii=False)
     if продолжение and контекст:
         блок = блок_книги(контекст)
         задание += "\n\n" + (блок if str(lang).startswith("en") else полка_для_модели(блок))

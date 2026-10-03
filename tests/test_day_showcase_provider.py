@@ -78,7 +78,8 @@ class ShowcaseProviderTests(unittest.TestCase):
     def test_daily_modes_route_only_showcase_to_groq(self):
         from engine import karta_dnya as day
         moment = datetime(2026, 10, 3, 4, tzinfo=timezone.utc)
-        shelf = {"местное": moment, "полка": "machine facts", "окна": {}}
+        shelf = {"местное": moment, "полка": "machine facts", "окна": {},
+                 "точки": {"Венера": {"знак": "Скорпион"}}}
         for mode in ("витрина", "полный"):
             with self.subTest(mode=mode), \
                     patch.object(day, "полочка_дня", return_value=shelf.copy()), \
@@ -91,6 +92,7 @@ class ShowcaseProviderTests(unittest.TestCase):
                 if mode == "витрина":
                     groq.assert_called_once()
                     paid.assert_not_called()
+                    self.assertIn('"Венера": "Скорпион"', groq.call_args.args[1][0]["content"])
                 else:
                     paid.assert_called_once()
                     groq.assert_not_called()

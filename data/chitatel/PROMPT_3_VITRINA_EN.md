@@ -76,3 +76,6 @@ occupy a DIFFERENT sign and house. Take each planet's placement only from its ow
 machine entry, never from the angle it rules. Omit placements that do not help the
 short summary. "Promises recognition" also promises an event: describe a possibility
 or the reader's own action instead.
+The task ends with the planets' actual signs, copied from the machine for internal
+interpretation. In this short summary, do not state "planet in sign/house" formulas:
+weave their meaning into the reading, naming planets only where it explains a link.
