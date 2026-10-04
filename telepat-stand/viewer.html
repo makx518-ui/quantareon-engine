@@ -4,12 +4,13 @@
 <button id="mask">Включить маску</button><button id="up">Прокрутить вверх</button><button id="down">Прокрутить вниз</button><p id="status">Подключение…</p><img id="screen" alt="Изображение серверного браузера">
 <textarea id="text" aria-label="Текст для выбранного поля" placeholder="Текст для выбранного поля"></textarea><button id="type">Ввести текст</button><button id="enter">Enter</button><button id="tab">Tab</button><button id="back">Удалить символ</button>
 <script>
-const screen=document.getElementById('screen'),statusEl=document.getElementById('status');let busy=false,old;
-async function frame(){if(busy)return;busy=true;try{let r=await fetch('/frame');if(!r.ok)throw Error();let url=URL.createObjectURL(await r.blob());await new Promise((resolve,reject)=>{screen.onload=resolve;screen.onerror=reject;screen.src=url;});if(old)URL.revokeObjectURL(old);old=url;statusEl.textContent='Соединение работает';}catch{statusEl.textContent='Ожидаю браузер. Если сеанс истёк — обновите страницу.';}finally{busy=false;}}
-async function action(route,data){try{let r=await fetch(route,{method:'POST',headers:{'Content-Type':'application/json','X-Stand-Action':'1'},body:JSON.stringify(data)});if(!r.ok)throw Error();await frame();}catch{statusEl.textContent='Действие не выполнено — проверьте состояние окна';}}
+const screen=document.getElementById('screen'),statusEl=document.getElementById('status');let busy=false,actionBusy=false,old;
+async function frame(){if(busy)return;busy=true;try{let r=await fetch('/frame',{signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error();let url=URL.createObjectURL(await r.blob());await new Promise((resolve,reject)=>{screen.onload=resolve;screen.onerror=reject;screen.src=url;});if(old)URL.revokeObjectURL(old);old=url;if(!actionBusy)statusEl.textContent='Изображение обновлено';}catch{statusEl.textContent='Ожидаю браузер. Если сеанс истёк — обновите страницу.';}finally{busy=false;}}
+async function action(route,data){if(actionBusy)return;actionBusy=true;document.querySelectorAll('button').forEach(b=>b.disabled=true);statusEl.textContent='Передаю действие…';try{let r=await fetch(route,{method:'POST',headers:{'Content-Type':'application/json','X-Stand-Action':'1'},body:JSON.stringify(data),signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error();statusEl.textContent='Действие принято сервером';await frame();}catch{statusEl.textContent='Действие не подтверждено. Не повторяйте ввод, пока кадр не обновится.';}finally{actionBusy=false;document.querySelectorAll('button').forEach(b=>b.disabled=false);}}
 screen.onclick=e=>{let rect=screen.getBoundingClientRect();action('/click',{x:(e.clientX-rect.left)*1100/rect.width,y:(e.clientY-rect.top)*760/rect.height});};
 document.getElementById('mask').onclick=()=>action('/mask',{});document.getElementById('type').onclick=()=>action('/text',{text:document.getElementById('text').value});
 for(const [id,key]of [['enter','Enter'],['tab','Tab'],['back','Backspace']])document.getElementById(id).onclick=()=>action('/key',{key});
 document.getElementById('up').onclick=()=>action('/wheel',{dy:-400});document.getElementById('down').onclick=()=>action('/wheel',{dy:400});
 async function loop(){await frame();setTimeout(loop,800);}loop();
 </script></html>
+
