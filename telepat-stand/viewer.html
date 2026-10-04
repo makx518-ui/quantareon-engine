@@ -1,7 +1,7 @@
 <!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Телепат — проверка механики</title>
 <style>body{margin:12px;background:#071224;color:#eee;font:17px Arial}button,textarea{font:inherit;padding:12px}img{display:block;width:100%;max-width:1100px;touch-action:pan-y;border:1px solid #cda95d}textarea{width:min(85%,800px)}#status{min-height:24px;color:#e8bd6a}</style>
 <h2>Закрытый стенд Телепата</h2><p>Живое окно отдельного браузера. Нажмите нужное поле на изображении, затем передайте текст ниже. Это испытательный механизм, не готовый интерфейс.</p>
-<button id="mask">Включить маску</button><button id="up">Прокрутить вверх</button><button id="down">Прокрутить вниз</button><p id="status">Подключение…</p><img id="screen" alt="Изображение серверного браузера">
+<p id="autoload" role="status">Автозапуск маски 17: подключение…</p><button id="mask">Включить маску вручную</button><button id="up">Прокрутить вверх</button><button id="down">Прокрутить вниз</button><p id="status">Подключение…</p><img id="screen" alt="Изображение серверного браузера">
 <textarea id="text" aria-label="Текст для выбранного поля" placeholder="Текст для выбранного поля"></textarea><button id="type">Ввести текст</button><button id="enter">Enter</button><button id="tab">Tab</button><button id="back">Удалить символ</button>
 <script>
 const screen=document.getElementById('screen'),statusEl=document.getElementById('status');let busy=false,actionBusy=false,old;
@@ -11,6 +11,7 @@ screen.onclick=e=>{let rect=screen.getBoundingClientRect();action('/click',{x:(e
 document.getElementById('mask').onclick=()=>action('/mask',{});document.getElementById('type').onclick=()=>action('/text',{text:document.getElementById('text').value});
 for(const [id,key]of [['enter','Enter'],['tab','Tab'],['back','Backspace']])document.getElementById(id).onclick=()=>action('/key',{key});
 document.getElementById('up').onclick=()=>action('/wheel',{dy:-400});document.getElementById('down').onclick=()=>action('/wheel',{dy:400});
+async function autoloadStatus(){try{const r=await fetch('/status',{signal:AbortSignal.timeout(5000)});if(r.status===401){document.getElementById('autoload').textContent='Сеанс стенда истёк. Обновите страницу для входа.';return;}if(!r.ok)throw Error();const s=await r.json();const label=s.page==='sign-in'?'Ожидается вход Microsoft':s.autoload==='active'&&s.mask?'Маска включилась автоматически':s.autoload==='paused'?'Маска закрыта':s.autoload==='error'?'Маска остановлена: структура чата требует проверки':s.autoload==='not-loaded'?'Автозагрузчик не найден':s.editor?'Ожидается готовность чата':'Ожидается окно чата';document.getElementById('autoload').textContent='Автозапуск '+s.version+': '+label+' · включений: '+s.mounts;}catch{document.getElementById('autoload').textContent='Состояние автозапуска пока недоступно';}finally{setTimeout(autoloadStatus,2500);}}autoloadStatus();
 async function loop(){await frame();setTimeout(loop,800);}loop();
 </script></html>
 

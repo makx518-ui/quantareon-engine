@@ -10,7 +10,9 @@ function equal(a,b){const x=Buffer.from(a),y=Buffer.from(b);return x.length===y.
 async function start(){if(starting)return starting;if(browser&&page&&!page.isClosed())return;starting=initialize().finally(()=>{starting=null;});return starting;}
 function configure(p){p.setDefaultTimeout(5000);p.setDefaultNavigationTimeout(15000);p.on('dialog',d=>d.dismiss().catch(()=>{}));}
 async function initialize(){if(browser)await browser.close();browser=await chromium.launch({headless:true,...(process.env.STAND_CHANNEL?{channel:process.env.STAND_CHANNEL}:{chromiumSandbox:true})});
- const context=await browser.newContext({viewport:{width:1100,height:760}});page=await context.newPage();
+ const context=await browser.newContext({viewport:{width:1100,height:760}});
+ await require('./register.cjs')(context);
+ page=await context.newPage();
  configure(page);context.on('page',p=>{configure(p);page=p;p.on('close',()=>{page=context.pages().find(x=>!x.isClosed());});});
  if(fixture)await page.setContent('<meta charset="utf-8"><style>body{background:#071224;color:white;font:22px Arial}input{padding:16px}button{padding:16px}</style><h2>Тестовый чат</h2><div id="messages">Начальное сообщение</div><input aria-label="Сообщение"><button onclick="messages.textContent+=document.querySelector(\'input\').value">Отправить</button>');
  else await page.goto('https://copilot.com/chat',{waitUntil:'domcontentloaded',timeout:60000});
@@ -25,6 +27,15 @@ const server=http.createServer(async(req,res)=>{res.setHeader('Cache-Control','n
   }
   if(!(req.headers.cookie||'').split(';').some(x=>equal(x.trim(),`stand=${ticket}`))){res.writeHead(401,{'Content-Type':'text/html; charset=utf-8'});res.end(login);return;}
   if(req.method==='GET'&&req.url==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');res.end(viewer);return;}
+  if(req.method==='GET'&&req.url==='/status'){
+   const state={version:'17',page:'starting',autoload:'waiting',mounts:0,mask:false,editor:false};
+   if(page&&!page.isClosed()){
+    const hostname=new URL(page.url()).hostname;
+    state.page=['copilot.com','www.copilot.com'].includes(hostname)?'copilot':/^(login\.live\.com|login\.microsoftonline\.com|account\.live\.com)$/.test(hostname)?'sign-in':'other';
+    if(state.page==='copilot')Object.assign(state,await page.evaluate(()=>({autoload:document.documentElement.dataset.telepatAutoload||'not-loaded',mounts:Number(document.documentElement.dataset.telepatMounts||0),mask:!!document.getElementById('telepat-v7-clean'),editor:!!document.getElementById('m365-chat-editor-target-element')})));
+   }
+   res.setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify(state));return;
+  }
   if(req.method==='GET'&&req.url==='/frame'){
    await start();if(!framePending)framePending=page.screenshot({type:'jpeg',quality:65,timeout:5000}).then(b=>{lastFrame=b;return b;}).finally(()=>{framePending=null;});
    const b=await framePending;res.setHeader('Content-Type','image/jpeg');res.end(b);return;
